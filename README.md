@@ -13,8 +13,9 @@ CRT TVs) with a colorimeter and a calibration DVD / external pattern generator.
 ## Features
 
 - **Pattern generator**: patterns come from your DVD / external generator (the app asks for
-  each one) or from a display connected to the Mac (the app shows each IRE level or color full
-  screen, with PC 0–255 or video 16–235 levels, full field or window patch, and a settle time).
+  each one), from a **Raspberry Pi running PGenerator** on your network, or from a display
+  connected to the Mac (the app shows each IRE level or color full screen, with PC 0–255 or
+  video 16–235 levels, full field or window patch, and a settle time).
 - **Measurements**:
   - Grey scale (10–100 IRE, or 0–100 IRE with *Override black* off)
   - Primary colors (Red, Green, Blue + White)
@@ -36,6 +37,24 @@ CRT TVs) with a colorimeter and a calibration DVD / external pattern generator.
   models not tested yet the diffuser position is not checked, because one user's meter reported
   the diffuser in place when it was not (tested serial prefixes: `C1-`, `CM-`).
 - Projects (`.hcfrex`), print / PDF report, sounds when a pattern is requested and when a run ends.
+
+## Raspberry Pi (PGenerator) generator
+
+Same protocol as HCFR for Windows' *rPI* display mode (its `RB8PGenerator.dll`), written in Swift:
+
+1. Start the Raspberry Pi with PGenerator, connected by HDMI to the display and on the same
+   network as the Mac.
+2. In **Generator**, choose **Raspberry Pi (PGenerator)**. The app finds the Pi automatically
+   (UDP broadcast "Who is a PGenerator", port 1977) and connects to it (TCP port 85); the Pi screen
+   shows a "connected" message with its resolution. The first time, macOS asks to allow finding
+   devices on the local network: allow it (System Settings → Privacy & Security → Local Network).
+3. If the Pi is not found (another subnet, Wi‑Fi isolation, VPN…), use **Generator → Raspberry Pi
+   address…** and type its IP address.
+
+*Levels* (PC 0–255 / video 16–235), *Patch size* (full field or window, on black) and *Wait before
+reading* work as with a Mac display. The levels are the RGB codes sent to the Pi, as in HCFR; the
+Pi's own output range (full / limited RGB, set in PGenerator) must match your display. When a run
+ends or is stopped the Pi goes back to black; if the Pi restarts the app reconnects by itself.
 
 ## Installing
 
@@ -74,6 +93,9 @@ ad-hoc signed).
   https://github.com/arthur-liberman/hcfr-code · https://sourceforge.net/projects/hcfr/
 - **ArgyllCMS** instrument drivers — Copyright Graeme W. Gill. https://www.argyllcms.com
 - **macOS version** — Copyright (C) 2026 Jorge Velázquez.
+- **Raspberry Pi (PGenerator) generator** — added in 2026 (`Sources/HCFRColorimeter/PGenerator.swift`
+  and the generator code in `Session.swift` / `Views.swift`), based on HCFR's `Generator.cpp` and
+  `GDIGenerator.cpp`. PGenerator is by Riccardo Biasiotto.
 
 This program is free software; you can redistribute it and/or modify it under the terms of the
 GNU General Public License version 2 as published by the Free Software Foundation. It is

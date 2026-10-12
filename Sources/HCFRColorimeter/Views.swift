@@ -206,6 +206,7 @@ private struct GeneratorMenu: View {
             Menu {
                 Picker("Generator", selection: $session.patternSource) {
                     Text("DVD / external generator (manual)").tag(PatternSource.manual)
+                    Text("Raspberry Pi (PGenerator)").tag(PatternSource.raspberryPi)
                     ForEach(session.generatorScreens, id: \.self) { screen in
                         if let id = screen.displayID {
                             Text(session.screenName(screen)).tag(PatternSource.display(id))
@@ -213,6 +214,18 @@ private struct GeneratorMenu: View {
                     }
                 }
                 .pickerStyle(.inline)
+                Divider()
+                Button(piAddressTitle) {
+                    session.piAddressDraft = session.piAddress
+                    session.editingPiAddress = true
+                }
+                if session.patternSource == .raspberryPi {
+                    if let s = session.piStatus {
+                        Text("Raspberry Pi connected: \(s)")
+                    } else {
+                        Button("Connect to Raspberry Pi now") { session.connectPi() }
+                    }
+                }
                 Divider()
                 Picker("Levels", selection: $session.videoLevels) {
                     ForEach(VideoLevels.allCases) { Text($0.rawValue).tag($0) }
@@ -232,12 +245,25 @@ private struct GeneratorMenu: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
             .disabled(session.activity != .idle)
-            .help("Where the patterns come from: your DVD / external generator (the app asks for each one) or a display connected to this Mac (the app shows each pattern full screen)")
+            .help("Where the patterns come from: your DVD / external generator (the app asks for each one), a Raspberry Pi running PGenerator on your network, or a display connected to this Mac (the app shows each pattern full screen)")
         }
         .padding(.leading, 4)
+        .alert("Raspberry Pi address", isPresented: $session.editingPiAddress) {
+            TextField("Automatic", text: $session.piAddressDraft)
+            Button("OK") { session.setPiAddress(session.piAddressDraft) }
+            Button("Automatic") { session.setPiAddress("") }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("IP address of the Raspberry Pi running PGenerator (for example 192.168.1.50). Leave it empty to find the Pi automatically on the local network.")
+        }
+    }
+
+    private var piAddressTitle: String {
+        "Raspberry Pi address: " + (session.piAddress.isEmpty ? "automatic" : session.piAddress) + "…"
     }
 
     private var label: String {
+        if session.patternSource == .raspberryPi { return "Raspberry Pi" }
         guard let screen = session.patternScreen else { return "DVD (manual)" }
         let n = (NSScreen.screens.firstIndex(of: screen) ?? 0) + 1
         return "Display \(n)"

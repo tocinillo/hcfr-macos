@@ -35,6 +35,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleVersion</key><string>2</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>NSHighResolutionCapable</key><true/>
+  <key>NSLocalNetworkUsageDescription</key><string>HCFR Colorimeter looks for and connects to a Raspberry Pi running PGenerator on your local network to show the test patterns.</string>
   <key>NSPrincipalClass</key><string>NSApplication</string>
   <key>UTExportedTypeDeclarations</key><array><dict>
     <key>UTTypeIdentifier</key><string>org.hcfr.colorimeterexpress.project</string>

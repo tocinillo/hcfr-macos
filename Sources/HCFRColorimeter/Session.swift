@@ -120,6 +120,16 @@ final class Session: ObservableObject {
     @Published var settleSeconds: Double = 1.0 { didSet { defaults.set(settleSeconds, forKey: "settleSeconds") } }
     private let patternWindow = PatternWindowController()
     private var shownPattern: TestPattern?
+    /// Raspberry Pi (PGenerator) IP address; empty = find it on the network automatically.
+    @Published private(set) var piAddress = ""
+    /// Connected Raspberry Pi, shown in the Generator menu (e.g. "192.168.1.50 · 1920×1080").
+    @Published private(set) var piStatus: String?
+    /// Generator → "Raspberry Pi address…" dialog: shown, and the text being typed.
+    /// (Kept here rather than in the view: @State is a macro in the macOS 27 SDK that needs Xcode.)
+    @Published var editingPiAddress = false
+    @Published var piAddressDraft = ""
+    private var pi: PGeneratorClient?
+    private var piConnecting: Task<PGeneratorClient, Error>?
     @Published var lastMeasure: Date?
     @Published var prompt: UserPrompt?
     /// Prompt waiting for an answer (also while its sheet is being re-presented).
@@ -150,9 +160,12 @@ final class Session: ObservableObject {
         videoLevels = defaults.string(forKey: "videoLevels").flatMap(VideoLevels.init(rawValue:)) ?? .full
         patternArea = defaults.object(forKey: "patternArea") as? Double ?? 100
         settleSeconds = defaults.object(forKey: "settleSeconds") as? Double ?? 1.0
+        piAddress = defaults.string(forKey: "piAddress") ?? ""
         if let id = defaults.object(forKey: "patternDisplay") as? UInt32,
            NSScreen.screens.contains(where: { $0.displayID == id }) {
             patternSource = .display(id)
+        } else if defaults.bool(forKey: "patternRaspberryPi") {
+            patternSource = .raspberryPi
         }
         patternWindow.onEscape = { [weak self] in self?.stop() }
     }
@@ -521,7 +534,7 @@ final class Session: ObservableObject {
     /// Manual generator: asks the user for the pattern. Built-in generator: shows it on the chosen
     /// display and waits for it to settle.
     private func present(_ pattern: TestPattern) async throws {
-        if patternScreen == nil {
+        if !automaticGenerator {
             Chime.request()
             try await ask("Information", "Use \(pattern.manualName) and press Continue.", style: .continueCancel)
         } else {
@@ -532,6 +545,15 @@ final class Session: ObservableObject {
     /// Shows the pattern on the generator display (if one is selected) and waits `settleSeconds`
     /// when it changed.
     private func showIfGenerator(_ pattern: TestPattern, force: Bool = false) async throws {
+        if patternSource == .raspberryPi {
+            guard force || pattern != shownPattern else { return }
+            try Task.checkCancellation()
+            let black = videoLevels.code(0)
+            try await piShow(rgb: pattern.rgb.map { videoLevels.code($0) }, background: [black, black, black])
+            shownPattern = pattern
+            try await Task.sleep(for: .seconds(settleSeconds))
+            return
+        }
         guard let screen = patternScreen else { return }
         if force || pattern != shownPattern || !patternWindow.isShowing {
             let black = videoLevels.code(0)
@@ -544,7 +566,95 @@ final class Session: ObservableObject {
 
     private func closePattern() {
         patternWindow.close()
+        // Raspberry Pi: back to black, as HCFR for Windows does at the end of a run
+        if shownPattern != nil, patternSource == .raspberryPi, let pi {
+            Task { try? await pi.send(PGeneratorClient.idleMessage) }
+        }
         shownPattern = nil
+    }
+
+    /// True when the app shows the patterns itself (a display of this Mac or the Raspberry Pi),
+    /// false for the manual DVD / external generator.
+    var automaticGenerator: Bool { patternScreen != nil || patternSource == .raspberryPi }
+
+    // MARK: - Raspberry Pi (PGenerator)
+
+    /// Sends a patch to the Raspberry Pi; if the connection was lost (Pi restarted…), reconnects once.
+    private func piShow(rgb: [Int], background: [Int]) async throws {
+        do {
+            let c = try await piClient()
+            try await c.send(c.rectangleMessage(rgb: rgb, background: background, areaPercent: patternArea))
+        } catch PGeneratorError.communication {
+            dropPi()
+            let c = try await piClient()
+            try await c.send(c.rectangleMessage(rgb: rgb, background: background, areaPercent: patternArea))
+        }
+    }
+
+    /// The connected Raspberry Pi, connecting first if needed (only one connection attempt at a time).
+    private func piClient() async throws -> PGeneratorClient {
+        if let pi { return pi }
+        if let piConnecting { return try await piConnecting.value }
+        let address = piAddress
+        let t = Task { @MainActor () throws -> PGeneratorClient in
+            var host = address
+            if host.isEmpty {
+                self.status = "Looking for the Raspberry Pi (PGenerator) on the network…"
+                var found: String?
+                // As HCFR for Windows: several discovery attempts
+                for _ in 0..<5 where found == nil { found = await PGeneratorClient.discover(timeout: 1) }
+                guard let ip = found else { throw PGeneratorError.notFound }
+                host = ip
+            }
+            self.status = "Connecting to the Raspberry Pi at \(host)…"
+            let c = PGeneratorClient(host: host)
+            try await c.connect()
+            try? await c.send(PGeneratorClient.textMessage(
+                "HCFR Colorimeter for macOS connected - PGenerator at \(host) Res [\(c.width)x\(c.height)]"))
+            return c
+        }
+        piConnecting = t
+        defer { piConnecting = nil }
+        do {
+            let c = try await t.value
+            pi = c
+            piStatus = "\(c.host) · \(c.width)×\(c.height)"
+            status = "Raspberry Pi connected at \(c.host) (\(c.width)×\(c.height))"
+            return c
+        } catch {
+            piStatus = nil
+            status = "Raspberry Pi not connected"
+            throw error
+        }
+    }
+
+    /// Connects now (when the Raspberry Pi is chosen as generator), so problems show up before measuring.
+    func connectPi() {
+        Task {
+            do { _ = try await piClient() } catch { errorMessage = error.localizedDescription }
+        }
+    }
+
+    /// Closes the connection, leaving the Pi on black.
+    private func dropPi(goodbye: Bool = false) {
+        guard let c = pi else { return }
+        pi = nil
+        piStatus = nil
+        if goodbye { Task { try? await c.send(PGeneratorClient.idleMessage); c.close() } } else { c.close() }
+    }
+
+    /// Generator → Raspberry Pi address: an IPv4 address, or empty to find the Pi automatically.
+    func setPiAddress(_ text: String) {
+        let a = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard a.isEmpty || PGeneratorClient.isValidIPv4(a) else {
+            errorMessage = PGeneratorError.badAddress(a).localizedDescription
+            return
+        }
+        guard a != piAddress else { return }
+        piAddress = a
+        defaults.set(a, forKey: "piAddress")
+        dropPi(goodbye: true)
+        if patternSource == .raspberryPi { connectPi() }
     }
 
     /// Display used as pattern generator, nil for the manual (DVD) generator or if it was disconnected.
@@ -568,7 +678,15 @@ final class Session: ObservableObject {
     private func savePatternSource() {
         if case .display(let id) = patternSource { defaults.set(id, forKey: "patternDisplay") }
         else { defaults.removeObject(forKey: "patternDisplay") }
+        defaults.set(patternSource == .raspberryPi, forKey: "patternRaspberryPi")
         if patternSource == .manual { closePattern() }
+        if patternSource == .raspberryPi {
+            patternWindow.close()
+            shownPattern = nil
+            connectPi()
+        } else {
+            dropPi(goodbye: true)
+        }
     }
 
     private func readWithCalibration(pattern: TestPattern) async throws -> XYZ {
@@ -604,7 +722,7 @@ final class Session: ObservableObject {
             // 0x100 = 100% white patch, 0x200 = 80% patch (CRT refresh rate); the built-in
             // generator shows them, with the manual generator the user is asked for them
             var text = msg
-            let auto = patternScreen != nil
+            let auto = automaticGenerator
             if cond & 0xFF00 == 0x100 {
                 if auto { try await showIfGenerator(.gray(100)) } else { text = "Use 100 IRE.\n\n" + msg }
             }

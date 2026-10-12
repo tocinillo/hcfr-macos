@@ -31,10 +31,12 @@ enum TestPattern: Equatable {
     }
 }
 
-/// Where patterns come from: the user's DVD / external generator, or a display of this Mac.
+/// Where patterns come from: the user's DVD / external generator, a display of this Mac, or a
+/// Raspberry Pi running PGenerator on the network (as HCFR for Windows' "rPI" display mode).
 enum PatternSource: Hashable {
     case manual
     case display(CGDirectDisplayID)
+    case raspberryPi
 }
 
 /// Output levels of the built-in generator (as HCFR's GDI generator option).
