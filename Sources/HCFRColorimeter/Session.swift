@@ -116,7 +116,9 @@ final class Session: ObservableObject {
     /// Table shown: gray scale or primaries and secondaries.
     @Published var view: MeasureView = .grayScale
     /// Graph of the Information panel (HCFR's graph views).
-    @Published var infoGraph: InfoGraph = .grayBalance { didSet { defaults.set(infoGraph.rawValue, forKey: "infoGraph") } }
+    @Published var infoGraph: InfoGraph = .rgbLevels { didSet { defaults.set(infoGraph.rawValue, forKey: "infoGraph") } }
+    /// CIE diagram: show the illuminants and color temperatures (HCFR's "Show references").
+    @Published var cieShowReferences = true { didSet { defaults.set(cieShowReferences, forKey: "cieShowReferences") } }
     /// CIE diagram: u'v' (CIE 1976 UCS) instead of xy (CIE 1931), as HCFR's "CIE u'v'" option.
     @Published var cieUV = false { didSet { defaults.set(cieUV, forKey: "cieUV") } }
     /// CIE diagram: show the gray scale points (HCFR's "Show gray scale").
@@ -173,7 +175,8 @@ final class Session: ObservableObject {
         settleSeconds = defaults.object(forKey: "settleSeconds") as? Double ?? 1.0
         piAddress = defaults.string(forKey: "piAddress") ?? ""
         if let n = defaults.object(forKey: "grayCount") as? Int, n >= 3, n <= 101 { grayCount = n }
-        infoGraph = defaults.string(forKey: "infoGraph").flatMap(InfoGraph.init(rawValue:)) ?? .grayBalance
+        infoGraph = defaults.string(forKey: "infoGraph").flatMap(InfoGraph.init(rawValue:)) ?? .rgbLevels
+        cieShowReferences = defaults.object(forKey: "cieShowReferences") as? Bool ?? true
         cieUV = defaults.bool(forKey: "cieUV")
         cieShowGrays = defaults.object(forKey: "cieShowGrays") as? Bool ?? true
         if let id = defaults.object(forKey: "patternDisplay") as? UInt32,
@@ -248,6 +251,17 @@ final class Session: ObservableObject {
 
     var selectedPatchResult: PatchResult {
         PatchResult(patch: selectedPatch, xyz: patchXYZ(selectedPatch), whiteY: colorWhiteY, ref: ref)
+    }
+
+    /// Area of the measured R-G-B triangle in CIE xy, as a fraction of the reference triangle.
+    var gamutCoverage: Double? {
+        func area(_ p: [(Double, Double)]) -> Double {
+            abs((p[0].0 * (p[1].1 - p[2].1) + p[1].0 * (p[2].1 - p[0].1) + p[2].0 * (p[0].1 - p[1].1)) / 2)
+        }
+        let m = [PatchColor.red, .green, .blue].compactMap { colorMeasurements[$0] }.filter { $0.Y > 0 }
+        guard m.count == 3 else { return nil }
+        let refArea = area(standard.primaries.map { ($0.x, $0.y) })
+        return refArea > 0 ? area(m.map { ($0.x, $0.y) }) / refArea : nil
     }
 
     /// Average / max ΔE of the measured primaries and secondaries (White excluded).

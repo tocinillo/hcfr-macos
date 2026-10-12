@@ -76,7 +76,9 @@ enum Snapshot {
         } else {
             for s in sample where s.0 <= maxLevel { session.measurements[s.0] = XYZ.fromxyY(x: s.1, y: s.2, Y: s.3) }
         }
-        session.infoGraph = args.contains("--cie") ? .cie : .grayBalance
+        session.infoGraph = args.contains("--cie") ? .cie : .rgbLevels
+        if let g = args.firstIndex(of: "--graph"), g + 1 < args.count,
+           let graph = InfoGraph.allCases.first(where: { "\($0)" == args[g + 1] }) { session.infoGraph = graph }
         session.cieUV = args.contains("--uv")
         session.selectedLevel = args.contains("--level10") ? 10 : max(maxLevel, 10)
         if args.contains("--project-roundtrip") {

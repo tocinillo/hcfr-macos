@@ -730,7 +730,7 @@ private struct Swatches: View {
 }
 
 /// Chromaticity target: shows where the measurement drifts from its reference (white or color).
-private struct TargetView: View {
+struct TargetView: View {
     let result: ColorReading
 
     var body: some View {

@@ -62,8 +62,16 @@ enum MeasureKind: CaseIterable {
 
 /// Graph shown in the Information panel (HCFR's graph views).
 enum InfoGraph: String, CaseIterable, Identifiable {
-    case grayBalance = "Gray scale balance"
-    case cie = "CIE diagram"
+    case summary = "Summary"
+    case targetCIE = "Target - CIE"
+    case luminanceGamma = "Luminance - Gamma"
+    case rgbGamma = "RGB - Gamma"
+    case rgbLevels = "RGB Levels"
+    case colorTemperature = "Color temperature"
+    case cie = "CIE Diagram"
+    case targetRGBGamma = "Target - RGB - Gamma"
+    /// RGB Levels for the gray scale table, CIE Diagram for the colors table.
+    case auto = "Auto"
     var id: String { rawValue }
 }
 
