@@ -45,6 +45,10 @@ struct ColorimeterApp: App {
                     .disabled(!session.hasMeasurements)
             }
         }
+
+        Settings {
+            PreferencesView(session: session)
+        }
     }
 }
 

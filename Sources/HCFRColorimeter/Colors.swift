@@ -136,7 +136,7 @@ struct PatchResult: Identifiable, ColorReading {
         let l = ColorMath.lab(xyz, whiteY: whiteY, white: ref.white)
         lab = l
         lch = ColorMath.lch(l)
-        deltaE = ColorMath.deltaE2000(ref: ColorMath.lab(reference, whiteY: 1, white: ref.white), measured: l)
+        deltaE = ColorMath.deltaE(xyz, whiteY: whiteY, reference: reference, refWhiteY: 1, ref: ref, isGray: false)
         deltaxy = hypot(xyz.x - reference.x, xyz.y - reference.y)
         deltaL = reference.Y > 0 ? (xyz.Y / whiteY - reference.Y) / reference.Y : nil
         let lin = ColorMath.rgb(xyz, ref: ref)

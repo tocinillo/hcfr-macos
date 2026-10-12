@@ -83,7 +83,16 @@ private struct DarkGraph<Content: View>: View {
     }
 }
 
-private let grayRamp = LinearGradient(colors: [Color(white: 0.12), Color(white: 0.75)], startPoint: .leading, endPoint: .trailing)
+let grayRamp = LinearGradient(colors: [Color(white: 0.12), Color(white: 0.95)], startPoint: .leading, endPoint: .trailing)
+
+/// HCFR's "10% White … 90% White" axis; every other label when the graph is narrow.
+func whiteLevelAxis(width: CGFloat) -> some AxisContent {
+    let step = width < 760 ? 20 : 10
+    return AxisMarks(values: Array(stride(from: 10, through: 90, by: step))) { v in
+        AxisGridLine().foregroundStyle(.teal.opacity(0.5))
+        AxisValueLabel { Text("\(v.as(Int.self) ?? 0)% White").font(.caption2.monospaced()).foregroundStyle(.white).fixedSize() }
+    }
+}
 
 private func levelAxis(step: Int = 10) -> some AxisContent {
     AxisMarks(values: Array(stride(from: step, through: 100, by: step))) { v in
@@ -106,13 +115,12 @@ struct LuminanceChart: View {
     @ObservedObject var session: Session
 
     var body: some View {
-        let ref = session.ref
         let white = session.whiteY
         let measured: [LevelPoint] = white.map { w in
             session.results.compactMap { r in r.xyz.map { LevelPoint(level: r.level, value: $0.Y / w * 100, series: "Measured") } }
         } ?? []
         let target = stride(from: 0.0, through: 100, by: 2.5).map {
-            LevelPoint(level: $0, value: ref.eotf(Reference.grayProp($0)) * 100, series: "Reference")
+            LevelPoint(level: $0, value: session.targetRelative(level: $0) * 100, series: "Reference")
         }
         DarkGraph(title: "Luminance") {
             Chart {
@@ -141,40 +149,44 @@ struct LuminanceChart: View {
 
 // MARK: - Gamma
 
-/// Point gamma per level against the target (HCFR "Gamma").
+/// Point gamma per level against the target curve (HCFR "EOTF(Gamma)", GammaHistoView): the target
+/// as dotted line with a square at each gray scale step, the measure in yellow, axis 1.1–2.9.
 struct GammaChart: View {
     @ObservedObject var session: Session
 
     var body: some View {
-        let ref = session.ref
         let measured = session.results.compactMap { r in r.gamma.map { LevelPoint(level: r.level, value: $0, series: "Measured") } }
-        let target = stride(from: 5.0, through: 95, by: 2.5).map { l -> LevelPoint in
-            let v = Reference.grayProp(l)
-            return LevelPoint(level: l, value: log(ref.eotf(v)) / log(v), series: "Reference")
+        let target = session.allLevels.compactMap { l -> LevelPoint? in
+            let v = Reference.grayProp(l), t = session.targetRelative(level: l)
+            guard t > 0, v > 0, v < 1 else { return nil }
+            return LevelPoint(level: l, value: log(t) / log(v), series: "Reference")
         }
         let values = measured.map(\.value) + target.map(\.value)
-        let lo = min(1.6, (values.min() ?? 2) - 0.1), hi = max(3.0, (values.max() ?? 2.4) + 0.1)
-        DarkGraph(title: "Gamma" + (session.averageGamma.map { String(format: " (average %.2f)", $0) } ?? "")) {
-            Chart {
-                ForEach(target) { p in
-                    LineMark(x: .value("Level", p.level), y: .value("Gamma", p.value), series: .value("S", p.series))
-                        .foregroundStyle(.white.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+        let lo = min(1.1, (values.min() ?? 2) - 0.1), hi = max(2.9, (values.max() ?? 2.4) + 0.1)
+        DarkGraph(title: "EOTF(Gamma)" + (session.averageGamma.map { String(format: " — average %.2f", $0) } ?? "")) {
+            GeometryReader { geo in
+                Chart {
+                    ForEach(target) { p in
+                        LineMark(x: .value("Level", p.level), y: .value("Gamma", p.value), series: .value("S", p.series))
+                            .foregroundStyle(.white.opacity(0.9)).lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 2]))
+                        PointMark(x: .value("Level", p.level), y: .value("Gamma", p.value))
+                            .symbol(.square).foregroundStyle(.white).symbolSize(22)
+                    }
+                    ForEach(measured) { p in
+                        LineMark(x: .value("Level", p.level), y: .value("Gamma", p.value), series: .value("S", p.series))
+                            .foregroundStyle(.yellow).lineStyle(StrokeStyle(lineWidth: 2))
+                        PointMark(x: .value("Level", p.level), y: .value("Gamma", p.value)).foregroundStyle(.yellow).symbolSize(24)
+                    }
                 }
-                ForEach(measured) { p in
-                    LineMark(x: .value("Level", p.level), y: .value("Gamma", p.value), series: .value("S", p.series))
-                        .foregroundStyle(.yellow).lineStyle(StrokeStyle(lineWidth: 2))
-                    PointMark(x: .value("Level", p.level), y: .value("Gamma", p.value)).foregroundStyle(.yellow).symbolSize(24)
-                }
+                .chartXScale(domain: 0...100)
+                .chartYScale(domain: lo...hi)
+                .chartYAxis { AxisMarks(position: .leading, values: Array(stride(from: (lo * 10).rounded() / 10, through: hi, by: geo.size.height < 300 ? 0.2 : 0.1))) { v in
+                    AxisGridLine().foregroundStyle(.teal.opacity(0.4))
+                    AxisValueLabel { Text(String(format: "%.1f", v.as(Double.self) ?? 0)).font(.caption.monospaced()).foregroundStyle(.white) }
+                } }
+                .chartXAxis { whiteLevelAxis(width: geo.size.width) }
+                .chartPlotStyle { $0.background(grayRamp) }
             }
-            .chartXScale(domain: 0...100)
-            .chartYScale(domain: lo...hi)
-            .chartYAxis { AxisMarks(position: .leading) { v in
-                AxisGridLine().foregroundStyle(.teal.opacity(0.4))
-                AxisValueLabel { Text(String(format: "%.1f", v.as(Double.self) ?? 0)).foregroundStyle(.white) }
-            } }
-            .chartXAxis { levelAxis(step: 20) }
-            .chartPlotStyle { $0.background(grayRamp) }
-            .overlay(alignment: .topLeading) { legend(measured.isEmpty ? "Measure the gray scale (with 100% white)" : nil) }
         }
     }
 }
@@ -267,7 +279,8 @@ struct SummaryView: View {
                 section("Reference", [
                     ("Standard", session.standard.rawValue),
                     ("White", session.white.label),
-                    ("Gamma", session.standard.usesSRGBCurve ? "sRGB" : String(format: "Power law %.2f", session.gamma)),
+                    ("Gamma", session.gammaDescription),
+                    ("Delta E", "\(session.ref.deltaEFormula.title), gray \(session.ref.grayDeltaE.title)"),
                     ("Gray steps", "\(session.grayCount)"),
                     ("Display (meter)", session.correction?.name ?? "—"),
                 ])

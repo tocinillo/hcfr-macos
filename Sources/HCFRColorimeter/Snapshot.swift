@@ -38,6 +38,20 @@ enum Snapshot {
             session.overrideBlack = original
             exit(0)
         }
+        if let p = args.firstIndex(of: "--prefs"), p + 1 < args.count {
+            // Development check: renders the Preferences pages
+            let session = Session()
+            for (n, page) in [(0, "references"), (1, "advanced")] {
+                let view = PreferencesSnapshot(session: session, page: n).frame(width: 640, height: n == 0 ? 980 : 300)
+                let renderer = ImageRenderer(content: view)
+                renderer.scale = 1
+                if let img = renderer.nsImage, let tiff = img.tiffRepresentation,
+                   let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
+                    try? png.write(to: URL(fileURLWithPath: args[p + 1] + "-\(page).png"))
+                }
+            }
+            exit(0)
+        }
         guard let i = args.firstIndex(of: "--snapshot"), i + 1 < args.count else { return }
         let session = Session()
         let sample: [(Double, Double, Double, Double)] = [

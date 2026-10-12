@@ -33,13 +33,14 @@ struct StepResult: Identifiable, ColorReading {
     /// `whiteY`: measured 100% white (for gamma). `baseY`: white for Y target, ΔE and Lab — the
     /// measured 100%, or 120 cd/m² until it is measured (as HCFR does in a new project), so ΔE is
     /// shown as values come in.
-    init(level: Double, xyz: XYZ?, whiteY: Double?, baseY: Double, ref: CalReference) {
+    init(level: Double, xyz: XYZ?, whiteY: Double?, baseY: Double, blackY: Double?, ref: CalReference) {
         self.level = level
         self.xyz = xyz
         targetCenter = (ref.white.x, ref.white.y)
         // Until 100% is measured only the 100% column shows its base target (120 cd/m²);
         // once it is measured every level gets its target from the real white.
-        targetY = whiteY != nil || level == 100 ? ColorMath.targetY(level: level, whiteY: baseY, ref: ref) : nil
+        let target = ColorMath.targetY(level: level, whiteY: baseY, blackY: blackY, ref: ref)
+        targetY = whiteY != nil || level == 100 ? target : nil
         let code = Int((Reference.grayProp(level) * 255).rounded())
         referenceRGB = [code, code, code]
         guard let xyz else {
@@ -52,7 +53,7 @@ struct StepResult: Identifiable, ColorReading {
         cct = ColorMath.cct(xyz)
         deltaxy = ColorMath.deltaxy(xyz, ref: ref)
         gamma = whiteY.flatMap { ColorMath.pointGamma(xyz, whiteY: $0, level: level) }
-        deltaE = ColorMath.grayDeltaE(xyz, whiteY: baseY, ref: ref)
+        deltaE = ColorMath.grayDeltaE(xyz, whiteY: baseY, targetY: target, ref: ref)
         let l = ColorMath.lab(xyz, whiteY: baseY, white: ref.white)
         lab = l
         lch = ColorMath.lch(l)
@@ -83,6 +84,13 @@ final class Session: ObservableObject {
             let clamped = min(max(gamma, 1.0), 4.0)
             if clamped != gamma { gamma = clamped; return }
             defaults.set(gamma, forKey: "gamma")
+        }
+    }
+    /// References / Advanced preferences (gamma mode, BT.1886, HDR, custom colors, Delta E).
+    @Published var prefs = ReferencePrefs() {
+        didSet {
+            prefs.applyCustomColors()
+            if let data = try? JSONEncoder().encode(prefs) { defaults.set(data, forKey: "referencePrefs") }
         }
     }
     /// Override black (0 cd/m²): 0 IRE is not measured and black is taken as perfect.
@@ -169,6 +177,9 @@ final class Session: ObservableObject {
         standard = defaults.string(forKey: "standard").flatMap(ColorStandard.init(rawValue:)) ?? .sdtv
         white = defaults.string(forKey: "white").flatMap(WhitePoint.init(rawValue:)) ?? .d65
         gamma = defaults.object(forKey: "gamma") as? Double ?? 2.3
+        let loadedPrefs = defaults.data(forKey: "referencePrefs").flatMap { try? JSONDecoder().decode(ReferencePrefs.self, from: $0) } ?? ReferencePrefs()
+        prefs = loadedPrefs
+        loadedPrefs.applyCustomColors()
         overrideBlack = defaults.object(forKey: "overrideBlack") as? Bool ?? true
         videoLevels = defaults.string(forKey: "videoLevels").flatMap(VideoLevels.init(rawValue:)) ?? .full
         patternArea = defaults.object(forKey: "patternArea") as? Double ?? 100
@@ -188,7 +199,44 @@ final class Session: ObservableObject {
         patternWindow.onEscape = { [weak self] in self?.stop() }
     }
 
-    var ref: CalReference { CalReference(standard: standard, white: white, gamma: gamma) }
+    var ref: CalReference {
+        CalReference(standard: standard, white: white, gamma: gamma, gammaMode: prefs.mode, gammaRel: prefs.gammaRel,
+                     split: prefs.split, measuredGamma: prefs.useMeasuredGamma ? measuredAverageGamma : nil, hdr: prefs.hdr,
+                     deltaEFormula: DeltaEFormula(rawValue: prefs.deltaEFormula) ?? .cie2000,
+                     grayDeltaE: GrayDeltaEMode(rawValue: prefs.grayDeltaE) ?? .absoluteYWithoutGamma,
+                     deltaEWeight: DeltaEWeight(rawValue: prefs.deltaEWeight) ?? .standard)
+    }
+
+    /// Average point gamma of the measurements, 10–80% (HCFR's GammaAvg), for "Use avg measured gamma".
+    var measuredAverageGamma: Double? {
+        guard let w = whiteY else { return nil }
+        let g = measurements.filter { $0.key >= 10 && $0.key <= 80 }.compactMap { ColorMath.pointGamma($0.value, whiteY: w, level: $0.key) }
+        return g.isEmpty ? nil : g.reduce(0, +) / Double(g.count)
+    }
+
+    /// "Power law 2.30", "BT.1886", "ST2084 (BT.2390)"… for the info lines.
+    var gammaDescription: String {
+        let r = ref
+        if r.standard.usesSRGBCurve && !r.gammaMode.isHDR { return "sRGB" }
+        switch r.gammaMode {
+        case .powerLaw: return String(format: "Power law w/gamma = %.2f", r.gammaInUse)
+        case .blackCompensation: return String(format: "Power law w/gamma = %.2f (black compensation)", r.gammaInUse)
+        case .bt1886: return r.gammaRel == 0 ? "BT.1886" : String(format: "BT.1886 (effective %.2f @50%%)", r.gammaRel)
+        case .lStar: return "L*"
+        case .hlg: return String(format: "HLG (system gamma %.2f)", r.hdr.hlgSystemGamma)
+        case .st2084: return "ST2084" + (r.hdr.bt2390 ? " (BT.2390)" : "")
+        }
+    }
+
+    /// Target luminance of a gray level relative to white (1 = white), with the current curve.
+    func targetRelative(level: Double) -> Double {
+        // Without measurements HCFR uses its default on/off white, Target MaxL (120 cd/m²)
+        let w = whiteY ?? prefs.targetMaxL
+        return ref.targetY(signal: Reference.grayProp(level), whiteY: w, blackY: targetBlackY) / w
+    }
+
+    /// Black luminance for the targets: measured 0%, or the manual black with Override black.
+    var targetBlackY: Double? { overrideBlack ? prefs.manualBlack : measurements[0]?.Y }
 
     /// All levels of the gray scale, 0 to 100%.
     var allLevels: [Double] { Reference.levels(count: grayCount) }
@@ -220,8 +268,8 @@ final class Session: ObservableObject {
         if !allLevels.contains(selectedLevel) { selectedLevel = 100 }
     }
 
-    /// Measured black, used for contrast (none when Override black is on: black = 0 cd/m²).
-    var blackY: Double? { overrideBlack ? nil : measurements[0]?.Y }
+    /// Black, used for contrast: measured 0%, or the manual black with Override black (none if 0).
+    var blackY: Double? { overrideBlack ? (prefs.manualBlack > 0 ? prefs.manualBlack : nil) : measurements[0]?.Y }
 
     var contrast: Double? {
         let w = grayBaseY
@@ -280,7 +328,7 @@ final class Session: ObservableObject {
 
     private func result(for level: Double) -> StepResult {
         let xyz = level == 0 && overrideBlack ? nil : measurements[level]
-        return StepResult(level: level, xyz: xyz, whiteY: whiteY, baseY: grayBaseY, ref: ref)
+        return StepResult(level: level, xyz: xyz, whiteY: whiteY, baseY: grayBaseY, blackY: targetBlackY, ref: ref)
     }
 
     /// Average gamma as HCFR (ComputeGammaAndOffset): levels 10% to 80%.

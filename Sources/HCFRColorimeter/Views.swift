@@ -384,8 +384,8 @@ private struct ViewPanel: View {
 
     private var infoLine: String {
         let r = session.ref
-        var s = "Color Space: \(r.standard.shortName), White Point: \(r.white.rawValue) (\(r.white.kelvin) K), EOTF: SDR, "
-        s += r.standard.usesSRGBCurve ? "sRGB" : "Power law w/gamma = \(String(format: "%.2f", r.gamma))"
+        var s = "Color Space: \(r.standard.shortName), White Point: \(r.white.rawValue) (\(r.white.kelvin) K), EOTF: \(r.gammaMode.isHDR ? "HDR" : "SDR"), "
+        s += session.gammaDescription
         let count = session.view == .grayScale
             ? session.measurements.filter { $0.key > 0 || !session.overrideBlack }.count
             : session.colorMeasurements.count
@@ -488,7 +488,12 @@ private struct MeasuresGrid: View {
 
     private var summary: String {
         "( Average Gamma: \(fmt(session.averageGamma, 2).isEmpty ? "—" : fmt(session.averageGamma, 2)), Contrast: \(contrastText) )  "
-        + "( Average dE: \(fmt(session.averageDeltaE, 2).isEmpty ? "—" : fmt(session.averageDeltaE, 2)), max: \(fmt(session.maxDeltaE, 2).isEmpty ? "—" : fmt(session.maxDeltaE, 2)) [CIE2000] )  [Absolute Y w/o gamma]"
+        + "( Average dE: \(fmt(session.averageDeltaE, 2).isEmpty ? "—" : fmt(session.averageDeltaE, 2)), max: \(fmt(session.maxDeltaE, 2).isEmpty ? "—" : fmt(session.maxDeltaE, 2)) [\(grayFormula)] )  [\(session.ref.grayDeltaE.title)]"
+    }
+
+    private var grayFormula: String {
+        let f = session.ref.deltaEFormula
+        return f == .recommended ? "CIE76(uv)" : f.title
     }
 
     private func select(_ level: Double) { session.select(level: level) }
@@ -605,7 +610,8 @@ private struct PrimariesGrid: View {
         let d = session.colorDeltaEs
         let avg = d.isEmpty ? "—" : fmt(d.reduce(0, +) / Double(d.count), 2)
         let mx = d.max().map { fmt($0, 2) } ?? "—"
-        return "( Average dE: \(avg), max: \(mx) [CIE2000] )  Reference: \(session.standard.shortName) primaries, 100% saturation"
+        let f = session.ref.deltaEFormula
+        return "( Average dE: \(avg), max: \(mx) [\(f == .recommended ? "CIE2000" : f.title)] )  Reference: \(session.standard.shortName) primaries, 100% saturation"
     }
 
     /// White not measured (no color run and no gray scale 100%): reference white with the 120 base.
@@ -822,6 +828,7 @@ struct GrayScaleChart: View {
         }
         let de = results.compactMap { r in r.deltaE.map { (r.level, min($0, 10)) } }
 
+        GeometryReader { geo in
         VStack(spacing: 0) {
             Text("Gray Scale Balance w/o gamma").font(.callout.bold()).foregroundStyle(.yellow)
                 .frame(maxWidth: .infinity).padding(.vertical, 4)
@@ -842,9 +849,10 @@ struct GrayScaleChart: View {
                 AxisGridLine().foregroundStyle(.teal.opacity(0.4))
                 AxisValueLabel { Text("\(v.as(Int.self) ?? 0)%").foregroundStyle(.white) }
             } }
-            .chartXAxis { levelAxis }
+            .chartXAxis { whiteLevelAxis(width: geo.size.width) }
             .chartPlotStyle { $0.background(grayRamp) }
             .frame(maxHeight: .infinity)
+            .padding(.bottom, 8)
 
             Chart {
                 ForEach(de, id: \.0) { p in
@@ -858,23 +866,13 @@ struct GrayScaleChart: View {
                 AxisGridLine().foregroundStyle(.teal.opacity(0.4))
                 AxisValueLabel { Text("\(v.as(Int.self) ?? 0)").foregroundStyle(.white) }
             } }
-            .chartXAxis { levelAxis }
+            .chartXAxis { whiteLevelAxis(width: geo.size.width) }
             .chartPlotStyle { $0.background(grayRamp) }
             .frame(height: 90)
         }
         .padding(6)
         .background(Color(white: 0.12))
         .clipShape(RoundedRectangle(cornerRadius: 4))
-    }
-
-    private var levelAxis: some AxisContent {
-        AxisMarks(values: Array(stride(from: 10, through: 100, by: 10))) { v in
-            AxisGridLine().foregroundStyle(.teal.opacity(0.5))
-            AxisValueLabel { Text("\(v.as(Int.self) ?? 0)% White").font(.caption2.monospaced()).foregroundStyle(.white) }
         }
-    }
-
-    private var grayRamp: some View {
-        LinearGradient(colors: [Color(white: 0.12), Color(white: 0.75)], startPoint: .leading, endPoint: .trailing)
     }
 }

@@ -30,6 +30,8 @@ struct ProjectFile: Codable {
     var measurements: [String: [Double]]
     /// Number of gray scale points. Absent in older projects (11 points).
     var grayCount: Int? = nil
+    /// References / Advanced preferences used. Absent in older projects (kept as they are).
+    var references: ReferencePrefs? = nil
     /// Primary/secondary colors ("Red", …, "White") -> [X, Y, Z]. Absent in older projects.
     var colors: [String: [Double]]? = nil
 }
@@ -61,6 +63,7 @@ extension Session {
             display: correction?.name, meter: meter?.name, meterSerial: meter?.serial, lastMeasure: lastMeasure,
             measurements: Dictionary(uniqueKeysWithValues: measurements.map { (Self.levelKey($0.key), [$0.value.X, $0.value.Y, $0.value.Z]) }),
             grayCount: grayCount,
+            references: prefs,
             colors: Dictionary(uniqueKeysWithValues: colorMeasurements.map { ($0.key.rawValue, [$0.value.X, $0.value.Y, $0.value.Z]) }))
         do {
             let encoder = JSONEncoder()
@@ -101,6 +104,7 @@ extension Session {
             gamma = file.gamma
             overrideBlack = file.overrideBlack
             applyGrayCount(file.grayCount ?? Reference.defaultGrayCount)
+            if let r = file.references { prefs = r }
             // Keys are matched to this size's levels, so "10" (older files) and "10.0" are the same level
             var m: [Double: XYZ] = [:]
             for (k, v) in file.measurements where v.count == 3 {
