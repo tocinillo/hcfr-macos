@@ -60,6 +60,13 @@ enum MeasureKind: CaseIterable {
     }
 }
 
+/// Graph shown in the Information panel (HCFR's graph views).
+enum InfoGraph: String, CaseIterable, Identifiable {
+    case grayBalance = "Gray scale balance"
+    case cie = "CIE diagram"
+    var id: String { rawValue }
+}
+
 /// Table shown in the main grid (HCFR's "View" selector).
 enum MeasureView: String, CaseIterable, Identifiable {
     case grayScale = "Gray scale"

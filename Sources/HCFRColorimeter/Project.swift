@@ -26,8 +26,10 @@ struct ProjectFile: Codable {
     var meter: String?
     var meterSerial: String?
     var lastMeasure: Date?
-    /// Level (IRE) -> [X, Y, Z] in cd/m².
+    /// Level (% white, e.g. "10" or "6.25") -> [X, Y, Z] in cd/m².
     var measurements: [String: [Double]]
+    /// Number of gray scale points. Absent in older projects (11 points).
+    var grayCount: Int? = nil
     /// Primary/secondary colors ("Red", …, "White") -> [X, Y, Z]. Absent in older projects.
     var colors: [String: [Double]]? = nil
 }
@@ -57,7 +59,8 @@ extension Session {
         let file = ProjectFile(
             standard: standard.rawValue, white: white.rawValue, gamma: gamma, overrideBlack: overrideBlack,
             display: correction?.name, meter: meter?.name, meterSerial: meter?.serial, lastMeasure: lastMeasure,
-            measurements: Dictionary(uniqueKeysWithValues: measurements.map { ("\($0.key)", [$0.value.X, $0.value.Y, $0.value.Z]) }),
+            measurements: Dictionary(uniqueKeysWithValues: measurements.map { (Self.levelKey($0.key), [$0.value.X, $0.value.Y, $0.value.Z]) }),
+            grayCount: grayCount,
             colors: Dictionary(uniqueKeysWithValues: colorMeasurements.map { ($0.key.rawValue, [$0.value.X, $0.value.Y, $0.value.Z]) }))
         do {
             let encoder = JSONEncoder()
@@ -97,9 +100,13 @@ extension Session {
             if let w = WhitePoint(rawValue: file.white) { white = w }
             gamma = file.gamma
             overrideBlack = file.overrideBlack
-            var m: [Int: XYZ] = [:]
+            applyGrayCount(file.grayCount ?? Reference.defaultGrayCount)
+            // Keys are matched to this size's levels, so "10" (older files) and "10.0" are the same level
+            var m: [Double: XYZ] = [:]
             for (k, v) in file.measurements where v.count == 3 {
-                if let level = Int(k) { m[level] = XYZ(X: v[0], Y: v[1], Z: v[2]) }
+                guard let value = Double(k),
+                      let level = allLevels.first(where: { abs($0 - value) < 1e-6 }) else { continue }
+                m[level] = XYZ(X: v[0], Y: v[1], Z: v[2])
             }
             measurements = m
             var c: [PatchColor: XYZ] = [:]
@@ -147,6 +154,11 @@ extension Session {
         default:
             return false
         }
+    }
+
+    /// Level as written in the file: "10" for whole levels, else full precision ("33.333333333333336").
+    static func levelKey(_ level: Double) -> String {
+        level == level.rounded() ? String(Int(level)) : "\(level)"
     }
 
     private func defaultProjectName() -> String {

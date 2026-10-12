@@ -61,7 +61,7 @@ struct ContentView: View {
 
             HStack(alignment: .top, spacing: 8) {
                 SelectedColorPanel(session: session).frame(width: 370)
-                Panel(title: "Information") { GrayScaleChart(session: session) }
+                InformationPanel(session: session)
             }
         }
         .padding(8)
@@ -83,6 +83,15 @@ struct ContentView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Are you sure? All measurements will be deleted and values reset to zero.")
+        }
+        .alert("Change the gray scale size", isPresented: Binding(get: { session.pendingGrayCount != nil },
+                                                                  set: { if !$0 { session.pendingGrayCount = nil } })) {
+            Button("Change and clear gray scale", role: .destructive) {
+                if let n = session.pendingGrayCount { session.setGrayCount(n, confirmed: true) }
+            }
+            Button("Cancel", role: .cancel) { session.pendingGrayCount = nil }
+        } message: {
+            Text("The gray scale measurements were taken with \(session.grayCount) points. Changing to \(session.pendingGrayCount ?? 0) points clears them (the colors are kept).")
         }
         .sheet(item: $session.prompt) { p in
             PromptSheet(prompt: p, session: session).onAppear { session.promptDidAppear(p.id) }
@@ -185,7 +194,7 @@ private struct ActionsPanel: View {
                 } else {
                     ActionButton(title: "Measure", symbol: "checklist", tint: .blue) { MeasureMenu.show(for: session) }
                         .disabled(session.busy || session.meter == nil)
-                        .help("Choose the test: Grey scale (\(session.levels.first ?? 10) to 100 IRE), Grey scale and colors, Primary colors, or Primary and secondary colors")
+                        .help("Choose the test: Grey scale (\(Reference.label(session.levels.first ?? 10)) to 100 IRE, \(session.levels.count) steps), Grey scale and colors, Primary colors, or Primary and secondary colors")
                 }
 
                 GeneratorMenu(session: session)
@@ -352,6 +361,17 @@ private struct ViewPanel: View {
                 }
                 .disabled(session.standard.usesSRGBCurve)
                 .help(session.standard.usesSRGBCurve ? "sRGB uses its own tone curve instead of a power law gamma." : "Target gamma (power law). Default 2.3.")
+                HStack(spacing: 4) {
+                    Text("Gray steps").fixedSize()
+                    Picker("Gray steps", selection: Binding(get: { session.grayCount }, set: { session.setGrayCount($0) })) {
+                        ForEach(Reference.grayCounts, id: \.self) { n in
+                            Text("\(n) (every \(Reference.label(100 / Double(n - 1)))%)").tag(n)
+                        }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                }
+                .help("Number of gray scale points, 0 and 100% included (HCFR's Scale sizes → Gray). Changing it clears the gray scale measurements.")
                 Toggle("Override black", isOn: $session.overrideBlack)
                     .help("""
                         Override black (0 cd/m²): when on, 0 IRE is not measured and black is taken as a perfect 0 cd/m².                         CRT and LCD displays never reach a true black and colorimeters read such low light poorly,                         so measuring it adds noise to contrast and the low end.                         Turn it off to measure 0 IRE, e.g. on an OLED, whose black is truly black and measures well.
@@ -428,14 +448,23 @@ private struct MeasuresGrid: View {
     @ObservedObject var session: Session
 
     var body: some View {
-        let results = session.results
         VStack(alignment: .leading, spacing: 4) {
             Text(summary).font(.caption.monospaced()).foregroundStyle(.secondary)
-            Grid(horizontalSpacing: 0, verticalSpacing: 0) {
+            // Up to ~21 columns fill the width; more (51, 101 points) scroll sideways
+            ViewThatFits(in: .horizontal) {
+                grid
+                ScrollView(.horizontal) { grid.padding(.bottom, 12) }
+            }
+        }
+    }
+
+    private var grid: some View {
+        let results = session.results
+        return Grid(horizontalSpacing: 0, verticalSpacing: 0) {
                 GridRow {
                     header("% White", width: 90)
                     ForEach(results) { r in
-                        header("\(r.level)", selected: r.level == session.selectedLevel)
+                        header(Reference.label(r.level), selected: r.level == session.selectedLevel)
                             .onTapGesture { select(r.level) }
                     }
                 }
@@ -455,7 +484,6 @@ private struct MeasuresGrid: View {
             }
             .font(.system(.body, design: .monospaced))
             .overlay(Rectangle().stroke(.separator))
-        }
     }
 
     private var summary: String {
@@ -463,7 +491,7 @@ private struct MeasuresGrid: View {
         + "( Average dE: \(fmt(session.averageDeltaE, 2).isEmpty ? "—" : fmt(session.averageDeltaE, 2)), max: \(fmt(session.maxDeltaE, 2).isEmpty ? "—" : fmt(session.maxDeltaE, 2)) [CIE2000] )  [Absolute Y w/o gamma]"
     }
 
-    private func select(_ level: Int) { session.select(level: level) }
+    private func select(_ level: Double) { session.select(level: level) }
 
     private var contrastText: String {
         guard let c = session.contrast else { return "—" }
@@ -484,7 +512,7 @@ private struct MeasuresGrid: View {
 
     private func header(_ text: String, width: CGFloat? = nil, selected: Bool = false) -> some View {
         Text(text).bold()
-            .frame(maxWidth: width ?? .infinity, minHeight: 21)
+            .frame(minWidth: width ?? 56, maxWidth: width ?? .infinity, minHeight: 21)
             .frame(width: width)
             .background(selected ? Color.accentColor.opacity(0.35) : Color.gray.opacity(0.35))
             .overlay(Rectangle().stroke(.separator, lineWidth: 0.5))
@@ -498,13 +526,15 @@ private struct MeasuresGrid: View {
             .overlay(Rectangle().stroke(.separator, lineWidth: 0.5))
     }
 
-    private func cell(_ text: String, level: Int, bold: Bool = false, fill: Color? = nil) -> some View {
+    private func cell(_ text: String, level: Double, bold: Bool = false, fill: Color? = nil) -> some View {
         let overridden = level == 0 && session.overrideBlack
         let background: Color = fill ?? (overridden ? blackCell : (level == session.selectedLevel ? Color.accentColor.opacity(0.10) : .clear))
         return Text(text)
             .fontWeight(bold ? .bold : .regular)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
             .foregroundStyle(fill != nil ? Color.black : (overridden ? Color.blue : Color.primary))
-            .frame(maxWidth: .infinity, minHeight: 21, alignment: .trailing)
+            .frame(minWidth: 50, maxWidth: .infinity, minHeight: 21, alignment: .trailing)
             .padding(.trailing, 6)
             .background(background)
             .overlay(Rectangle().stroke(.separator, lineWidth: 0.5))
@@ -774,14 +804,14 @@ private struct CurrentMeasureTable: View {
 // MARK: - Chart
 
 private struct BalancePoint: Identifiable {
-    let level: Int
+    let level: Double
     let channel: Int
     let value: Double
-    var id: Int { level * 10 + channel }
+    var id: String { "\(level)-\(channel)" }
 }
 
 /// "Gray Scale Balance w/o gamma": balance RGB arriba (60–140%) y ΔE abajo (0–10), como HCFR.
-private struct GrayScaleChart: View {
+struct GrayScaleChart: View {
     @ObservedObject var session: Session
 
     var body: some View {

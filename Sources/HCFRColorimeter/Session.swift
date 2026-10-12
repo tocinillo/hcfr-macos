@@ -11,7 +11,7 @@ import Combine
 
 /// Analysed result for one gray level (table column).
 struct StepResult: Identifiable, ColorReading {
-    let level: Int
+    let level: Double
     let xyz: XYZ?
     let targetY: Double?
     let balance: [Double]?
@@ -25,15 +25,15 @@ struct StepResult: Identifiable, ColorReading {
     let measureRGB: [Int]?
     let referenceRGB: [Int]
     let targetCenter: (x: Double, y: Double)
-    var id: Int { level }
-    var title: String { "\(level)% White" }
+    var id: Double { level }
+    var title: String { "\(Reference.label(level))% White" }
     var bars: [Double]? { balance }
     var targetRange: Double { 0.02 }
 
     /// `whiteY`: measured 100% white (for gamma). `baseY`: white for Y target, ΔE and Lab — the
     /// measured 100%, or 120 cd/m² until it is measured (as HCFR does in a new project), so ΔE is
     /// shown as values come in.
-    init(level: Int, xyz: XYZ?, whiteY: Double?, baseY: Double, ref: CalReference) {
+    init(level: Double, xyz: XYZ?, whiteY: Double?, baseY: Double, ref: CalReference) {
         self.level = level
         self.xyz = xyz
         targetCenter = (ref.white.x, ref.white.y)
@@ -103,13 +103,24 @@ final class Session: ObservableObject {
     @Published var scanning = false
     @Published var status = "Looking for colorimeters…"
     @Published var activity: Activity = .idle
-    @Published var measurements: [Int: XYZ] = [:]
-    @Published var selectedLevel: Int = 100
+    /// Gray scale measurements by level (% white).
+    @Published var measurements: [Double: XYZ] = [:]
+    /// Number of points of the gray scale (11 = 0, 10, … 100%), as HCFR's "Scale sizes" → Gray.
+    @Published private(set) var grayCount = Reference.defaultGrayCount
+    /// Gray scale size chosen while measurements exist: asks before clearing them.
+    @Published var pendingGrayCount: Int?
+    @Published var selectedLevel: Double = 100
     /// Primary / secondary color measurements (and the White measured with them).
     @Published var colorMeasurements: [PatchColor: XYZ] = [:]
     @Published var selectedPatch: PatchColor = .red
     /// Table shown: gray scale or primaries and secondaries.
     @Published var view: MeasureView = .grayScale
+    /// Graph of the Information panel (HCFR's graph views).
+    @Published var infoGraph: InfoGraph = .grayBalance { didSet { defaults.set(infoGraph.rawValue, forKey: "infoGraph") } }
+    /// CIE diagram: u'v' (CIE 1976 UCS) instead of xy (CIE 1931), as HCFR's "CIE u'v'" option.
+    @Published var cieUV = false { didSet { defaults.set(cieUV, forKey: "cieUV") } }
+    /// CIE diagram: show the gray scale points (HCFR's "Show gray scale").
+    @Published var cieShowGrays = true { didSet { defaults.set(cieShowGrays, forKey: "cieShowGrays") } }
 
     // Pattern generator: the user's DVD / external generator (manual) or a display of this Mac
     @Published var patternSource: PatternSource = .manual { didSet { savePatternSource() } }
@@ -161,6 +172,10 @@ final class Session: ObservableObject {
         patternArea = defaults.object(forKey: "patternArea") as? Double ?? 100
         settleSeconds = defaults.object(forKey: "settleSeconds") as? Double ?? 1.0
         piAddress = defaults.string(forKey: "piAddress") ?? ""
+        if let n = defaults.object(forKey: "grayCount") as? Int, n >= 3, n <= 101 { grayCount = n }
+        infoGraph = defaults.string(forKey: "infoGraph").flatMap(InfoGraph.init(rawValue:)) ?? .grayBalance
+        cieUV = defaults.bool(forKey: "cieUV")
+        cieShowGrays = defaults.object(forKey: "cieShowGrays") as? Bool ?? true
         if let id = defaults.object(forKey: "patternDisplay") as? UInt32,
            NSScreen.screens.contains(where: { $0.displayID == id }) {
             patternSource = .display(id)
@@ -172,8 +187,35 @@ final class Session: ObservableObject {
 
     var ref: CalReference { CalReference(standard: standard, white: white, gamma: gamma) }
 
+    /// All levels of the gray scale, 0 to 100%.
+    var allLevels: [Double] { Reference.levels(count: grayCount) }
+
     /// Levels to measure: 0 IRE only when Override black is off.
-    var levels: [Int] { overrideBlack ? Reference.allLevels.filter { $0 > 0 } : Reference.allLevels }
+    var levels: [Double] { overrideBlack ? allLevels.filter { $0 > 0 } : allLevels }
+
+    /// Changes the number of gray scale points; gray measurements of another size are cleared
+    /// (as in HCFR), so with measurements the user is asked first (`pendingGrayCount`).
+    func setGrayCount(_ count: Int, confirmed: Bool = false) {
+        guard count != grayCount, activity == .idle else { return }
+        if !measurements.isEmpty && !confirmed {
+            pendingGrayCount = count
+            return
+        }
+        pendingGrayCount = nil
+        if !measurements.isEmpty {
+            measurements.removeAll()
+            isDirty = true
+        }
+        applyGrayCount(count)
+        status = "Gray scale: \(count) points (every \(Reference.label(100 / Double(count - 1)))%)"
+    }
+
+    /// Sets the size without touching measurements (opening a project, launch).
+    func applyGrayCount(_ count: Int) {
+        grayCount = min(max(count, 3), 101)
+        defaults.set(grayCount, forKey: "grayCount")
+        if !allLevels.contains(selectedLevel) { selectedLevel = 100 }
+    }
 
     /// Measured black, used for contrast (none when Override black is on: black = 0 cd/m²).
     var blackY: Double? { overrideBlack ? nil : measurements[0]?.Y }
@@ -217,12 +259,12 @@ final class Session: ObservableObject {
     var hasMeasurements: Bool { !measurements.isEmpty || !colorMeasurements.isEmpty }
 
     var results: [StepResult] {
-        Reference.allLevels.map { result(for: $0) }
+        allLevels.map { result(for: $0) }
     }
 
     var selectedResult: StepResult { result(for: selectedLevel) }
 
-    private func result(for level: Int) -> StepResult {
+    private func result(for level: Double) -> StepResult {
         let xyz = level == 0 && overrideBlack ? nil : measurements[level]
         return StepResult(level: level, xyz: xyz, whiteY: whiteY, baseY: grayBaseY, ref: ref)
     }
@@ -365,14 +407,14 @@ final class Session: ObservableObject {
 
     /// Measure button: runs the chosen test.
     func measure(_ kind: MeasureKind = .grayScale) {
-        let grayCount = kind == .grayScale || kind == .grayScaleAndColors ? levels.count : 0
+        let graySteps = kind == .grayScale || kind == .grayScaleAndColors ? levels.count : 0
         // As HCFR for Windows, color tests never measure Black (with or without Override black)
-        let total = grayCount + kind.patches.count
+        let total = graySteps + kind.patches.count
         var what: [String] = []
-        if grayCount > 0 { what.append("\(levels.first!) to 100 IRE") }
+        if graySteps > 0 { what.append("\(Reference.label(levels.first!)) to 100 IRE") }
         if !kind.patches.isEmpty { what.append(kind.patches.map(\.rawValue).joined(separator: ", ")) }
 
-        view = kind.patches.isEmpty || grayCount > 0 ? .grayScale : .primariesSecondaries
+        view = kind.patches.isEmpty || graySteps > 0 ? .grayScale : .primariesSecondaries
         run(.measuring) {
             try await self.ask("On measure", """
                 Run \(kind.title.lowercased()) measures on \(total) values (\(what.joined(separator: "; ")))?
@@ -381,7 +423,7 @@ final class Session: ObservableObject {
                 Note: you can cancel measuring using the ESC key.
                 """, style: .yesNo)
             self.isDirty = true
-            if grayCount > 0 {
+            if graySteps > 0 {
                 self.measurements.removeAll()
                 try await self.measureGrayLevels()
             }
@@ -401,7 +443,7 @@ final class Session: ObservableObject {
             try Task.checkCancellation()
             selectedLevel = level
             try await present(.gray(level))
-            status = "Measuring \(level) IRE…"
+            status = "Measuring \(Reference.label(level)) IRE…"
             store(try await readWithCalibration(pattern: .gray(level)), level: level)
         }
         selectedLevel = 100
@@ -428,7 +470,7 @@ final class Session: ObservableObject {
             while !Task.isCancelled {
                 if self.view == .grayScale {
                     let level = self.selectedLevel
-                    self.status = "Continuous reading at \(level) IRE — click another column to measure it, Stop to finish"
+                    self.status = "Continuous reading at \(Reference.label(level)) IRE — click another column to measure it, Stop to finish"
                     try await self.showIfGenerator(.gray(level))
                     let xyz = try await self.readWithCalibration(pattern: .gray(level))
                     // If the column changed during the reading, it belongs to the previous pattern: drop it.
@@ -453,7 +495,7 @@ final class Session: ObservableObject {
         selectedPatch = patch
     }
 
-    func select(level: Int) {
+    func select(level: Double) {
         guard levels.contains(level), activity != .measuring else { return }
         selectedLevel = level
     }
@@ -487,7 +529,7 @@ final class Session: ObservableObject {
 
     // MARK: - Measuring
 
-    private func store(_ xyz: XYZ, level: Int) {
+    private func store(_ xyz: XYZ, level: Double) {
         measurements[level] = xyz
         lastMeasure = Date()
         isDirty = true

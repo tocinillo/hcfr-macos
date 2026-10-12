@@ -33,14 +33,14 @@ enum Snapshot {
             let original = session.overrideBlack
             for value in [true, false] {
                 session.overrideBlack = value
-                print("overrideBlack=\(value): \(session.levels.count) values, \(session.levels.first!) to 100")
+                print("overrideBlack=\(value): \(session.levels.count) values, \(Reference.label(session.levels.first!)) to 100")
             }
             session.overrideBlack = original
             exit(0)
         }
         guard let i = args.firstIndex(of: "--snapshot"), i + 1 < args.count else { return }
         let session = Session()
-        let sample: [(Int, Double, Double, Double)] = [
+        let sample: [(Double, Double, Double, Double)] = [
             (10, 0.2969, 0.3102, 0.880), (20, 0.3067, 0.3219, 3.126), (30, 0.3096, 0.3241, 7.106),
             (40, 0.3108, 0.3255, 13.674), (50, 0.3114, 0.3262, 26.810), (60, 0.3120, 0.3283, 39.654),
             (70, 0.3125, 0.3290, 55.459), (80, 0.3129, 0.3281, 74.584), (90, 0.3130, 0.3287, 97.720),
@@ -60,13 +60,24 @@ enum Snapshot {
         }
         if let r = args.firstIndex(of: "--report"), r + 1 < args.count {
             defer { exit(0) }
-            for s in [(10, 0.2969, 0.3102, 0.880), (50, 0.3114, 0.3262, 26.810), (100, 0.3130, 0.3276, 123.189)] {
+            for s in [(10.0, 0.2969, 0.3102, 0.880), (50.0, 0.3114, 0.3262, 26.810), (100.0, 0.3130, 0.3276, 123.189)] {
                 session.measurements[s.0] = XYZ.fromxyY(x: s.1, y: s.2, Y: s.3)
             }
             if let pdf = Report.makePDF(session) { try? pdf.write(to: URL(fileURLWithPath: args[r + 1])) }
         }
-        let maxLevel = args.contains("--partial") ? 50 : args.contains("--empty") ? -1 : 100
-        for s in sample where s.0 <= maxLevel { session.measurements[s.0] = XYZ.fromxyY(x: s.1, y: s.2, Y: s.3) }
+        let maxLevel: Double = args.contains("--partial") ? 50 : args.contains("--empty") ? -1 : 100
+        if let g = args.firstIndex(of: "--grays"), g + 1 < args.count, let n = Int(args[g + 1]) {
+            // Gray scale of n points with synthetic readings (gamma 2.3, slightly warm low end)
+            session.applyGrayCount(n)
+            for level in session.allLevels where level > 0 && level <= maxLevel {
+                let v = Reference.grayProp(level)
+                session.measurements[level] = XYZ.fromxyY(x: 0.3127 - 0.01 * (1 - v), y: 0.3290 - 0.008 * (1 - v), Y: 120 * pow(v, 2.3))
+            }
+        } else {
+            for s in sample where s.0 <= maxLevel { session.measurements[s.0] = XYZ.fromxyY(x: s.1, y: s.2, Y: s.3) }
+        }
+        session.infoGraph = args.contains("--cie") ? .cie : .grayBalance
+        session.cieUV = args.contains("--uv")
         session.selectedLevel = args.contains("--level10") ? 10 : max(maxLevel, 10)
         if args.contains("--project-roundtrip") {
             // Save, clear, reopen and compare (development check of .hcfrex files)

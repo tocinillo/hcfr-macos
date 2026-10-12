@@ -10,13 +10,13 @@ import AppKit
 
 /// A pattern to show (or ask for): a gray level in IRE or a 100% color patch.
 enum TestPattern: Equatable {
-    case gray(Int)
+    case gray(Double)
     case color(PatchColor)
 
     /// Text used in the "Use … and press Continue" message of the manual (DVD) generator.
     var manualName: String {
         switch self {
-        case .gray(let level): return "\(level) IRE"
+        case .gray(let level): return "\(Reference.label(level)) IRE"
         case .color(.white): return "100% White (100 IRE)"
         case .color(let p): return "100% \(p.rawValue)"
         }

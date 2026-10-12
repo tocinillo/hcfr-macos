@@ -146,22 +146,29 @@ private struct ReportView: View {
         return VStack(alignment: .leading, spacing: 4) {
             Text("Gray scale").font(.system(size: 13, weight: .bold))
             Text(summary).font(.system(size: 9, design: .monospaced))
-            Grid(horizontalSpacing: 0, verticalSpacing: 0) {
-                GridRow {
-                    headerCell("% White", width: 70)
-                    ForEach(results) { r in headerCell("\(r.level)") }
-                }
-                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+            // Gray scales of more than 11 points are printed in blocks of 11 columns
+            ForEach(Array(stride(from: 0, to: results.count, by: 11)), id: \.self) { start in
+                let part = Array(results[start..<min(start + 11, results.count)])
+                Grid(horizontalSpacing: 0, verticalSpacing: 0) {
                     GridRow {
-                        labelCell(row.0)
-                        ForEach(results) { r in
-                            let de: Double? = row.0 == "Delta E" && !isOver(r) ? (isBase(r) ? 0 : r.deltaE) : nil
-                            valueCell(row.1(r), fill: de.map(reportDeltaEColor))
+                        headerCell("% White", width: 70)
+                        ForEach(part) { r in headerCell(Reference.label(r.level)) }
+                        // Keep the columns of a short last block as wide as the others
+                        ForEach(part.count..<11, id: \.self) { _ in Color.clear.frame(maxWidth: .infinity, minHeight: 16) }
+                    }
+                    ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                        GridRow {
+                            labelCell(row.0)
+                            ForEach(part) { r in
+                                let de: Double? = row.0 == "Delta E" && !isOver(r) ? (isBase(r) ? 0 : r.deltaE) : nil
+                                valueCell(row.1(r), fill: de.map(reportDeltaEColor))
+                            }
+                            ForEach(part.count..<11, id: \.self) { _ in Color.clear.frame(maxWidth: .infinity, minHeight: 15) }
                         }
                     }
                 }
+                .overlay(Rectangle().stroke(Color.gray))
             }
-            .overlay(Rectangle().stroke(Color.gray))
         }
     }
 

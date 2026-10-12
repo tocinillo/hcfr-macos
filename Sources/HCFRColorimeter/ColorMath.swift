@@ -180,11 +180,29 @@ struct CalReference: Equatable {
 }
 
 enum Reference {
-    static let allLevels = Array(stride(from: 0, through: 100, by: 10))
+    /// Default gray scale: 11 points, 0 to 100% in steps of 10.
+    static let defaultGrayCount = 11
+    /// Gray scale sizes offered (number of points, 0 and 100% included). HCFR for Windows
+    /// accepts 4 to 100 intervals ("Scale sizes" dialog); these are the usual ones.
+    static let grayCounts = [5, 6, 11, 17, 21, 26, 51, 101]
+
+    /// Levels (% white) of a gray scale of `count` points: evenly spaced from 0 to 100, as HCFR's
+    /// gray measure array (the signal is quantized to 8-bit video codes by `grayProp`).
+    static func levels(count: Int) -> [Double] {
+        let n = max(count, 2)
+        return (0..<n).map { $0 == n - 1 ? 100 : Double($0) * 100 / Double(n - 1) }
+    }
+
+    /// "10", "6.25", "33.3" for column headers and messages.
+    static func label(_ level: Double) -> String {
+        if abs(level - level.rounded()) < 1e-9 { return String(Int(level.rounded())) }
+        let s = String(format: "%.2f", level)
+        return s.hasSuffix("0") ? String(s.dropLast()) : s
+    }
 
     /// Gray level of a calibration DVD (8 bit, 16–235, normal rounding; HCFR's GrayLevelToGrayProp).
-    static func grayProp(_ level: Int) -> Double {
-        (floor(Double(level) / 100 * 219 + 16.5) - 16) / 219
+    static func grayProp(_ level: Double) -> Double {
+        (floor(level / 100 * 219 + 16.5) - 16) / 219
     }
 }
 
@@ -264,12 +282,12 @@ enum ColorMath {
     }
 
     /// Target luminance: white Y × EOTF(level) (power law gamma, or sRGB curve).
-    static func targetY(level: Int, whiteY: Double, ref: CalReference) -> Double {
+    static func targetY(level: Double, whiteY: Double, ref: CalReference) -> Double {
         whiteY * ref.eotf(Reference.grayProp(level))
     }
 
     /// Gamma puntual (log(Y/Yblanco) / log(nivel)).
-    static func pointGamma(_ c: XYZ, whiteY: Double, level: Int) -> Double? {
+    static func pointGamma(_ c: XYZ, whiteY: Double, level: Double) -> Double? {
         guard level > 0, level < 100, whiteY > 0, c.Y > 0 else { return nil }
         return log(c.Y / whiteY) / log(Reference.grayProp(level))
     }
