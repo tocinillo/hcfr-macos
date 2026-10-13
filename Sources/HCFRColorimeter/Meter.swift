@@ -111,9 +111,9 @@ final class MeterHelper: @unchecked Sendable {
         }
         process.executableURL = url
         var env = ProcessInfo.processInfo.environment
-        if let dir = Self.correctionsDataDir {
-            env["XDG_DATA_DIRS"] = [dir, env["XDG_DATA_DIRS"]].compactMap { $0 }.joined(separator: ":")
-        }
+        // HCFR's CCSS files, and the spectral samples made with this app (Application Support)
+        let userDir = Session.userCorrectionsDir.deletingLastPathComponent().path
+        env["XDG_DATA_DIRS"] = [Self.correctionsDataDir, userDir, env["XDG_DATA_DIRS"]].compactMap { $0 }.joined(separator: ":")
         process.environment = env
         process.standardInput = input
         process.standardOutput = output
@@ -364,12 +364,23 @@ final class ArgyllMeter {
     /// True while the helper process is alive.
     var isAlive: Bool { helper.isRunning }
 
+    /// Spectrum of the last reading (spectral meters only).
+    private(set) var lastSpectrum: Spectrum?
+
     func read() async throws -> XYZ {
         helper.send("read")
         let watchdog = DispatchWorkItem { [helper] in helper.kill(reason: "The colorimeter stopped responding (no reading in \(Int(Self.readTimeout / 60)) minutes).") }
         DispatchQueue.global().asyncAfter(deadline: .now() + Self.readTimeout, execute: watchdog)
         defer { watchdog.cancel() }
-        let line = try await helper.nextLine()
+        lastSpectrum = nil
+        var line = try await helper.nextLine()
+        if line.hasPrefix("SPEC ") {
+            let f = line.dropFirst(5).split(separator: " ").compactMap { Double($0) }
+            if f.count > 3, f.count == 3 + Int(f[2]) {
+                lastSpectrum = Spectrum(start: f[0], end: f[1], values: Array(f[3...]))
+            }
+            line = try await helper.nextLine()
+        }
         try parseStatus(line)
         let v = line.split(separator: " ").dropFirst().compactMap { Double($0) }
         guard line.hasPrefix("XYZ "), v.count == 3 else { throw MeterError.failed("Unexpected reply: \(line)") }

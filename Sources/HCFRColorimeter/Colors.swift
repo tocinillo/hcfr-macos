@@ -100,6 +100,7 @@ enum MeasureKind: Hashable {
 enum InfoGraph: String, CaseIterable, Identifiable {
     case summary = "Summary"
     case targetCIE = "Target - CIE"
+    case spectrum = "Spectrum"
     case luminanceGamma = "Luminance - Gamma"
     case rgbGamma = "RGB - Gamma"
     case rgbLevels = "RGB Levels"

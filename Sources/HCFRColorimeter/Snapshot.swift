@@ -134,6 +134,16 @@ enum Snapshot {
             print(session.status)
             exit(same ? 0 : 1)
         }
+        if args.contains("--spectrum") {
+            // Synthetic white LED-like spectrum for the selected column
+            let v = stride(from: 380.0, through: 730, by: 10).map { nm in
+                exp(-pow((nm - 450) / 12, 2)) + 0.75 * exp(-pow((nm - 560) / 60, 2))
+            }
+            session.spectra[session.selectedTarget.id] = Spectrum(start: 380, end: 730, values: v)
+        }
+        if args.contains("--lux") {
+            for l in session.allLevels where l > 0 { session.luxValues[EditTarget.gray(l).id] = l * 1.3 }
+        }
         if args.contains("--compare") {
             // Reference project: the same readings, a little bluer
             func shift(_ c: XYZ) -> XYZ { XYZ(X: c.X * 0.99, Y: c.Y, Z: c.Z * 1.03) }

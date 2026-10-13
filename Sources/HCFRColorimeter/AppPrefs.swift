@@ -55,6 +55,12 @@ struct GraphOptions: Codable, Equatable {
     var tempScale = 0
     /// CIE diagram: saturations, Color Checker and free measures shown whatever the table.
     var cieAllSeries = false
+    /// CIE: HCFR's "Display Delta E = 3 and 10" contours around the references.
+    var cieDeltaE = false
+    /// CIE: HCFR's "CIE a*b* mode" (CIELAB a*, b* plane instead of chromaticity).
+    var cieAB = false
+    /// CIE: HCFR's "Worst 10%" (the measures with the largest Delta E circled in red).
+    var cieWorst10 = false
 
     var rgbDomain: ClosedRange<Double> { [0.0...200, 60...140, 50...150, 80...120][min(max(rgbScale, 0), 3)] }
 }
@@ -89,6 +95,11 @@ struct AppPrefs: Codable, Equatable {
     var hiRes = false
     /// HCFR's sensor matrix: applied to every reading (identity = no correction), row major.
     var sensorMatrix: [Double] = [1, 0, 0, 0, 1, 0, 0, 0, 1]
+    /// Luxmeter (Advanced → Luxmeter LX-1108): serial port ("" = none), imperial units (ft-cd), and
+    /// "Compute contrast and delta luminance from luxmeter values".
+    var luxPort = ""
+    var imperialUnits = false
+    var preferLuxmeter = false
     /// Advanced → "Do not use white in matrix calculus (R1.x)".
     var matrixOnlyPrimaries = false
 

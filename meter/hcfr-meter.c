@@ -18,7 +18,8 @@
  *   list          -> "@PORT <n> <name>" for each port, then "@OK"
  *   open <n> [default|crt|lcd|oled|proj]
  *                 -> "@OPENED <instrument>\t<correction>\t<1 exact | 0 approximate>\t<serial>" or "@ERR <msg>"
- *   read          -> "@XYZ <X> <Y> <Z>" (cd/m2), "@CAL <cond hex> <msg>", "@POS wrong <msg>" or "@ERR <msg>"
+ *   read          -> spectral meters first send "@SPEC <nm short> <nm long> <n> <v1> … <vn>" (mW/m2/sr/nm), then
+ *                    "@XYZ <X> <Y> <Z>" (cd/m2), "@CAL <cond hex> <msg>", "@POS wrong <msg>" or "@ERR <msg>"
  *   cal           -> "@OK", "@CAL <cond hex> <msg>" or "@ERR <msg>"
  *   settype <i>   -> selects display type/correction <i> from "types"; "@OK" or "@ERR <msg>"
  *   ident <n>     -> "@IDENT <n> <serial number>" (opens and closes the port) or "@ERR <msg>"
@@ -459,11 +460,22 @@ static void cmd_read(void) {
 	double X = val.XYZ[0], Y = val.XYZ[1], Z = val.XYZ[2];
 	int extra = Y < 1.0 ? 4 : Y < 2.0 ? 3 : Y < 5.0 ? 2 : Y < 10.0 ? 1 : 0;
 	int count = 1;
+	xspect sp = val.sp;
 	for (int i = 0; i < extra; i++) {
 		if (g_it->read_sample(g_it, "SPOT", &val, instNoClamp) != inst_ok || !val.XYZ_v)
 			break;
 		X += val.XYZ[0]; Y += val.XYZ[1]; Z += val.XYZ[2];
+		if (sp.spec_n > 0 && val.sp.spec_n == sp.spec_n)
+			for (int k = 0; k < sp.spec_n; k++) sp.spec[k] += val.sp.spec[k];
 		count++;
+	}
+	if (sp.spec_n > 0) {
+		/* Spectrum (HCFR's Spectrum graph and spectral samples), averaged like XYZ */
+		double norm = sp.norm > 0 ? sp.norm : 1.0;
+		printf("@SPEC %.3f %.3f %d", sp.spec_wl_short, sp.spec_wl_long, sp.spec_n);
+		for (int k = 0; k < sp.spec_n; k++) printf(" %.6g", sp.spec[k] / norm / count);
+		printf("\n");
+		fflush(stdout);
 	}
 	reply("XYZ %.6f %.6f %.6f", X / count, Y / count, Z / count);
 }

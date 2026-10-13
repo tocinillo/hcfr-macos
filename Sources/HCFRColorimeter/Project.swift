@@ -45,6 +45,9 @@ struct ProjectFile: Codable {
     var freeMeasures: [[Double]]? = nil
     /// Contrast view: "Black", "White", "ANSI 1", "ANSI 2" -> [X, Y, Z].
     var contrast: [String: [Double]]? = nil
+    /// Spectra (spectral meters) and luxmeter values, by column ("gray:10", "patch:Red"…).
+    var spectra: [String: Spectrum]? = nil
+    var lux: [String: Double]? = nil
 }
 
 extension UTType {
@@ -84,7 +87,9 @@ extension Session {
             userColorChecker: ccSet == .user ? userCCRows.map { "\($0.r),\($0.g),\($0.b),\($0.name)" } : nil,
             userColorCheckerName: ccSet == .user ? userCCName : nil,
             freeMeasures: freeMeasurements.isEmpty ? nil : freeMeasurements.map { [$0.X, $0.Y, $0.Z] },
-            contrast: contrastMeasurements.isEmpty ? nil : Dictionary(uniqueKeysWithValues: contrastMeasurements.map { ($0.key.rawValue, [$0.value.X, $0.value.Y, $0.value.Z]) }))
+            contrast: contrastMeasurements.isEmpty ? nil : Dictionary(uniqueKeysWithValues: contrastMeasurements.map { ($0.key.rawValue, [$0.value.X, $0.value.Y, $0.value.Z]) }),
+            spectra: spectra.isEmpty ? nil : spectra,
+            lux: luxValues.isEmpty ? nil : luxValues)
         do {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -160,6 +165,8 @@ extension Session {
                 if let p = ContrastPatch(rawValue: k) { con[p] = XYZ(X: x[0], Y: x[1], Z: x[2]) }
             }
             contrastMeasurements = con
+            spectra = file.spectra ?? [:]
+            luxValues = file.lux ?? [:]
             selectedIndex = 0
             if !m.isEmpty { view = .grayScale }
             else if !c.isEmpty { view = .primariesSecondaries }
@@ -209,7 +216,7 @@ extension Session {
     }
 
     /// Level as written in the file: "10" for whole levels, else full precision ("33.333333333333336").
-    static func levelKey(_ level: Double) -> String {
+    nonisolated static func levelKey(_ level: Double) -> String {
         level == level.rounded() ? String(Int(level)) : "\(level)"
     }
 

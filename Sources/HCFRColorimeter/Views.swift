@@ -506,6 +506,9 @@ private struct MeasuresGrid: View {
                 }
                 row("delta xy", results) { r in isOverridden(r) ? "" : isBase(r) ? fmt(0, 4) : fmt(r.deltaxy, 4) }
                 row("Y target", results) { r in fmt(r.targetY, 3) }
+                if session.hasLux(.grayScale) {
+                    row(session.luxLabel, results) { r in session.luxText(.gray(r.level)) }
+                }
                 if session.refData != nil {
                     row("dE / ref", results) { r in fmt(session.grayComparison(r).deltaE, 1) }
                     row("xy / ref", results) { r in fmt(session.grayComparison(r).deltaxy, 4) }
@@ -633,6 +636,9 @@ private struct PrimariesGrid: View {
                 row("delta xy", results, black: "") { r in isBase(r) ? fmt(0, 4) : fmt(r.deltaxy, 4) }
                 row("delta L", results, black: "") { r in isBase(r) ? "=" : r.deltaLText }
                 row("Y Target", results, black: "") { r in fmt(r.reference.Y * session.colorWhiteY, 3) }
+                if session.hasLux(.primariesSecondaries) {
+                    row(session.luxLabel, results, black: "") { r in session.luxText(.patch(r.patch)) }
+                }
                 if session.refData != nil {
                     row("dE / ref", results, black: "") { r in fmt(session.colorComparison(r).deltaE, 1) }
                     row("xy / ref", results, black: "") { r in fmt(session.colorComparison(r).deltaxy, 4) }
@@ -1037,6 +1043,9 @@ private struct SeriesGrid: View {
                 if !gray { row("delta L", results) { r in r.deltaLText } }
                 row(gray ? "Y target" : "Y Target", results) { r in fmt(r.targetY, 3) }
             }
+            if session.hasLux(v) {
+                row(session.luxLabel, results) { r in session.luxText(v == .freeMeasures ? .free(r.index) : .series(v, r.index)) }
+            }
             if session.refData != nil {
                 row("dE / ref", results) { r in fmt(session.seriesComparison(v, r).deltaE, 1) }
                 row("xy / ref", results) { r in fmt(session.seriesComparison(v, r).deltaxy, 4) }
@@ -1161,6 +1170,14 @@ private struct ContrastGrid: View {
                         ForEach(results) { r in cell(valueText(blackOverridden(r) ? zeroXYZ : r.xyz, k, session), r) }
                         side(["ON/OFF:", "ANSI:", ""][k], bold: k < 2)
                         side(k == 0 ? contrastText(session.onOffContrast) : k == 1 ? contrastText(session.ansiContrast) : "")
+                    }
+                }
+                if session.hasLux(.contrast) {
+                    GridRow {
+                        label(session.luxLabel)
+                        ForEach(results) { r in cell(session.luxText(.contrast(r.index)), r) }
+                        side("")
+                        side("")
                     }
                 }
             }

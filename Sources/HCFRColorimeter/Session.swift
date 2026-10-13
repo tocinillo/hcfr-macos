@@ -101,6 +101,7 @@ final class Session: ObservableObject {
             applyStaticOptions()
             let s = (oldValue.readingType, oldValue.observer, oldValue.integrationTime, oldValue.hiRes)
             if s != (appPrefs.readingType, appPrefs.observer, appPrefs.integrationTime, appPrefs.hiRes) { reapplySensorOptions() }
+            if oldValue.luxPort != appPrefs.luxPort { applyLuxPort() }
         }
     }
     /// Reading type the meter actually uses (it may not have the one chosen).
@@ -180,6 +181,19 @@ final class Session: ObservableObject {
     /// Wait after showing a pattern before reading, so the display settles.
     @Published var settleSeconds: Double = 1.0 { didSet { defaults.set(settleSeconds, forKey: "settleSeconds") } }
     let patternWindow = PatternWindowController()
+    /// Spectra (spectral meters) and luxmeter values of the measures, by column (EditTarget id).
+    @Published var spectra: [String: Spectrum] = [:]
+    @Published var luxValues: [String: Double] = [:]
+    var lastSpectrum: Spectrum?
+    var lastLux: Double?
+    var lastSecondXYZ: XYZ?
+    /// Luxmeter (HCFR's LX-1108 on a serial port).
+    let luxmeter = Luxmeter()
+    @Published var luxStatus: String?
+    /// Second meter for simultaneous measures; its readings go to the compared data.
+    @Published var meter2: ArgyllMeter?
+    @Published var selectedPort2: MeterPort?
+    @Published var simultaneous = false
     /// Column whose values are being edited (grid's right-click → Edit values…).
     @Published var editingMeasure: EditTarget?
     /// Test pattern on the generator from the Patterns menu (nil = none).
@@ -218,7 +232,7 @@ final class Session: ObservableObject {
     /// Serial numbers already read, by port name (reading one means opening the meter).
     private var serials: [String: String] = [:]
     /// Port this app has open (it can't be opened again to read its serial).
-    private var connectedPortName: String?
+    var connectedPortName: String?
 
     init() {
         standard = defaults.string(forKey: "standard").flatMap(ColorStandard.init(rawValue:)) ?? .sdtv
@@ -255,6 +269,7 @@ final class Session: ObservableObject {
         }
         patternWindow.onEscape = { [weak self] in self?.stop() }
         applyStaticOptions()
+        if !appPrefs.luxPort.isEmpty { applyLuxPort() }
     }
 
     /// Options kept in static settings read by the formulas and tables.
@@ -592,6 +607,8 @@ final class Session: ObservableObject {
         seriesMeasurements.removeAll()
         freeMeasurements.removeAll()
         contrastMeasurements.removeAll()
+        spectra.removeAll()
+        luxValues.removeAll()
         lastMeasure = nil
         selectedLevel = 100
         selectedPatch = .red
@@ -666,6 +683,7 @@ final class Session: ObservableObject {
             try await present(.color(patch))
             status = "Measuring \(patch.rawValue)…"
             colorMeasurements[patch] = try await readWithCalibration(pattern: .color(patch))
+            attach(.patch(patch))
             lastMeasure = Date()
         }
         selectedPatch = .red
@@ -693,6 +711,7 @@ final class Session: ObservableObject {
                     let xyz = try await self.readWithCalibration(pattern: .color(patch))
                     if self.view == .primariesSecondaries && patch == self.selectedPatch {
                         self.colorMeasurements[patch] = xyz
+                        self.attach(.patch(patch))
                         self.lastMeasure = Date()
                         self.isDirty = true
                     }
@@ -743,6 +762,7 @@ final class Session: ObservableObject {
 
     private func store(_ xyz: XYZ, level: Double) {
         measurements[level] = xyz
+        attach(.gray(level))
         lastMeasure = Date()
         isDirty = true
     }
@@ -987,7 +1007,15 @@ final class Session: ObservableObject {
         while true {
             try Task.checkCancellation()
             do {
-                return appPrefs.correct(try await meter.read())
+                // Luxmeter and second meter read during the same pattern (HCFR's simultaneous measures)
+                let started = Date()
+                let second = simultaneous ? meter2 : nil
+                async let other: XYZ? = Self.readIfPresent(second)
+                let xyz = appPrefs.correct(try await meter.read())
+                lastSecondXYZ = await other
+                lastSpectrum = meter.lastSpectrum
+                lastLux = luxmeter.value(since: started)
+                return xyz
             } catch MeterError.needsCalibration(let cond, let msg) {
                 try await calibrate(meter: meter, condition: cond, message: msg)
                 if let pattern { try await present(pattern) } else { closePattern() }
@@ -995,6 +1023,11 @@ final class Session: ObservableObject {
                 try await ask("Incorrect Position", msg, style: .position)
             }
         }
+    }
+
+    private static func readIfPresent(_ m: ArgyllMeter?) async -> XYZ? {
+        guard let m else { return nil }
+        return try? await m.read()
     }
 
     /// Repeats the "Incorrect Position" message until the meter is in display measurement position.

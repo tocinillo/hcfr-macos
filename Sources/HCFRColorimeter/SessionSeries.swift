@@ -153,6 +153,8 @@ extension Session {
 
     /// HCFR's GetOnOffContrast: white / black; infinite with a perfect (0) black, nil if not measured.
     var onOffContrast: Double? {
+        // Advanced → "Compute contrast and delta luminance from luxmeter values"
+        if appPrefs.preferLuxmeter, let w = lux(.contrast(1)), let b = lux(.contrast(0)) { return b > 0 ? w / b : .infinity }
         guard let w = contrastMeasurements[.white]?.Y else { return nil }
         let b = overrideBlack ? prefs.manualBlack : contrastMeasurements[.black]?.Y
         guard let b else { return nil }
@@ -160,6 +162,7 @@ extension Session {
     }
 
     var ansiContrast: Double? {
+        if appPrefs.preferLuxmeter, let w = lux(.contrast(3)), let b = lux(.contrast(2)) { return b > 0 ? w / b : .infinity }
         guard let b = contrastMeasurements[.ansi1]?.Y, let w = contrastMeasurements[.ansi2]?.Y else { return nil }
         return b > 0.000001 ? w / b : .infinity
     }
@@ -298,6 +301,7 @@ extension Session {
                 status = "Measuring \(v.rawValue.lowercased()): \(seriesPatches(v)[i].name) (\(i + 1) of \(seriesCount(v)))…"
                 let xyz = try await readWithCalibration(pattern: pattern)
                 seriesMeasurements[v, default: [:]][i] = xyz
+                attach(.series(v, i))
                 lastMeasure = Date()
             }
         }
@@ -316,6 +320,7 @@ extension Session {
             try await present(pattern)
             status = "Measuring \(item.rawValue)…"
             contrastMeasurements[item] = try await readWithCalibration(pattern: pattern)
+            attach(.contrast(ContrastPatch.allCases.firstIndex(of: item) ?? 0))
             lastMeasure = Date()
         }
         // As HCFR: if the "black" ANSI reading is brighter, the checkerboard was the other way round
@@ -388,6 +393,7 @@ extension Session {
             self.closePattern()
             self.status = "Free measure: reading the screen as it is…"
             self.freeMeasurements.append(try await self.readWithCalibration(pattern: nil))
+            self.attach(.free(self.freeMeasurements.count - 1))
             self.selectedIndex = self.freeMeasurements.count - 1
             self.lastMeasure = Date()
             self.isDirty = true
@@ -403,6 +409,7 @@ extension Session {
             let xyz = try await readWithCalibration(pattern: nil)
             if view == .freeMeasures {
                 freeMeasurements.append(xyz)
+                attach(.free(freeMeasurements.count - 1))
                 selectedIndex = freeMeasurements.count - 1
                 lastMeasure = Date(); isDirty = true
             }
@@ -424,8 +431,10 @@ extension Session {
         guard view == v, selectedIndex == i else { return }
         if v == .contrast {
             contrastMeasurements[ContrastPatch.allCases[min(i, 3)]] = xyz
+            attach(.contrast(i))
         } else {
             seriesMeasurements[v, default: [:]][i] = xyz
+            attach(.series(v, i))
         }
         lastMeasure = Date(); isDirty = true
     }
@@ -445,7 +454,15 @@ enum EditTarget: Identifiable, Hashable {
     case contrast(Int)
     case free(Int)
 
-    var id: String { "\(self)" }
+    var id: String {
+        switch self {
+        case .gray(let l): return "gray:\(Session.levelKey(l))"
+        case .patch(let p): return "patch:\(p.rawValue)"
+        case .series(let v, let i): return "series:\(v.rawValue):\(i)"
+        case .contrast(let i): return "contrast:\(i)"
+        case .free(let i): return "free:\(i)"
+        }
+    }
 }
 
 extension Session {
@@ -481,6 +498,7 @@ extension Session {
             guard freeMeasurements.indices.contains(i) else { return }
             if let c { freeMeasurements[i] = c } else { freeMeasurements.remove(at: i) }
         }
+        if c == nil { spectra[t.id] = nil; luxValues[t.id] = nil }
         isDirty = true
         status = c == nil ? "Measure deleted: \(title(for: t))" : "Measure edited: \(title(for: t))"
     }

@@ -174,6 +174,19 @@ struct AdvancedPage: View {
                 Text("Sensor matrix from a reference meter: with white (default) the four-color method; without, red, green and blue only.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Luxmeter LX-1108") {
+                Picker("Port", selection: $session.appPrefs.luxPort) {
+                    Text("none").tag("")
+                    ForEach(Luxmeter.ports(), id: \.self) { Text($0).tag($0) }
+                    if !session.appPrefs.luxPort.isEmpty && !Luxmeter.ports().contains(session.appPrefs.luxPort) {
+                        Text(session.appPrefs.luxPort + " (not connected)").tag(session.appPrefs.luxPort)
+                    }
+                }
+                Toggle("Imperial units (Ft-cd)", isOn: $session.appPrefs.imperialUnits)
+                Toggle("Compute contrast from luxmeter values", isOn: $session.appPrefs.preferLuxmeter)
+                Text(session.luxStatus ?? "The luxmeter is read on its serial port (USB adapter: /dev/cu.usbserial…) during every reading; a Lux row is added to the tables.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Measure launch") {
                 Toggle("Confirmation message", isOn: $session.appPrefs.confirmMeasures)
                 Text("Asks \"Run … measures?\" before every measurement run.").font(.caption).foregroundStyle(.secondary)
@@ -297,6 +310,32 @@ struct SensorPage: View {
                         .disabled(session.meter == nil || session.activity != .idle)
                     Spacer()
                 }
+            }
+            Section("Second meter (simultaneous measures)") {
+                HStack {
+                    Picker("Meter", selection: $session.selectedPort2) {
+                        Text("none").tag(MeterPort?.none)
+                        ForEach(session.ports.filter { $0.name != session.connectedPortName }) { Text($0.displayName).tag(MeterPort?.some($0)) }
+                    }
+                    if session.meter2 == nil {
+                        Button("Connect") { session.connectSecondMeter() }.disabled(session.selectedPort2 == nil)
+                    } else {
+                        Button("Disconnect") { session.disconnectSecondMeter() }
+                    }
+                }
+                Toggle("Simultaneous measures", isOn: $session.simultaneous).disabled(session.meter2 == nil)
+                Text(session.meter2.map { "Connected: \($0.name). Every reading is taken with both meters; the second one's values go to the compared data (rows dE / ref, xy / ref), and \"Compute from compared project\" then makes the sensor matrix (HCFR's \"Build using simultaneous measures\")." }
+                     ?? "Connect a second meter (e.g. a spectro as reference) to measure with both at once, as HCFR's Simultaneous measures.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Spectral sample") {
+                HStack {
+                    Button("Build colorimeter calibration spectral sample…") { session.createSpectralSample() }
+                        .disabled(session.spectra.isEmpty)
+                    Spacer()
+                }
+                Text("With a spectrophotometer: measure white, red, green and blue, then save them as a CCSS file. Colorimeters then list it in Display, as HCFR's spectral samples.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("Sensor matrix") {
                 Grid(horizontalSpacing: 8, verticalSpacing: 4) {

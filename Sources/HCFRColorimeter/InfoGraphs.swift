@@ -57,6 +57,7 @@ struct InformationPanel: View {
     private func graph(_ g: InfoGraph) -> some View {
         switch g {
         case .freeHistogram: FreeMeasuresChart(session: session)
+        case .spectrum: SpectrumChart(session: session)
         case .nearBlackWhite:
             HStack(spacing: 8) {
                 NearScaleChart(session: session, view: .nearBlack)
@@ -556,7 +557,7 @@ struct GraphOptionsMenu: View {
                 Toggle("Display grays", isOn: $session.cieShowGrays)
                 Toggle("Display references", isOn: $session.cieShowReferences)
                 Toggle("CIE u'v' mode", isOn: $session.cieUV)
-            case .saturationShift, .nearBlackWhite, .freeHistogram, .summary:
+            case .saturationShift, .nearBlackWhite, .freeHistogram, .summary, .spectrum:
                 Text("No options for this graph")
             }
         } label: {
@@ -589,6 +590,61 @@ enum GraphExport {
             session.status = "Graph saved: \(url.lastPathComponent)"
         } catch {
             session.errorMessage = "Could not save the graph: \(error.localizedDescription)"
+        }
+    }
+}
+
+// MARK: - Spectrum (spectral meters)
+
+/// HCFR's Spectrum graph: the spectrum of the selected column (spectral meters only).
+struct SpectrumChart: View {
+    @ObservedObject var session: Session
+
+    /// Approximate color of a wavelength, for the area under the curve.
+    static func color(_ nm: Double) -> Color {
+        var r = 0.0, g = 0.0, b = 0.0
+        switch nm {
+        case ..<440: r = -(nm - 440) / 60; b = 1
+        case ..<490: g = (nm - 440) / 50; b = 1
+        case ..<510: g = 1; b = -(nm - 510) / 20
+        case ..<580: r = (nm - 510) / 70; g = 1
+        case ..<645: r = 1; g = -(nm - 645) / 65
+        default: r = 1
+        }
+        let f = nm < 420 ? 0.3 + 0.7 * (nm - 380) / 40 : nm > 700 ? 0.3 + 0.7 * (780 - nm) / 80 : 1
+        return Color(red: max(r, 0) * max(f, 0.2), green: max(g, 0) * max(f, 0.2), blue: max(b, 0) * max(f, 0.2))
+    }
+
+    var body: some View {
+        let target = session.selectedTarget
+        let sp = session.spectra[target.id] ?? session.spectra.values.first
+        let pts: [(Double, Double)] = sp.map { s in s.values.indices.map { (s.wavelength($0), s.values[$0]) } } ?? []
+        let peak = max(pts.map(\.1).max() ?? 1, 1e-9)
+        DarkGraph(title: "Spectrum" + (session.spectra[target.id] != nil ? " — \(session.title(for: target))" : "")) {
+            Chart {
+                ForEach(Array(pts.enumerated()), id: \.offset) { _, p in
+                    BarMark(x: .value("nm", p.0), y: .value("Relative", p.1 / peak), width: .fixed(3))
+                        .foregroundStyle(Self.color(p.0))
+                }
+                ForEach(Array(pts.enumerated()), id: \.offset) { _, p in
+                    LineMark(x: .value("nm", p.0), y: .value("Relative", p.1 / peak), series: .value("S", "Spectrum"))
+                        .foregroundStyle(.white).lineStyle(StrokeStyle(lineWidth: 1.5))
+                }
+            }
+            .chartXScale(domain: 380...780)
+            .chartYScale(domain: 0...1.05)
+            .chartXAxis { AxisMarks(values: Array(stride(from: 400, through: 780, by: 50))) { v in
+                AxisGridLine().foregroundStyle(.teal.opacity(0.3))
+                AxisValueLabel { Text("\(v.as(Int.self) ?? 0) nm").font(.caption2).foregroundStyle(.white) }
+            } }
+            .chartYAxis { AxisMarks(position: .leading) { v in
+                AxisGridLine().foregroundStyle(.teal.opacity(0.3))
+                AxisValueLabel { Text(String(format: "%.1f", v.as(Double.self) ?? 0)).foregroundStyle(.white) }
+            } }
+            .chartPlotStyle { $0.background(Color(white: 0.15)) }
+            .overlay(alignment: .topLeading) {
+                legend(pts.isEmpty ? "No spectrum: measure with a spectrophotometer (colorimeters give no spectrum)" : nil)
+            }
         }
     }
 }

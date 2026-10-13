@@ -632,21 +632,29 @@ struct CIEChart: View {
         VStack(spacing: 4) {
             if !compact {
                 HStack(spacing: 12) {
-                    Picker("Plane", selection: $session.cieUV) {
-                        Text("CIE xy").tag(false)
-                        Text("CIE u'v'").tag(true)
+                    Picker("Plane", selection: Binding(get: { session.graphOptions.cieAB ? 2 : session.cieUV ? 1 : 0 },
+                                                       set: { session.graphOptions.cieAB = $0 == 2; if $0 < 2 { session.cieUV = $0 == 1 } })) {
+                        Text("CIE xy").tag(0)
+                        Text("CIE u'v'").tag(1)
+                        Text("a*b*").tag(2)
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
                     .fixedSize()
                     Toggle("Gray scale", isOn: $session.cieShowGrays).toggleStyle(.checkbox)
                     Toggle("References", isOn: $session.cieShowReferences).toggleStyle(.checkbox)
+                    Toggle("ΔE 3 / 10", isOn: $session.graphOptions.cieDeltaE).toggleStyle(.checkbox)
+                        .help("HCFR's \"Display Delta E = 3 and 10\": contours around each reference at Delta E 3 and 10 (current formula)")
+                    Toggle("Worst 10%", isOn: $session.graphOptions.cieWorst10).toggleStyle(.checkbox)
+                        .help("Circles in red the 10% of the measures with the largest Delta E")
                     Spacer()
                     Text("Reference: \(session.standard.shortName), \(session.white.rawValue)")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
             }
-            GeometryReader { geo in chart(size: geo.size) }
+            GeometryReader { geo in
+                if session.graphOptions.cieAB { LabChart(session: session) } else { chart(size: geo.size) }
+            }
         }
     }
 
@@ -669,6 +677,16 @@ struct CIEChart: View {
             : (session.view == .colorChecker || session.view == .freeMeasures ? [session.view] : [])
         let series = seriesViews.map { v in (v, session.seriesResults(v)) }
         let currentView = session.view, selectedIndex = session.selectedIndex
+        // Delta E contours (3 and 10) around the references of the colors shown
+        let refXYZs: [XYZ] = PatchColor.allCases.filter { $0 != .white }.compactMap { patches[$0]?.reference }
+            + series.flatMap { $0.1.compactMap(\.reference) }.prefix(40)
+        let contours: [[(Double, Double)]] = session.graphOptions.cieDeltaE
+            ? refXYZs.flatMap { r in [3.0, 10.0].map { DeltaEContour.xy(around: r, deltaE: $0, ref: session.ref) } } : []
+        // Worst 10%: measured points with the largest Delta E
+        let scored: [(XYZ, Double)] = (session.patchResults.filter { $0.patch != .white }.compactMap { p in p.xyz.flatMap { x in p.deltaE.map { (x, $0) } } })
+            + series.flatMap { $0.1.compactMap { r in r.xyz.flatMap { x in r.deltaE.map { (x, $0) } } } }
+        let worst: [XYZ] = session.graphOptions.cieWorst10
+            ? Array(scored.sorted { $0.1 > $1.1 }.prefix(max(1, Int((Double(scored.count) * 0.1).rounded(.up))))).map(\.0) : []
         let sx = size.width / CIEBackground.bitmapSize.width, sy = size.height / CIEBackground.bitmapSize.height
         let small = min(size.width, size.height) < 260
         let penWidth: CGFloat = small ? 2 : 3
@@ -861,6 +879,20 @@ struct CIEChart: View {
                 }
             }
 
+            // Delta E 3 / 10 contours
+            for c in contours where c.count > 2 {
+                var path = Path()
+                path.addLines(c.map { pos($0) })
+                path.closeSubpath()
+                ctx.stroke(path, with: .color(.white.opacity(0.75)), style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+            }
+
+            // Worst 10%
+            for x in worst where x.Y > 0 {
+                let p = pos((x.x, x.y))
+                ctx.stroke(Path(ellipseIn: CGRect(x: p.x - 9, y: p.y - 9, width: 18, height: 18)), with: .color(.red), lineWidth: 2)
+            }
+
             // Axis names
             if !small {
                 ctx.draw(Text(plane.axisNames.0).font(.caption.bold()).foregroundColor(.white),
@@ -881,6 +913,95 @@ struct CIEChart: View {
         case .cyan: return Color(red: 0, green: 0.85, blue: 0.95)
         case .magenta: return Color(red: 1, green: 0.2, blue: 1)
         case .white: return .white
+        }
+    }
+}
+
+// MARK: - Delta E contours and the a*b* plane
+
+enum DeltaEContour {
+    /// Points (xy) around a reference (relative, white Y = 1) where Delta E equals `deltaE` at the
+    /// reference's luminance, with the current Delta E formula.
+    static func xy(around r: XYZ, deltaE target: Double, ref: CalReference, steps: Int = 48) -> [(Double, Double)] {
+        guard r.Y > 0 else { return [] }
+        let w = 100.0
+        return (0..<steps).compactMap { k -> (Double, Double)? in
+            let a = Double(k) / Double(steps) * 2 * .pi
+            func de(_ d: Double) -> Double {
+                let c = XYZ.fromxyY(x: r.x + d * cos(a), y: max(r.y + d * sin(a), 1e-4), Y: r.Y * w)
+                return ColorMath.deltaE(c, whiteY: w, reference: r, refWhiteY: 1, ref: ref, isGray: false)
+            }
+            var lo = 0.0, hi = 0.4
+            guard de(hi) >= target else { return (r.x + hi * cos(a), r.y + hi * sin(a)) }
+            for _ in 0..<22 {
+                let mid = (lo + hi) / 2
+                if de(mid) < target { lo = mid } else { hi = mid }
+            }
+            return (r.x + hi * cos(a), r.y + hi * sin(a))
+        }
+    }
+}
+
+/// HCFR's "CIE a*b* mode": measures and references in the CIELAB a*, b* plane.
+struct LabChart: View {
+    @ObservedObject var session: Session
+
+    var body: some View {
+        let ref = session.ref
+        let w = session.colorWhiteY
+        func lab(_ c: XYZ, _ white: Double) -> (Double, Double) {
+            let l = ColorMath.lab(c, whiteY: white, white: ref.white)
+            return (l[1], l[2])
+        }
+        let patches = session.patchResults.filter { $0.patch != .white }
+        let views: [MeasureView] = session.graphOptions.cieAllSeries ? MeasureView.saturations + [.colorChecker]
+            : session.view.saturationColor != nil ? MeasureView.saturations : (session.view == .colorChecker ? [.colorChecker] : [])
+        let series = views.flatMap { session.seriesResults($0) }.filter { $0.reference != nil }
+        let grays = session.cieShowGrays ? session.results.compactMap(\.xyz).filter { $0.Y > 0 } : []
+        var pairs: [((Double, Double), (Double, Double)?, Color)] = patches.map { p in
+            (lab(p.reference, 1), p.xyz.map { lab($0, w) }, CIEChart.markerColor(p.patch))
+        }
+        pairs += series.map { s in
+            let rgb = s.referenceRGB.map { Double($0) / 255 }
+            return (lab(s.reference!, 1), s.xyz.map { lab($0, session.seriesColorWhiteY) }, Color(red: rgb[0], green: rgb[1], blue: rgb[2]))
+        }
+        let all = pairs.flatMap { [$0.0] + ($0.1.map { [$0] } ?? []) }
+        let range = max(30, (all.map { max(abs($0.0), abs($0.1)) }.max() ?? 100) * 1.1)
+        return Canvas { ctx, size in
+            let rect = CGRect(origin: .zero, size: size)
+            ctx.fill(Path(rect), with: .color(Color(white: 0.1)))
+            let s = min(size.width, size.height) / 2 / range
+            let c = CGPoint(x: size.width / 2, y: size.height / 2)
+            func p(_ v: (Double, Double)) -> CGPoint { CGPoint(x: c.x + v.0 * s, y: c.y - v.1 * s) }
+            var grid = Path()
+            for r in stride(from: 25.0, through: range, by: 25) {
+                grid.addEllipse(in: CGRect(x: c.x - r * s, y: c.y - r * s, width: 2 * r * s, height: 2 * r * s))
+            }
+            grid.move(to: CGPoint(x: 0, y: c.y)); grid.addLine(to: CGPoint(x: size.width, y: c.y))
+            grid.move(to: CGPoint(x: c.x, y: 0)); grid.addLine(to: CGPoint(x: c.x, y: size.height))
+            ctx.stroke(grid, with: .color(Color(white: 0.3)), lineWidth: 1)
+            ctx.draw(Text("+a* (red)").font(.caption).foregroundColor(.white), at: CGPoint(x: size.width - 6, y: c.y - 4), anchor: .bottomTrailing)
+            ctx.draw(Text("−a* (green)").font(.caption).foregroundColor(.white), at: CGPoint(x: 6, y: c.y - 4), anchor: .bottomLeading)
+            ctx.draw(Text("+b* (yellow)").font(.caption).foregroundColor(.white), at: CGPoint(x: c.x + 4, y: 4), anchor: .topLeading)
+            ctx.draw(Text("−b* (blue)").font(.caption).foregroundColor(.white), at: CGPoint(x: c.x + 4, y: size.height - 4), anchor: .bottomLeading)
+            for g in grays {
+                let q = p(lab(g, session.grayBaseY))
+                ctx.fill(Path(ellipseIn: CGRect(x: q.x - 3, y: q.y - 3, width: 6, height: 6)), with: .color(.white))
+            }
+            for (r, m, color) in pairs {
+                let rp = p(r)
+                ctx.stroke(Path(ellipseIn: CGRect(x: rp.x - 5, y: rp.y - 5, width: 10, height: 10)), with: .color(color), lineWidth: 1.5)
+                if let m {
+                    let mp = p(m)
+                    var l = Path(); l.move(to: rp); l.addLine(to: mp)
+                    ctx.stroke(l, with: .color(.white.opacity(0.6)), lineWidth: 1)
+                    let dot = Path(ellipseIn: CGRect(x: mp.x - 4, y: mp.y - 4, width: 8, height: 8))
+                    ctx.fill(dot, with: .color(color))
+                    ctx.stroke(dot, with: .color(.black), lineWidth: 1)
+                }
+            }
+            ctx.draw(Text("CIE a*b* — rings: references, dots: measures").font(.caption.bold()).foregroundColor(.yellow),
+                     at: CGPoint(x: 8, y: 8), anchor: .topLeading)
         }
     }
 }
