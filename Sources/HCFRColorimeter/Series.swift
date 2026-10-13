@@ -68,14 +68,16 @@ enum MeasureView: String, CaseIterable, Identifiable {
 }
 
 /// HCFR's Color Checker pattern sets ("Color Checker Patterns" of the References preferences).
-/// Raw values are HCFR's CCPatterns numbers. HCFR's HDR-only sets (BT2020HDR, LG tone curves)
-/// are not offered: they need the HDR10 reference calculation.
+/// Raw values are HCFR's CCPatterns numbers. The HDR sets (BT2020HDR, LG HDR10 targets) hold PQ
+/// signals; HCFR's 2016/2017 LG base tone curve tables are not included.
 enum ColorCheckerSet: Int, CaseIterable, Identifiable, Codable {
     case gcd = 0, mcd = 1, pantoneSkin = 2, calmanClassic = 3, calmanSGSkin = 4, chromaPureSkin = 5
     case calmanSG = 6, axis = 7
     case cm4Lum = 8, cm5Lum = 9, cm10Lum = 10
     case cm4Sat = 11, cm4Sat75 = 12, cm5Sat = 13, cm5Sat75 = 14, cm10Sat = 15, cm10Sat75 = 16
     case cm6NearBlack = 17, cmDynamicRange = 18
+    case mascior50 = 19, lgUK65xx = 24, lgOLED2018V1 = 25, lgOLED2018V2 = 26, lgOLED2018V3 = 27
+    case lgOLED2019_10 = 28, lgOLED2019_22 = 29, lgOLED2020_10 = 30, lgOLED2020_22 = 31, lgOLED2021_10 = 32, lgOLED2021_22 = 33
     case random250 = 34, random500 = 35, user = 36
 
     var id: Int { rawValue }
@@ -101,6 +103,17 @@ enum ColorCheckerSet: Int, CaseIterable, Identifiable, Codable {
         case .cm10Sat75: return "CM 10-Point Saturation (75AMP)"
         case .cm6NearBlack: return "CM 6-Point Near Black"
         case .cmDynamicRange: return "CM Dynamic Range (Clipping)"
+        case .mascior50: return "BT2020HDR_50_50"
+        case .lgUK65xx: return "LG UK65xx 20-Point"
+        case .lgOLED2018V1: return "LG 2018 OLED V1 20-Point"
+        case .lgOLED2018V2: return "LG 2018 OLED V2 20-Point"
+        case .lgOLED2018V3: return "LG 2018 OLED V3 20-Point"
+        case .lgOLED2019_10: return "LG 2019 OLED 10-Point"
+        case .lgOLED2019_22: return "LG 2019 OLED 22-Point"
+        case .lgOLED2020_10: return "LG 2020 OLED 10-Point"
+        case .lgOLED2020_22: return "LG 2020 OLED 22-Point"
+        case .lgOLED2021_10: return "LG 2021 OLED 10-Point"
+        case .lgOLED2021_22: return "LG 2021 OLED 22-Point"
         case .random250: return "Random 250"
         case .random500: return "Random 500"
         case .user: return "User defined"
@@ -138,11 +151,25 @@ enum ColorCheckerSet: Int, CaseIterable, Identifiable, Codable {
         case .cm10Sat75: return csv(ColorCheckerData.cm10Sat75)
         case .cm6NearBlack: return csv(ColorCheckerData.cm6NearBlack)
         case .cmDynamicRange: return csv(ColorCheckerData.cmDynamicRange)
+        case .mascior50: return csv(ColorCheckerData.mascior50)
+        case .lgUK65xx: return csv(ColorCheckerData.lgUK65xx)
+        case .lgOLED2018V1: return csv(ColorCheckerData.lgOLED2018V1)
+        case .lgOLED2018V2: return csv(ColorCheckerData.lgOLED2018V2)
+        case .lgOLED2018V3: return csv(ColorCheckerData.lgOLED2018V3)
+        case .lgOLED2019_10: return csv(ColorCheckerData.lgOLED2019_10)
+        case .lgOLED2019_22: return csv(ColorCheckerData.lgOLED2019_22)
+        case .lgOLED2020_10: return csv(ColorCheckerData.lgOLED2020_10)
+        case .lgOLED2020_22: return csv(ColorCheckerData.lgOLED2020_22)
+        case .lgOLED2021_10: return csv(ColorCheckerData.lgOLED2021_10)
+        case .lgOLED2021_22: return csv(ColorCheckerData.lgOLED2021_22)
         case .random250: return csv(ColorCheckerData.random250)
         case .random500: return csv(ColorCheckerData.random500)
         case .user: return csv(user)
         }
     }
+
+    /// HDR10 sets: PQ signals, targets in nits against the measured peak white (HCFR's MASCIOR50…CCMAXHDR).
+    var isHDRSet: Bool { (19...33).contains(rawValue) }
 
     /// HCFR's m_bRecalc: in HDR the signals of these sets are recomputed so they give the same colors.
     var recomputedInHDR: Bool {

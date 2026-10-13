@@ -109,6 +109,17 @@ extension Session {
             return freeMeasurements.enumerated().map { i, xyz in
                 SeriesResult(index: i, name: "\(i + 1)", signal: [0, 0, 0], xyz: xyz, reference: nil, whiteY: grayBaseY, ref: r)
             }
+        case .colorChecker where ccSet.isHDRSet:
+            // PQ signals: absolute targets (nits), compared with the measured peak white (gray 100%)
+            var pq = r
+            pq.gammaMode = .st2084
+            let peak = whiteY ?? prefs.targetMaxL
+            return ccPatches.enumerated().map { i, p in
+                let lin = p.signal.map { pq.targetCurve(CalReference.quantize219($0), whiteY: peak, blackY: nil) * prefs.diffuseWhite / peak }
+                let v = r.rgbToXYZ.apply(lin)
+                return SeriesResult(index: i, name: p.name, signal: p.signal, xyz: data[i], reference: XYZ(X: v[0], Y: v[1], Z: v[2]),
+                                    whiteY: peak, ref: r)
+            }
         case .colorChecker:
             return ccPatches.enumerated().map { i, p in
                 SeriesResult(index: i, name: p.name, signal: p.signal, xyz: data[i],
