@@ -178,3 +178,85 @@ extension Session {
         status = "Sensor matrix computed against \(d.name). It applies to the next readings: measure again."
     }
 }
+
+// MARK: - Meter correction files (HCFR: Advanced → Meter Correction file)
+
+enum MeterCorrectionFile {
+    /// Argyll CCMX (CGATS text, the 3×3 matrix by rows) or HCFR .thc (MFC archive whose first object is
+    /// the sensor matrix, stored by columns).
+    static func read(_ data: Data) -> [Double]? {
+        if data.count >= 92, data.prefix(8) == Data("taMCCxir".utf8) {
+            let ints = (0..<3).map { i in data.subdata(in: (8 + 4 * i)..<(12 + 4 * i)).withUnsafeBytes { $0.loadUnaligned(as: Int32.self) } }
+            guard ints[1] == 3, ints[2] == 3 else { return nil }
+            let v = (0..<9).map { i in data.subdata(in: (20 + 8 * i)..<(28 + 8 * i)).withUnsafeBytes { $0.loadUnaligned(as: Double.self) } }
+            // column-major -> row-major
+            return [v[0], v[3], v[6], v[1], v[4], v[7], v[2], v[5], v[8]]
+        }
+        guard let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1),
+              let b = text.range(of: "BEGIN_DATA\n") ?? text.range(of: "BEGIN_DATA\r\n") ?? text.range(of: "BEGIN_DATA"),
+              let e = text.range(of: "END_DATA", range: b.upperBound..<text.endIndex) else { return nil }
+        let nums = text[b.upperBound..<e.lowerBound].split(whereSeparator: { $0.isWhitespace }).compactMap { Double($0) }
+        return nums.count >= 9 ? Array(nums.prefix(9)) : nil
+    }
+
+    static func ccmx(_ m: [Double], meter: String, display: String) -> String {
+        let row = { (r: Int) in (0..<3).map { String(format: "%.10f", m[r * 3 + $0]) }.joined(separator: " ") }
+        let f = DateFormatter()
+        f.dateFormat = "EEE MMM dd HH:mm:ss yyyy"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return """
+            CCMX
+
+            DESCRIPTOR "\(display.isEmpty ? "Meter correction" : display)"
+            ORIGINATOR "HCFR Colorimeter for macOS"
+            CREATED "\(f.string(from: Date()))"
+            KEYWORD "INSTRUMENT"
+            INSTRUMENT "\(meter)"
+            KEYWORD "DISPLAY"
+            DISPLAY "\(display)"
+            KEYWORD "COLOR_REP"
+            COLOR_REP "XYZ"
+
+            NUMBER_OF_FIELDS 3
+            BEGIN_DATA_FORMAT
+            XYZ_X XYZ_Y XYZ_Z
+            END_DATA_FORMAT
+
+            NUMBER_OF_SETS 3
+            BEGIN_DATA
+            \(row(0))
+            \(row(1))
+            \(row(2))
+            END_DATA
+
+            """
+    }
+}
+
+extension Session {
+    func loadMeterCorrectionFile() {
+        let panel = NSOpenPanel()
+        panel.title = "Load meter correction file (Argyll .ccmx or HCFR .thc)"
+        guard panel.runModal() == .OK, let url = panel.url, let data = try? Data(contentsOf: url) else { return }
+        guard let m = MeterCorrectionFile.read(data) else {
+            errorMessage = "\(url.lastPathComponent) is not a meter correction file (.ccmx or .thc with a 3×3 matrix)."
+            return
+        }
+        appPrefs.sensorMatrix = m
+        status = "Meter correction loaded: \(url.lastPathComponent). It applies to the next readings."
+    }
+
+    func saveMeterCorrectionFile() {
+        let panel = NSSavePanel()
+        panel.title = "Save meter correction file"
+        panel.nameFieldStringValue = (correction?.name ?? "Meter correction") + ".ccmx"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try MeterCorrectionFile.ccmx(appPrefs.sensorMatrix, meter: meter?.name ?? "", display: correction?.name ?? "")
+                .write(to: url, atomically: true, encoding: .utf8)
+            status = "Meter correction saved: \(url.lastPathComponent)"
+        } catch {
+            errorMessage = "Could not save: \(error.localizedDescription)"
+        }
+    }
+}

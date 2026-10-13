@@ -38,6 +38,27 @@ enum IntegrationTime: Int, CaseIterable, Identifiable, Codable {
     }
 }
 
+/// Luminance graph modes (HCFR's Luminance graph menu: relative, Absolute Y, log(Y), L*).
+enum LuminanceMode: String, CaseIterable, Identifiable, Codable {
+    case relative = "Luminance %", absolute = "Absolute Y", log = "log(Y)", lStar = "L*"
+    var id: String { rawValue }
+}
+
+/// Scale and display options of the graphs (HCFR's right-click graph menus).
+struct GraphOptions: Codable, Equatable {
+    var luminance = LuminanceMode.relative
+    /// RGB levels scale: 0 = 0-200%, 1 = 60-140%, 2 = 50-150%, 3 = 80-120%.
+    var rgbScale = 1
+    /// Delta E axis maximum (5, 10 or 20).
+    var deltaEMax = 10.0
+    /// Color temperature scale: 0 = auto, 1 = 2000-10000 K, 2 = 4000-8000 K.
+    var tempScale = 0
+    /// CIE diagram: saturations, Color Checker and free measures shown whatever the table.
+    var cieAllSeries = false
+
+    var rgbDomain: ClosedRange<Double> { [0.0...200, 60...140, 50...150, 80...120][min(max(rgbScale, 0), 3)] }
+}
+
 /// Options of HCFR's General and Advanced pages and of the sensor page. Saved with the settings.
 struct AppPrefs: Codable, Equatable {
     // General

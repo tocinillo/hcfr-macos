@@ -319,6 +319,12 @@ struct SensorPage: View {
                         .help("Measure red, green, blue and white with this meter; open (File → Compare with Project…) a project where the same patches were measured with a reference meter (a spectro). The matrix makes this meter read like the reference.")
                     Button("Reset") { session.appPrefs.sensorMatrix = [1, 0, 0, 0, 1, 0, 0, 0, 1] }
                 }
+                HStack {
+                    Button("Load meter correction file…") { session.loadMeterCorrectionFile() }
+                    Button("Save meter correction file…") { session.saveMeterCorrectionFile() }
+                        .disabled(!session.appPrefs.hasSensorMatrix)
+                    Spacer()
+                }
                 Text("Every reading (X, Y, Z) is multiplied by this matrix, as HCFR's sensor matrix. Leave the identity unless you have a correction matrix for your meter and display.")
                     .font(.caption).foregroundStyle(.secondary)
             }

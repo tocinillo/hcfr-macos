@@ -153,6 +153,10 @@ final class Session: ObservableObject {
     @Published var userCCName = ""
     /// Another project compared with this one (HCFR's data reference): "dE / ref" and "xy / ref" rows.
     @Published var refData: ReferenceData?
+    /// Graph scales and display options.
+    @Published var graphOptions = GraphOptions() {
+        didSet { if let d = try? JSONEncoder().encode(graphOptions) { defaults.set(d, forKey: "graphOptions") } }
+    }
     /// Values of the first table rows: xyY (default), XYZ, RGB or xyz.
     @Published var valueMode: ValueMode = .xyY { didSet { defaults.set(valueMode.rawValue, forKey: "valueMode") } }
     /// Table shown (HCFR's "View" selector).
@@ -234,6 +238,7 @@ final class Session: ObservableObject {
         cieShowReferences = defaults.object(forKey: "cieShowReferences") as? Bool ?? true
         cieUV = defaults.bool(forKey: "cieUV")
         cieShowGrays = defaults.object(forKey: "cieShowGrays") as? Bool ?? true
+        graphOptions = GraphOptions.decodeMerging(defaults.data(forKey: "graphOptions"), over: GraphOptions())
         valueMode = defaults.string(forKey: "valueMode").flatMap(ValueMode.init(rawValue:)) ?? .xyY
         if let id = defaults.object(forKey: "patternDisplay") as? UInt32,
            NSScreen.screens.contains(where: { $0.displayID == id }) {
@@ -594,6 +599,7 @@ final class Session: ObservableObject {
         if !kind.seriesViews.isEmpty { measureSeries(kind); return }
         if kind == .contrast { measureContrast(); return }
         if kind == .freeMeasure { measureFree(); return }
+        if kind == .fullTiltBoogie { measureFullTiltBoogie(); return }
         let graySteps = kind == .grayScale || kind == .grayScaleAndColors ? levels.count : 0
         // General → "Colors to add when measuring primaries and secondaries": none, white, or
         // white and black (black only when not overridden, and not again after a gray scale)

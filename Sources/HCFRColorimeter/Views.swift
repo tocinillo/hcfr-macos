@@ -855,11 +855,14 @@ struct GrayScaleChart: View {
 
     var body: some View {
         let results = session.results.filter { $0.level > 0 }
+        let dom = session.graphOptions.rgbDomain
+        let step = (dom.upperBound - dom.lowerBound) / 8
         let balance = results.flatMap { r -> [BalancePoint] in
             guard let b = r.balance else { return [] }
-            return (0..<3).map { BalancePoint(level: r.level, channel: $0, value: min(max(b[$0], 60), 140)) }
+            return (0..<3).map { BalancePoint(level: r.level, channel: $0, value: min(max(b[$0], dom.lowerBound), dom.upperBound)) }
         }
-        let de = results.compactMap { r in r.deltaE.map { (r.level, min($0, 10)) } }
+        let deMax = session.graphOptions.deltaEMax
+        let de = results.compactMap { r in r.deltaE.map { (r.level, min($0, deMax)) } }
 
         GeometryReader { geo in
         VStack(spacing: 0) {
@@ -877,10 +880,10 @@ struct GrayScaleChart: View {
                 }
             }
             .chartXScale(domain: 0...100)
-            .chartYScale(domain: 60...140)
-            .chartYAxis { AxisMarks(position: .leading, values: Array(stride(from: 60, through: 140, by: 10))) { v in
+            .chartYScale(domain: dom)
+            .chartYAxis { AxisMarks(position: .leading, values: Array(stride(from: dom.lowerBound, through: dom.upperBound, by: step))) { v in
                 AxisGridLine().foregroundStyle(.teal.opacity(0.4))
-                AxisValueLabel { Text("\(v.as(Int.self) ?? 0)%").foregroundStyle(.white) }
+                AxisValueLabel { Text("\(Int(v.as(Double.self) ?? 0))%").foregroundStyle(.white) }
             } }
             .chartXAxis { whiteLevelAxis(width: geo.size.width) }
             .chartPlotStyle { $0.background(grayRamp) }
@@ -894,10 +897,10 @@ struct GrayScaleChart: View {
                 }
             }
             .chartXScale(domain: 0...100)
-            .chartYScale(domain: 0...10)
-            .chartYAxis { AxisMarks(position: .leading, values: [0, 2, 4, 6, 8, 10]) { v in
+            .chartYScale(domain: 0...deMax)
+            .chartYAxis { AxisMarks(position: .leading, values: Array(stride(from: 0, through: deMax, by: deMax / 5))) { v in
                 AxisGridLine().foregroundStyle(.teal.opacity(0.4))
-                AxisValueLabel { Text("\(v.as(Int.self) ?? 0)").foregroundStyle(.white) }
+                AxisValueLabel { Text("\(Int(v.as(Double.self) ?? 0))").foregroundStyle(.white) }
             } }
             .chartXAxis { whiteLevelAxis(width: geo.size.width) }
             .chartPlotStyle { $0.background(grayRamp) }

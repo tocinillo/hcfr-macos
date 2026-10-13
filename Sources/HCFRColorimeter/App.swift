@@ -46,6 +46,14 @@ struct ColorimeterApp: App {
                 Button("Export Measurements (CSV)…") { session.exportCSV() }
                     .keyboardShortcut("e", modifiers: [.command, .shift])
                     .disabled(!session.hasMeasurements)
+                Button("Create PDF Report…") { session.exportPDFReport() }
+                    .disabled(!session.hasMeasurements)
+            }
+            CommandGroup(after: .pasteboard) {
+                Divider()
+                Button("Copy Table") { session.copyTable() }
+                    .keyboardShortcut("c", modifiers: [.command, .shift])
+                    .disabled(!session.hasMeasurements)
             }
             CommandGroup(replacing: .printItem) {
                 Button("Print…") { Report.printReport(session) }

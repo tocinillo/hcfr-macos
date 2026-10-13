@@ -40,15 +40,16 @@ enum PatchColor: String, CaseIterable, Identifiable, Codable {
 enum MeasureKind: Hashable {
     case grayScale, primaries, primariesSecondaries, grayScaleAndColors
     case nearBlack, nearWhite
-    case saturation(MeasureView), allSaturations
-    case colorChecker, contrast, freeMeasure
+    case saturation(MeasureView), primarySaturations, allSaturations, allColors
+    case colorChecker, contrast, freeMeasure, fullTiltBoogie
 
     /// Menu groups, separated by a line.
     static let menu: [[MeasureKind]] = [
         [.grayScale, .nearBlack, .nearWhite],
         [.primaries, .primariesSecondaries, .grayScaleAndColors],
-        MeasureView.saturations.map { .saturation($0) } + [.allSaturations],
+        MeasureView.saturations.map { .saturation($0) } + [.primarySaturations, .allSaturations, .allColors],
         [.colorChecker, .contrast, .freeMeasure],
+        [.fullTiltBoogie],
     ]
 
     var title: String {
@@ -60,7 +61,10 @@ enum MeasureKind: Hashable {
         case .nearBlack: return "Near black"
         case .nearWhite: return "Near white"
         case .saturation(let v): return "\(v.saturationColor?.rawValue ?? "") saturation"
-        case .allSaturations: return "All saturations"
+        case .primarySaturations: return "Saturations: primary colors"
+        case .allSaturations: return "Saturations: primary and secondary colors"
+        case .allColors: return "Saturations: all colors (with Color Checker)"
+        case .fullTiltBoogie: return "Full Tilt Boogie (everything)"
         case .colorChecker: return "Color checker"
         case .contrast: return "Contrast (on/off and ANSI)"
         case .freeMeasure: return "Free measure (one reading of the screen as it is)"
@@ -83,7 +87,9 @@ enum MeasureKind: Hashable {
         case .nearBlack: return [.nearBlack]
         case .nearWhite: return [.nearWhite]
         case .saturation(let v): return [v]
+        case .primarySaturations: return [.redSat, .greenSat, .blueSat]
         case .allSaturations: return MeasureView.saturations
+        case .allColors: return MeasureView.saturations + [.colorChecker]
         case .colorChecker: return [.colorChecker]
         default: return []
         }

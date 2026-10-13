@@ -264,7 +264,7 @@ extension Session {
     /// Near black, near white, saturations and Color Checker (HCFR's Measure…Scale).
     func measureSeries(_ kind: MeasureKind) {
         let views = kind.seriesViews
-        let total = views.reduce(0) { $0 + seriesCount($1) - ($1 == .nearBlack && overrideBlack ? 1 : 0) }
+        let total = seriesTotal(views)
         view = views[0]
         run(.measuring) {
             try await self.confirmRun("""
@@ -274,23 +274,80 @@ extension Session {
                 Note: you can cancel measuring using the ESC key.
                 """)
             self.isDirty = true
-            for v in views {
-                self.view = v
-                self.seriesMeasurements[v] = [:]
-                let first = v == .nearBlack && self.overrideBlack ? 1 : 0
-                for i in first..<self.seriesCount(v) {
-                    try Task.checkCancellation()
-                    guard let pattern = self.seriesPattern(v, i) else { continue }
-                    self.selectedIndex = i
-                    try await self.present(pattern)
-                    self.status = "Measuring \(v.rawValue.lowercased()): \(self.seriesPatches(v)[i].name) (\(i + 1) of \(self.seriesCount(v)))…"
-                    let xyz = try await self.readWithCalibration(pattern: pattern)
-                    self.seriesMeasurements[v, default: [:]][i] = xyz
-                    self.lastMeasure = Date()
-                }
-            }
-            self.selectedIndex = 0
+            try await self.measureSeriesSteps(views)
             self.status = "\(kind.title) measurement finished"
+            Chime.finished()
+        }
+    }
+
+    /// Points measured in a series run (near black 0% is skipped with Override black).
+    func seriesTotal(_ views: [MeasureView]) -> Int {
+        views.reduce(0) { $0 + seriesCount($1) - ($1 == .nearBlack && overrideBlack ? 1 : 0) }
+    }
+
+    func measureSeriesSteps(_ views: [MeasureView]) async throws {
+        for v in views {
+            view = v
+            seriesMeasurements[v] = [:]
+            let first = v == .nearBlack && overrideBlack ? 1 : 0
+            for i in first..<seriesCount(v) {
+                try Task.checkCancellation()
+                guard let pattern = seriesPattern(v, i) else { continue }
+                selectedIndex = i
+                try await present(pattern)
+                status = "Measuring \(v.rawValue.lowercased()): \(seriesPatches(v)[i].name) (\(i + 1) of \(seriesCount(v)))…"
+                let xyz = try await readWithCalibration(pattern: pattern)
+                seriesMeasurements[v, default: [:]][i] = xyz
+                lastMeasure = Date()
+            }
+        }
+        selectedIndex = 0
+    }
+
+    var contrastItems: [ContrastPatch] { ContrastPatch.allCases.filter { $0 != .black || !overrideBlack } }
+
+    func measureContrastSteps() async throws {
+        view = .contrast
+        contrastMeasurements.removeAll()
+        for item in contrastItems {
+            try Task.checkCancellation()
+            selectedIndex = ContrastPatch.allCases.firstIndex(of: item) ?? 0
+            let pattern = contrastPattern(item)
+            try await present(pattern)
+            status = "Measuring \(item.rawValue)…"
+            contrastMeasurements[item] = try await readWithCalibration(pattern: pattern)
+            lastMeasure = Date()
+        }
+        // As HCFR: if the "black" ANSI reading is brighter, the checkerboard was the other way round
+        if let b = contrastMeasurements[.ansi1], let w = contrastMeasurements[.ansi2], b.Y > w.Y {
+            contrastMeasurements[.ansi1] = w
+            contrastMeasurements[.ansi2] = b
+        }
+    }
+
+    /// HCFR's "Full Tilt Boogie": gray scale and colors, near black, near white, all saturations,
+    /// Color Checker and contrast, one confirmation.
+    func measureFullTiltBoogie() {
+        let series: [MeasureView] = [.nearBlack, .nearWhite] + MeasureView.saturations + [.colorChecker]
+        let total = levels.count + 7 + seriesTotal(series) + contrastItems.count
+        run(.measuring) {
+            try await self.confirmRun("""
+                Run Gray scale, Near Black/White, Primaries/Secondaries, saturations, Color Checker (\(self.ccSet.title)) and contrast patterns on \(total) values?
+                Warning: current data will be lost. This is a long run.
+
+                Note: you can cancel measuring using the ESC key.
+                """)
+            self.isDirty = true
+            self.view = .grayScale
+            self.measurements.removeAll()
+            try await self.measureGrayLevels()
+            self.colorMeasurements.removeAll()
+            self.view = .primariesSecondaries
+            try await self.measurePatches([.red, .green, .blue, .yellow, .cyan, .magenta, .white])
+            try await self.measureSeriesSteps(series)
+            try await self.measureContrastSteps()
+            self.view = .grayScale
+            self.status = "Full Tilt Boogie finished"
             Chime.finished()
         }
     }
@@ -308,7 +365,7 @@ extension Session {
     /// read at the center (black square, then white square).
     func measureContrast() {
         view = .contrast
-        let items = ContrastPatch.allCases.filter { $0 != .black || !overrideBlack }
+        let items = contrastItems
         run(.measuring) {
             try await self.confirmRun("""
                 Run contrast measures (\(items.map(\.rawValue).joined(separator: ", ")))?
@@ -318,21 +375,7 @@ extension Session {
                 Note: you can cancel measuring using the ESC key.
                 """)
             self.isDirty = true
-            self.contrastMeasurements.removeAll()
-            for item in items {
-                try Task.checkCancellation()
-                self.selectedIndex = ContrastPatch.allCases.firstIndex(of: item) ?? 0
-                let pattern = self.contrastPattern(item)
-                try await self.present(pattern)
-                self.status = "Measuring \(item.rawValue)…"
-                self.contrastMeasurements[item] = try await self.readWithCalibration(pattern: pattern)
-                self.lastMeasure = Date()
-            }
-            // As HCFR: if the "black" ANSI reading is brighter, the checkerboard was the other way round
-            if let b = self.contrastMeasurements[.ansi1], let w = self.contrastMeasurements[.ansi2], b.Y > w.Y {
-                self.contrastMeasurements[.ansi1] = w
-                self.contrastMeasurements[.ansi2] = b
-            }
+            try await self.measureContrastSteps()
             self.status = "Contrast measurement finished"
             Chime.finished()
         }

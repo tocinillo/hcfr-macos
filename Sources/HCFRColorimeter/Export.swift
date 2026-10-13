@@ -68,3 +68,33 @@ extension Session {
         }
     }
 }
+
+extension Session {
+    /// File → "Create PDF Report…" (HCFR's Export → Create PDF Report): the printed report as a PDF file.
+    func exportPDFReport() {
+        guard let pdf = Report.makePDF(self) else { errorMessage = "Could not create the report."; return }
+        let panel = NSSavePanel()
+        panel.title = "Create PDF Report"
+        panel.allowedContentTypes = [.pdf]
+        panel.nameFieldStringValue = projectName + ".pdf"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try pdf.write(to: url)
+            status = "Report saved: \(url.lastPathComponent)"
+        } catch {
+            errorMessage = "Could not save the report: \(error.localizedDescription)"
+        }
+    }
+
+    /// Edit → "Copy Table": the table shown, tab separated (pastes into Numbers / Excel), as HCFR's Copy.
+    func copyTable() {
+        let lines = csvText().split(separator: "\n").map(String.init)
+        guard let header = lines.first(where: { !$0.hasPrefix("#") }) else { return }
+        let name = view.rawValue
+        let rows = lines.filter { $0.hasPrefix(name + ",") || $0.hasPrefix("\"" + name + "\",") }
+        let tsv = ([header] + rows).map { $0.replacingOccurrences(of: ",", with: "\t") }.joined(separator: "\n")
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(tsv, forType: .string)
+        status = "\(rows.count) rows of \(name) copied"
+    }
+}

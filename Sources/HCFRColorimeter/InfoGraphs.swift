@@ -10,6 +10,7 @@
 
 import SwiftUI
 import Charts
+import UniformTypeIdentifiers
 
 /// Information panel: HCFR's graph selector and the chosen graph.
 struct InformationPanel: View {
@@ -23,15 +24,23 @@ struct InformationPanel: View {
                 }
                 .labelsHidden()
                 .fixedSize()
+                GraphOptionsMenu(session: session, graph: shownGraph)
                 Spacer()
+                Button {
+                    GraphExport.save(graph(shownGraph), name: shownGraph.rawValue, session: session)
+                } label: { Image(systemName: "square.and.arrow.down") }
+                .buttonStyle(.borderless)
+                .help("Save this graph as a PNG image (HCFR's graph Save…)")
             }
-            graph(session.infoGraph == .auto ? autoGraph : session.infoGraph)
+            graph(shownGraph)
         }
         .padding(8)
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: 6).fill(.background))
         .overlay(RoundedRectangle(cornerRadius: 6).stroke(.separator))
     }
+
+    private var shownGraph: InfoGraph { session.infoGraph == .auto ? autoGraph : session.infoGraph }
 
     /// Auto: the graph that goes with the table shown.
     private var autoGraph: InfoGraph {
@@ -137,14 +146,29 @@ struct LuminanceChart: View {
     @ObservedObject var session: Session
 
     var body: some View {
+        let mode = session.graphOptions.luminance
         let white = session.whiteY
+        let w = white ?? session.prefs.targetMaxL
+        // Value shown for a luminance relative to white (1 = white), as HCFR's graph modes
+        func shown(_ rel: Double) -> Double {
+            switch mode {
+            case .relative: return rel * 100
+            case .absolute: return rel * w
+            case .log: return log10(max(rel * 100, 0.01))
+            case .lStar:
+                let t = max(rel, 0)
+                return t > 216.0 / 24389 ? 116 * cbrt(t) - 16 : 24389.0 / 27 * t
+            }
+        }
         let measured: [LevelPoint] = white.map { w in
-            session.results.compactMap { r in r.xyz.map { LevelPoint(level: r.level, value: $0.Y / w * 100, series: "Measured") } }
+            session.results.compactMap { r in r.xyz.map { LevelPoint(level: r.level, value: shown($0.Y / w), series: "Measured") } }
         } ?? []
         let target = stride(from: 0.0, through: 100, by: 2.5).map {
-            LevelPoint(level: $0, value: session.targetRelative(level: $0) * 100, series: "Reference")
+            LevelPoint(level: $0, value: shown(session.targetRelative(level: $0)), series: "Reference")
         }
-        DarkGraph(title: "Luminance") {
+        let top: Double = mode == .absolute ? max(w, measured.map(\.value).max() ?? 0) * 1.05 : mode == .log ? 2.05 : 105
+        let bottom: Double = mode == .log ? -2 : 0
+        DarkGraph(title: mode == .relative ? "Luminance" : "Luminance — \(mode.rawValue)" + (mode == .absolute ? " (cd/m²)" : "")) {
             Chart {
                 ForEach(target) { p in
                     LineMark(x: .value("Level", p.level), y: .value("%", p.value), series: .value("S", p.series))
@@ -157,10 +181,13 @@ struct LuminanceChart: View {
                 }
             }
             .chartXScale(domain: 0...100)
-            .chartYScale(domain: 0...105)
-            .chartYAxis { AxisMarks(position: .leading, values: Array(stride(from: 0, through: 100, by: 20))) { v in
+            .chartYScale(domain: bottom...top)
+            .chartYAxis { AxisMarks(position: .leading) { v in
                 AxisGridLine().foregroundStyle(.teal.opacity(0.4))
-                AxisValueLabel { Text("\(v.as(Int.self) ?? 0)%").foregroundStyle(.white) }
+                AxisValueLabel {
+                    let d = v.as(Double.self) ?? 0
+                    Text(mode == .relative ? "\(Int(d))%" : mode == .log ? String(format: "%.1f", d) : "\(Int(d))").foregroundStyle(.white)
+                }
             } }
             .chartXAxis { levelAxis(step: 20) }
             .chartPlotStyle { $0.background(grayRamp) }
@@ -223,11 +250,17 @@ struct ColorTempChart: View {
         let refK = Double(session.white.kelvin)
         let measured = session.results.filter { $0.level > 0 }.compactMap { r in r.cct.map { LevelPoint(level: r.level, value: $0, series: "Measured") } }
         let values = measured.map(\.value) + [refK]
-        let lo = min(refK - 1500, (values.min() ?? refK) - 300), hi = max(refK + 1500, (values.max() ?? refK) + 300)
+        var lo = min(refK - 1500, (values.min() ?? refK) - 300), hi = max(refK + 1500, (values.max() ?? refK) + 300)
+        switch session.graphOptions.tempScale {
+        case 1: lo = 2000; hi = 10000
+        case 2: lo = 4000; hi = 8000
+        default: break
+        }
+        let shown = measured.map { LevelPoint(level: $0.level, value: min(max($0.value, lo), hi), series: $0.series) }
         DarkGraph(title: "Color temperature (K)") {
             Chart {
                 RuleMark(y: .value("Ref", refK)).foregroundStyle(.white.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                ForEach(measured) { p in
+                ForEach(shown) { p in
                     LineMark(x: .value("Level", p.level), y: .value("K", p.value)).foregroundStyle(.orange).lineStyle(StrokeStyle(lineWidth: 2))
                     PointMark(x: .value("Level", p.level), y: .value("K", p.value)).foregroundStyle(.orange).symbolSize(24)
                 }
@@ -469,6 +502,74 @@ struct FreeMeasuresChart: View {
             } }
             .chartPlotStyle { $0.background(Color(white: 0.2)) }
             .overlay(alignment: .topLeading) { legend(values.isEmpty ? "Measure → Free measure" : nil) }
+        }
+    }
+}
+
+// MARK: - Graph options and saving (HCFR's graph right-click menus)
+
+/// Scale / display options of the graph shown.
+struct GraphOptionsMenu: View {
+    @ObservedObject var session: Session
+    let graph: InfoGraph
+
+    var body: some View {
+        let o = $session.graphOptions
+        Menu {
+            switch graph {
+            case .luminanceGamma:
+                Picker("Luminance", selection: o.luminance) {
+                    ForEach(LuminanceMode.allCases) { Text($0.rawValue).tag($0) }
+                }
+            case .rgbLevels, .rgbGamma, .targetRGBGamma, .auto:
+                Picker("RGB scale", selection: o.rgbScale) {
+                    Text("0-200%").tag(0); Text("60-140%").tag(1); Text("50-150%").tag(2); Text("80-120%").tag(3)
+                }
+                Picker("Delta E scale", selection: o.deltaEMax) {
+                    Text("0-5").tag(5.0); Text("0-10").tag(10.0); Text("0-20").tag(20.0)
+                }
+            case .colorTemperature:
+                Picker("Temperature scale", selection: o.tempScale) {
+                    Text("Auto-adjust").tag(0); Text("2000K-10000K").tag(1); Text("4000K-8000K").tag(2)
+                }
+            case .cie, .targetCIE:
+                Toggle("Display saturations, color checker and free measures", isOn: o.cieAllSeries)
+                Toggle("Display grays", isOn: $session.cieShowGrays)
+                Toggle("Display references", isOn: $session.cieShowReferences)
+                Toggle("CIE u'v' mode", isOn: $session.cieUV)
+            case .saturationShift, .nearBlackWhite, .freeHistogram, .summary:
+                Text("No options for this graph")
+            }
+        } label: {
+            Image(systemName: "slider.horizontal.3")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Graph scales and options")
+    }
+}
+
+@MainActor
+enum GraphExport {
+    static func save<V: View>(_ view: V, name: String, session: Session) {
+        let content = view.frame(width: 1400, height: 800).padding(8).background(Color(white: 0.12))
+        let renderer = ImageRenderer(content: content)
+        renderer.scale = 2
+        guard let img = renderer.nsImage, let tiff = img.tiffRepresentation,
+              let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else {
+            session.errorMessage = "Could not render the graph."
+            return
+        }
+        let panel = NSSavePanel()
+        panel.title = "Save graph"
+        panel.allowedContentTypes = [.png]
+        panel.nameFieldStringValue = "\(session.projectName) - \(name).png"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try png.write(to: url)
+            session.status = "Graph saved: \(url.lastPathComponent)"
+        } catch {
+            session.errorMessage = "Could not save the graph: \(error.localizedDescription)"
         }
     }
 }

@@ -664,7 +664,8 @@ struct CIEChart: View {
         let selectedLevel = session.view == .grayScale ? session.selectedLevel : nil
         let showRefs = session.cieShowReferences
         // Saturation scales (all six), Color Checker or free measures: their points as well
-        let seriesViews: [MeasureView] = session.view.saturationColor != nil ? MeasureView.saturations
+        let seriesViews: [MeasureView] = session.graphOptions.cieAllSeries ? MeasureView.saturations + [.colorChecker, .freeMeasures]
+            : session.view.saturationColor != nil ? MeasureView.saturations
             : (session.view == .colorChecker || session.view == .freeMeasures ? [session.view] : [])
         let series = seriesViews.map { v in (v, session.seriesResults(v)) }
         let currentView = session.view, selectedIndex = session.selectedIndex
