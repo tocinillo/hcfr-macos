@@ -144,6 +144,23 @@ enum ColorCheckerSet: Int, CaseIterable, Identifiable, Codable {
         }
     }
 
+    /// HCFR's m_bRecalc: in HDR the signals of these sets are recomputed so they give the same colors.
+    var recomputedInHDR: Bool {
+        switch self {
+        case .gcd, .mcd, .pantoneSkin, .calmanClassic, .calmanSGSkin, .chromaPureSkin, .calmanSG,
+             .cm4Sat, .cm4Sat75, .cm5Sat, .cm5Sat75, .cm10Sat, .cm10Sat75: return true
+        default: return false
+        }
+    }
+
+    /// HCFR's constant_XYZ: the classic charts are defined in Rec.709, whatever the reference.
+    var rec709Colors: Bool {
+        switch self {
+        case .gcd, .mcd, .pantoneSkin, .calmanClassic, .calmanSGSkin, .chromaPureSkin, .calmanSG: return true
+        default: return false
+        }
+    }
+
     /// Reads a pattern file in HCFR's format: one patch per line, "R,G,B,name" with 8-bit video codes.
     static func readCSV(_ text: String) -> [ColorCheckerData.Row] {
         text.split(whereSeparator: \.isNewline).compactMap { line in
@@ -290,7 +307,27 @@ extension CalReference {
         switch gammaMode {
         case .powerLaw, .blackCompensation: return pow(q, gammaInUse)
         case .bt1886, .lStar: return whiteY > 0 ? targetY(signal: q, whiteY: whiteY, blackY: blackY) / whiteY : pow(q, 2.4)
-        case .hlg, .st2084: return pow(q, 2.22)
+        case .st2084:
+            // Absolute: relative to the diffuse white (HCFR: 50% PQ, 94.37844 nits by default)
+            let nits = hdr.bt2390 ? EOTF.bt2390(q, hdr: hdr) : min(EOTF.pq(q) * 10000 * hdr.diffuseWhite / 94.37844, hdr.targetMaxL)
+            return nits / hdr.diffuseWhite
+        case .hlg:
+            let peak = whiteY > 0 ? whiteY : hdr.targetMaxL
+            return EOTF.hlg(q, systemGamma: hdr.hlgSystemGamma, minTL: hdr.targetMinL, maxTL: hdr.targetMaxL) / peak
+        }
+    }
+
+    /// Pattern encoding of a linear level (white = 1), as HCFR generates them: 1/2.22 in SDR; in
+    /// ST2084 white is the diffuse white (94.37844 nits) PQ-encoded; in HLG the BT.2100 OETF.
+    func encodeSignal(_ v: Double) -> Double {
+        if v <= 0 { return 0 }
+        switch gammaMode {
+        case .st2084: return EOTF.pqInverse(v * 94.37844 / 10000)
+        case .hlg:
+            let a = 0.17883277, b = 1 - 4 * a, c = 0.5 - a * log(4 * a)
+            let e = min(v, 1)
+            return e <= 1.0 / 12 ? sqrt(3 * e) : a * log(12 * e - b) + c
+        default: return v >= 1 ? 1 : pow(v, 1 / 2.22)
         }
     }
 
@@ -300,6 +337,19 @@ extension CalReference {
         let lin = signal.map { targetCurve(Self.quantize219($0), whiteY: whiteY, blackY: blackY) }
         let v = rgbToXYZ.apply(lin)
         return XYZ(X: v[0], Y: v[1], Z: v[2])
+    }
+
+    /// HDR: signal of a Color Checker patch recomputed as HCFR's GenerateCC24Colors (SDR signal
+    /// linearized with 2.22, in Rec.709 for the classic charts, then encoded with the HDR curve).
+    func hdrSignal(_ s: [Double], rec709: Bool) -> [Double] {
+        var lin = s.map { $0 <= 0 ? 0 : pow(min($0, 1), 2.22) }
+        if rec709 {
+            var r709 = self
+            r709.standard = .hdtv
+            let xyz = r709.rgbToXYZ.apply(lin)
+            lin = rgbToXYZ.inverse.apply(xyz)
+        }
+        return lin.map { Self.quantize219(encodeSignal(min(max($0, 0), 1))) }
     }
 
     static func quantize219(_ v: Double) -> Double { floor(min(max(v, 0), 1) * 219 + 0.5) / 219 }
@@ -331,11 +381,7 @@ extension CalReference {
                 clr = min(max(clr, 0), 1)
                 comp = min(max(comp, 0), 1)
             }
-            return on.map { a in
-                let v = a ? clr : comp
-                let e = v <= 0 || v >= 1 ? min(max(v, 0), 1) : pow(v, 1 / 2.22)
-                return Self.quantize219(e)
-            }
+            return on.map { a in Self.quantize219(gen.encodeSignal(a ? clr : comp)) }
         }
     }
 
@@ -349,11 +395,9 @@ extension CalReference {
         let end = XYZ(X: full[0], Y: full[1], Z: full[2])
         let c = XYZ.fromxyY(x: white.x + (end.x - white.x) * ratio, y: white.y + (end.y - white.y) * ratio,
                             Y: luma(on))
-        guard !gammaMode.isHDR else { return c }
         let rgb = m.inverse.apply([c.X, c.Y, c.Z])
         let lin = rgb.map { v -> Double in
-            let q = Self.quantize219(v <= 0 || v >= 1 ? min(max(v, 0), 1) : pow(v, 1 / 2.22))
-            return targetCurve(q, whiteY: whiteY, blackY: blackY)
+            targetCurve(Self.quantize219(encodeSignal(min(max(v, 0), 1))), whiteY: whiteY, blackY: blackY)
         }
         let v = m.apply(lin)
         return XYZ(X: v[0], Y: v[1], Z: v[2])

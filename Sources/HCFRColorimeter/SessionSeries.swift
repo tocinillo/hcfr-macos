@@ -40,7 +40,15 @@ extension Session {
         }
     }
 
-    var ccPatches: [SeriesPatch] { ccSet.patches(user: userCCRows) }
+    var ccPatches: [SeriesPatch] {
+        let p = ccSet.patches(user: userCCRows)
+        let r = ref
+        guard r.gammaMode.isHDR, ccSet.recomputedInHDR else { return p }
+        return p.map { SeriesPatch(name: $0.name, signal: r.hdrSignal($0.signal, rec709: ccSet.rec709Colors)) }
+    }
+
+    /// White of the color references: absolute (diffuse white) in ST2084, else the measured white.
+    var seriesColorWhiteY: Double { ref.gammaMode == .st2084 ? prefs.diffuseWhite : colorWhiteY }
 
     /// Patterns of a series: name (column header) and signal.
     func seriesPatches(_ v: MeasureView) -> [SeriesPatch] {
@@ -105,7 +113,7 @@ extension Session {
             return ccPatches.enumerated().map { i, p in
                 SeriesResult(index: i, name: p.name, signal: p.signal, xyz: data[i],
                              reference: r.patternReference(signal: p.signal, whiteY: curveWhiteY, blackY: targetBlackY),
-                             whiteY: colorWhiteY, ref: r)
+                             whiteY: seriesColorWhiteY, ref: r)
             }
         case .grayScale, .primariesSecondaries, .contrast:
             return []
@@ -116,7 +124,7 @@ extension Session {
                 SeriesResult(index: i, name: p.name, signal: p.signal, xyz: data[i],
                              reference: r.saturationReference(color, ratio: Double(i) / Double(n - 1),
                                                               whiteY: curveWhiteY, blackY: targetBlackY),
-                             whiteY: colorWhiteY, ref: r)
+                             whiteY: seriesColorWhiteY, ref: r)
             }
         }
     }
