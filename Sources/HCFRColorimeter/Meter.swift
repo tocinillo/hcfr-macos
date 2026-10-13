@@ -54,7 +54,18 @@ struct MeterCorrection: Identifiable, Hashable {
     let index: Int
     let name: String
     let isCCSS: Bool
+    /// Refresh display type (CRT, plasma…): the integration time is a whole number of refresh periods.
+    var refresh = false
     var id: Int { index }
+}
+
+/// What the open meter can do (HCFR's Argyll meter page enables its options from this).
+struct MeterCaps: Equatable {
+    var telephoto = false
+    var ambient = false
+    var hiRes = false
+    var observer = false
+    var integrationTime = false
 }
 
 /// `hcfr-meter` helper process (HCFR's ArgyllCMS drivers) with a line protocol.
@@ -206,6 +217,9 @@ final class ArgyllMeter {
     let checksDiffuser: Bool
     /// Corrections the meter offers (built-in + HCFR CCSS files).
     let corrections: [MeterCorrection]
+    let caps: MeterCaps
+    /// Standard observers (Argyll number, description) for CCSS corrections and spectral meters.
+    let observers: [(Int, String)]
 
     /// Serial-number prefixes of the meters this app was tested with (i1d3 driver family):
     /// "C1-" Calibrite ColorChecker Display, "CM-" X-Rite ColorMunki Display.
@@ -217,7 +231,10 @@ final class ArgyllMeter {
         testedSerialPrefixes.contains { serial.uppercased().hasPrefix($0) }
     }
 
-    private init(helper: MeterHelper, name: String, serial: String, checksDiffuser: Bool, corrections: [MeterCorrection]) {
+    private init(helper: MeterHelper, name: String, serial: String, checksDiffuser: Bool, corrections: [MeterCorrection],
+                 caps: MeterCaps, observers: [(Int, String)]) {
+        self.caps = caps
+        self.observers = observers
         self.helper = helper
         self.name = name
         self.serial = serial
@@ -286,11 +303,35 @@ final class ArgyllMeter {
             let l = try await helper.nextLine()
             if l.hasPrefix("TYPE ") {
                 let f = l.dropFirst(5).split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
-                if f.count >= 4, let i = Int(f[0]) { corrections.append(MeterCorrection(index: i, name: f[1], isCCSS: f[3] == "ccss")) }
+                if f.count >= 4, let i = Int(f[0]) {
+                    corrections.append(MeterCorrection(index: i, name: f[1], isCCSS: f[3] == "ccss",
+                                                       refresh: f.count > 4 && f[4] == "refresh=1"))
+                }
             } else { break } // OK or ERR
         }
+
+        // Sensor options (reading type, observer, integration time, hi-res)
+        var caps = MeterCaps()
+        helper.send("caps")
+        let c = try await helper.nextLine()
+        if c.hasPrefix("CAPS ") {
+            let kv = Dictionary(c.dropFirst(5).split(separator: " ").compactMap { p -> (String, Bool)? in
+                let f = p.split(separator: "=")
+                return f.count == 2 ? (String(f[0]), f[1] == "1") : nil
+            }, uniquingKeysWith: { a, _ in a })
+            caps = MeterCaps(telephoto: kv["tele"] ?? false, ambient: kv["ambient"] ?? false, hiRes: kv["hires"] ?? false,
+                             observer: kv["observer"] ?? false, integrationTime: kv["itime"] ?? false)
+        }
+        var observers: [(Int, String)] = []
+        helper.send("observers")
+        while true {
+            let l = try await helper.nextLine()
+            guard l.hasPrefix("OBS ") else { break }
+            let f = l.dropFirst(4).split(separator: "\t", maxSplits: 1).map(String.init)
+            if f.count == 2, let i = Int(f[0]) { observers.append((i, f[1])) }
+        }
         return ArgyllMeter(helper: helper, name: info.first ?? port.name, serial: serial,
-                           checksDiffuser: checksDiffuser, corrections: corrections)
+                           checksDiffuser: checksDiffuser, corrections: corrections, caps: caps, observers: observers)
     }
 
     private func parseStatus(_ line: String) throws {
@@ -333,6 +374,21 @@ final class ArgyllMeter {
         let v = line.split(separator: " ").dropFirst().compactMap { Double($0) }
         guard line.hasPrefix("XYZ "), v.count == 3 else { throw MeterError.failed("Unexpected reply: \(line)") }
         return XYZ(X: v[0], Y: v[1], Z: v[2])
+    }
+
+    /// Applies HCFR's sensor options; returns the reading type actually set (the meter may not have it).
+    func applyOptions(readingType: Int, observer: Int, integrationMs: Int, refresh: Bool, hiRes: Bool) async throws -> Int {
+        helper.send("rtype \(readingType)")
+        let r = try await helper.nextLine()
+        try parseStatus(r)
+        let actual = r.hasPrefix("RTYPE ") ? Int(r.dropFirst(6)) ?? readingType : readingType
+        helper.send("obs \(observer)")
+        try parseStatus(try await helper.nextLine())
+        helper.send("itime \(integrationMs) \(refresh ? 1 : 0)")
+        try parseStatus(try await helper.nextLine())
+        helper.send("hires \(hiRes ? 1 : 0)")
+        try parseStatus(try await helper.nextLine())
+        return actual
     }
 
     func calibrate() async throws {

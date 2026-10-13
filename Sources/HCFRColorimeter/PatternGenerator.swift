@@ -34,7 +34,7 @@ enum TestPattern: Equatable {
     /// Signal level (0…1) of each channel, before the video range is applied.
     var rgb: [Double] {
         switch self {
-        case .gray(let level): return Array(repeating: Double(level) / 100, count: 3)
+        case .gray(let level): return Array(repeating: Reference.grayProp(level), count: 3)
         case .color(let p): return p.rgb
         case .custom(let rgb, _): return rgb
         case .ansi: return [0, 0, 0]

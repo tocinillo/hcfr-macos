@@ -25,6 +25,14 @@
  *   pos           -> "@POS ok" or "@POS wrong <instruction>" (e.g. i1d3 diffuser in place)
  *   diffcheck <0|1> -> turns the i1d3 diffuser-position check off/on (on by default); "@OK"
  *   types         -> "@TYPE <i>\t<description>\t<disptech>\t<ccss|builtin>\trefresh=<0|1>", then "@OK"
+ *   caps          -> "@CAPS tele=<0|1> ambient=<0|1> hires=<0|1> observer=<0|1> itime=<0|1>"
+ *   observers     -> "@OBS <i>\t<description>" for each standard observer, then "@OK"
+ *   rtype <0|1|2> -> reading type display (spot) / telephoto / ambient, as HCFR's
+ *                    ArgyllMeterWrapper::connectAndStartMeter; "@RTYPE <type actually set>" or "@ERR"
+ *   obs <i>       -> observer for CCSS corrections / spectral meters (icxObserverType); "@OK" or "@ERR"
+ *   itime <ms> <refresh 0|1> -> minimum integration time of i1d3 / ColorMunki colorimeters
+ *                    (0 = Argyll default); "@ITIME <seconds set>" or "@ERR"
+ *   hires <0|1>   -> high resolution spectral mode (i1Pro, ColorMunki); "@OK"
  *   quit
  *
  * Argyll diagnostic messages go to stderr.
@@ -35,6 +43,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <strings.h>
+#include <math.h>
 
 #include "copyright.h"
 #include "aconfig.h"
@@ -208,6 +217,112 @@ static void cmd_types(void) {
 	reply("OK");
 }
 
+/* ---- Sensor options of HCFR's Argyll meter page (ArgyllSensor.cpp / ArgyllMeterWrapper.cpp) ---- */
+
+static void get_caps(inst_mode *cap, inst2_capability *cap2) {
+	inst3_capability cap3 = 0;
+	*cap = 0; *cap2 = 0;
+	g_it->capabilities(g_it, cap, cap2, &cap3);
+}
+
+static int is_colorimeter(void) {
+	inst_mode cap; inst2_capability cap2;
+	get_caps(&cap, &cap2);
+	return !IMODETST(cap, inst_mode_spectral);
+}
+
+static int supports_hires(void) {
+	instType t = g_it->get_itype(g_it);
+	return t == instI1Pro || t == instColorMunki || t == instI1Pro2 || t == instI1Pro3;
+}
+
+static int supports_itime(void) {
+	instType t = g_it->get_itype(g_it);
+	return (t == instI1Disp3 || t == instColorMunki) && is_colorimeter();
+}
+
+static void cmd_caps(void) {
+	inst_mode cap; inst2_capability cap2;
+	if (g_it == NULL) { reply("ERR No instrument open"); return; }
+	get_caps(&cap, &cap2);
+	reply("CAPS tele=%d ambient=%d hires=%d observer=%d itime=%d",
+	      IMODETST(cap, inst_mode_emis_tele) ? 1 : 0, IMODETST(cap, inst_mode_emis_ambient) ? 1 : 0,
+	      supports_hires(), ((cap2 & inst2_ccss) || !is_colorimeter()) ? 1 : 0, supports_itime());
+}
+
+static void cmd_observers(void) {
+	for (int i = 0; i < icxOT_MAX; i++) {
+		if (i == icxOT_none || i == icxOT_custom) continue;
+		char *d = standardObserverDescription((icxObserverType)i);
+		if (d != NULL && d[0]) reply("OBS %d\t%s", i, d);
+	}
+	reply("OK");
+}
+
+/* Reading type: 0 display (spot), 1 telephoto, 2 ambient; falls back as HCFR does */
+static void cmd_rtype(int want) {
+	inst_mode cap; inst2_capability cap2;
+	inst_mode mode = inst_mode_none;
+	inst_code rv;
+	int got = want;
+	if (g_it == NULL) { reply("ERR No instrument open"); return; }
+	get_caps(&cap, &cap2);
+	if (want == 1) {
+		if (IMODETST(cap, inst_mode_emis_tele)) mode = inst_mode_emis_tele;
+		else { mode = inst_mode_emis_spot; got = 0; }
+	} else if (want == 2) {
+		if (IMODETST(cap, inst_mode_emis_ambient)) mode = inst_mode_emis_ambient;
+		else { mode = inst_mode_emis_spot; got = 0; }
+	} else {
+		if (IMODETST(cap, inst_mode_emis_spot)) mode = inst_mode_emis_spot;
+		else { mode = inst_mode_emis_tele; got = 1; }
+	}
+	if ((rv = g_it->set_mode(g_it, mode)) != inst_ok) { reply("ERR Could not set the reading type: %s", inst_err(rv)); return; }
+	get_caps(&cap, &cap2);
+	if (IMODETST(cap, inst_mode_spectral))
+		g_it->set_mode(g_it, mode | inst_mode_spectral);
+	g_it->get_set_opt(g_it, inst_opt_trig_prog);
+	reply("RTYPE %d", got);
+}
+
+static void cmd_obs(int ob) {
+	inst_mode cap; inst2_capability cap2;
+	inst_code rv;
+	if (g_it == NULL) { reply("ERR No instrument open"); return; }
+	get_caps(&cap, &cap2);
+	if (!(cap2 & inst2_ccss) && is_colorimeter()) { reply("OK"); return; }   /* not applicable */
+	if (ob < 0 || ob >= icxOT_MAX || ob == icxOT_none || ob == icxOT_custom) ob = icxOT_default;
+	if ((rv = g_it->get_set_opt(g_it, inst_opt_set_ccss_obs, (icxObserverType)ob, NULL)) != inst_ok)
+		reply("ERR Could not set the observer: %s", inst_err(rv));
+	else
+		reply("OK");
+}
+
+/* As HCFR: refresh displays use a whole number of refresh periods when the rate is known */
+static void cmd_itime(int ms, int refresh) {
+	double want = ms / 1000.0, i_time = want, rate = 0;
+	inst_code rv;
+	if (g_it == NULL) { reply("ERR No instrument open"); return; }
+	if (!supports_itime()) { reply("ITIME 0"); return; }
+	if (refresh) {
+		double minint = want == 0.0 ? 0.4 : want;
+		if (g_it->get_refr_rate(g_it, &rate) == inst_ok && rate > 0)
+			i_time = ceil(minint * rate) / rate;
+		else
+			i_time = minint;
+	}
+	if ((rv = g_it->get_set_opt(g_it, inst_opt_set_min_int_time, i_time)) != inst_ok)
+		reply("ERR Could not set the integration time: %s", inst_err(rv));
+	else
+		reply("ITIME %.4f", i_time);
+}
+
+static void cmd_hires(int on) {
+	if (g_it != NULL && supports_hires())
+		g_it->get_set_opt(g_it, on ? inst_opt_highres : inst_opt_stdres);
+	reply("OK");
+}
+
 static const char *serial_of(inst *it) {
 	char *sn = it->get_serial_no != NULL ? it->get_serial_no(it) : NULL;
 	/* El driver i1d3 (i1 DisplayPro / ColorMunki / ColorChecker Display) no implementa
@@ -367,6 +482,12 @@ int main(int argc, char *argv[]) {
 		char cmd[32] = "", arg2[8] = "crt";
 		int arg1 = 0;
 		sscanf(line, "%31s %d %7s", cmd, &arg1, arg2);
+		if (strcmp(cmd, "caps") == 0)           { cmd_caps(); continue; }
+		if (strcmp(cmd, "observers") == 0)      { cmd_observers(); continue; }
+		if (strcmp(cmd, "rtype") == 0)          { cmd_rtype(arg1); continue; }
+		if (strcmp(cmd, "obs") == 0)            { cmd_obs(arg1); continue; }
+		if (strcmp(cmd, "itime") == 0)          { cmd_itime(arg1, atoi(arg2)); continue; }
+		if (strcmp(cmd, "hires") == 0)          { cmd_hires(arg1); continue; }
 		if (strcmp(cmd, "list") == 0)      cmd_list();
 		else if (strcmp(cmd, "open") == 0) cmd_open(arg1, arg2);
 		else if (strcmp(cmd, "read") == 0) cmd_read();

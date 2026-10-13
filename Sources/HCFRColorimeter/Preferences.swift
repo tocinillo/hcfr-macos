@@ -1,7 +1,7 @@
 // HCFR Colorimeter for macOS
 // Copyright (C) 2026 Jorge Velázquez
-// Preferences window added in 2026, after HCFR's preference pages (ReferencesPropPage.cpp,
-// AdvancedPropPage.cpp).
+// Preferences window added in 2026, after HCFR's preference pages (GeneralPropPage.cpp,
+// ReferencesPropPage.cpp, AdvancedPropPage.cpp, Sensors/Argyllsensorproppage.cpp, SensorPropPage.cpp).
 //
 // This program is free software; you can redistribute it and/or modify it under the terms of
 // the GNU General Public License version 2 as published by the Free Software Foundation.
@@ -16,8 +16,10 @@ struct PreferencesView: View {
 
     var body: some View {
         TabView {
+            GeneralPage(session: session).tabItem { Label("General", systemImage: "gearshape") }
             ReferencesPage(session: session).tabItem { Label("References", systemImage: "scope") }
             AdvancedPage(session: session).tabItem { Label("Advanced", systemImage: "gearshape.2") }
+            SensorPage(session: session).tabItem { Label("Sensor", systemImage: "camera.metering.center.weighted") }
         }
         .frame(width: 680)
         .disabled(session.activity != .idle)
@@ -92,6 +94,19 @@ struct ReferencesPage: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
 
+            Section("Color Checker Patterns") {
+                Picker("Patterns", selection: Binding(get: { session.ccSet }, set: { session.setColorCheckerSet($0) })) {
+                    ForEach(ColorCheckerSet.allCases) { s in
+                        Text(s == .user && !session.userCCName.isEmpty ? "User defined (\(session.userCCName))" : s.title).tag(s)
+                    }
+                }
+                HStack {
+                    Text("\(session.ccPatches.count) patches").foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Load user file…") { session.loadUserColorChecker() }
+                }
+            }
+
             Section("EOTF (HDR)") {
                 Picker("HDR", selection: $session.prefs.gammaMode) {
                     ForEach([GammaMode.hlg, .st2084]) { Text($0.title).tag($0.rawValue) }
@@ -154,7 +169,12 @@ struct AdvancedPage: View {
 
     var body: some View {
         Form {
+            Section("Measure launch") {
+                Toggle("Confirmation message", isOn: $session.appPrefs.confirmMeasures)
+                Text("Asks \"Run … measures?\" before every measurement run.").font(.caption).foregroundStyle(.secondary)
+            }
             Section("Delta E") {
+                Toggle("Highlight", isOn: $session.appPrefs.highlight)
                 Picker("dE formula", selection: $session.prefs.deltaEFormula) {
                     ForEach(DeltaEFormula.allCases) { Text($0.title).tag($0.rawValue) }
                 }
@@ -172,6 +192,156 @@ struct AdvancedPage: View {
     }
 }
 
+/// Preferences → General (HCFR's IDD_GENERAL_PROP_PAGE).
+struct GeneralPage: View {
+    @ObservedObject var session: Session
+    var plain = false
+
+    var body: some View {
+        Form {
+            Section("Dynamic iris") {
+                HStack(spacing: 6) {
+                    Text("Latency time")
+                    TextField("Latency", value: Binding(get: { Int((session.settleSeconds * 1000).rounded()) },
+                                                        set: { session.settleSeconds = Double(min(max($0, 0), 30000)) / 1000 }),
+                              format: .number)
+                        .labelsHidden().frame(width: 70).multilineTextAlignment(.trailing)
+                    Text("ms")
+                }
+                Toggle("Bip at the beginning of measure (latency definition help)", isOn: $session.appPrefs.latencyBeep)
+                Toggle("Frame insertion", isOn: $session.appPrefs.ablEnabled)
+                HStack(spacing: 18) {
+                    intField("Frequency", $session.appPrefs.ablFrequency, 1...100)
+                    intField("Duration [ms]", $session.appPrefs.ablDuration, 100...10000)
+                    intField("Level [%]", $session.appPrefs.ablLevel, 0...100)
+                }
+                .disabled(!session.appPrefs.ablEnabled)
+                Text("Latency: wait after showing each pattern before reading (also in the Generator menu). Frame insertion shows a full-field gray frame every N patterns, so the ABL / dynamic dimming of the display does not drift during long runs.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Colors to add when measuring primaries and secondaries") {
+                Picker("Colors to add", selection: $session.appPrefs.colorsToAdd) {
+                    ForEach(ColorsToAdd.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.radioGroup)
+                .labelsHidden()
+            }
+            Section("Gray levels rounding assumption") {
+                Toggle("Use round down levels (AVSHD, DVE)", isOn: $session.appPrefs.roundDown)
+                Toggle("Use 10 bit targets (HDR10 Blu-ray)", isOn: $session.appPrefs.use10bit)
+                    .disabled(session.appPrefs.roundDown)
+                Text("How a % gray level becomes a video code: normal rounding (GCD disc, generators), round down (AVSHD, DVE) or 10-bit codes.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .modifier(PrefsFormStyle(plain: plain))
+    }
+
+    private func intField(_ title: String, _ value: Binding<Int>, _ range: ClosedRange<Int>) -> some View {
+        HStack(spacing: 6) {
+            Text(title)
+            TextField(title, value: Binding(get: { value.wrappedValue }, set: { value.wrappedValue = min(max($0, range.lowerBound), range.upperBound) }),
+                      format: .number)
+                .labelsHidden().frame(width: 60).multilineTextAlignment(.trailing)
+        }
+    }
+}
+
+/// Preferences → Sensor (HCFR's Argyll meter page and sensor matrix page).
+struct SensorPage: View {
+    @ObservedObject var session: Session
+    var plain = false
+
+    /// Argyll standard observers, as HCFR lists them, when no meter is connected.
+    static let defaultObservers: [(Int, String)] = [
+        (0, "Default"), (3, "CIE 1931 2 deg"), (4, "CIE 1964 10 deg"), (5, "CIE 2012 2 deg"), (6, "CIE 2012 10 deg"),
+        (7, "Stiles&Burch 2 deg"), (8, "Judd&Vos 2 deg"), (9, "CIE 1964 10/2 deg comp"), (10, "Shaw&Fairchild 2 deg"),
+        (11, "EBU 2012"),
+    ]
+
+    var body: some View {
+        let caps = session.meter?.caps
+        let known = caps != nil
+        Form {
+            Section("Meter") {
+                Text(session.meter.map { "\($0.name)" + ($0.serial.isEmpty ? "" : " — S/N \($0.serial)") } ?? "No colorimeter connected: the options are applied when one connects.")
+                    .foregroundStyle(.secondary)
+                Picker("Reading Type", selection: $session.appPrefs.readingType) {
+                    ForEach(ReadingType.allCases) { t in
+                        Text(t.title + (known && !available(t, caps!) ? " (not available)" : "")).tag(t)
+                    }
+                }
+                if session.activeReadingType != .display && session.meter != nil {
+                    Text("In use: \(session.activeReadingType.title)\(session.activeReadingType == .ambient ? " — values in lux" : "")")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Picker("Observer", selection: $session.appPrefs.observer) {
+                    ForEach(observers, id: \.0) { Text($0.1).tag($0.0) }
+                }
+                .disabled(known && !caps!.observer)
+                Picker("Integration time", selection: $session.appPrefs.integrationTime) {
+                    ForEach(IntegrationTime.allCases) { Text($0.title).tag($0) }
+                }
+                .disabled(known && !caps!.integrationTime)
+                Toggle("Hi-Res", isOn: $session.appPrefs.hiRes)
+                    .disabled(known && !caps!.hiRes)
+                Text("As HCFR: the observer applies to CCSS corrections and spectro meters; the integration time to i1 Display Pro / ColorMunki Display (with refresh display types it is rounded to whole refresh periods); Hi-Res to i1Pro / ColorMunki spectros.")
+                    .font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Button("Calibrate meter now") { session.calibrateMeterNow() }
+                        .disabled(session.meter == nil || session.activity != .idle)
+                    Spacer()
+                }
+            }
+            Section("Sensor matrix") {
+                Grid(horizontalSpacing: 8, verticalSpacing: 4) {
+                    ForEach(0..<3, id: \.self) { r in
+                        GridRow {
+                            Text(["X", "Y", "Z"][r]).bold()
+                            ForEach(0..<3, id: \.self) { c in
+                                TextField("", value: cell(r, c), format: .number.precision(.fractionLength(0...6)))
+                                    .labelsHidden().frame(width: 100).multilineTextAlignment(.trailing)
+                            }
+                        }
+                    }
+                }
+                HStack {
+                    Text(session.appPrefs.hasSensorMatrix ? "Correction matrix in use" : "Identity: no correction")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Reset") { session.appPrefs.sensorMatrix = [1, 0, 0, 0, 1, 0, 0, 0, 1] }
+                }
+                Text("Every reading (X, Y, Z) is multiplied by this matrix, as HCFR's sensor matrix. Leave the identity unless you have a correction matrix for your meter and display.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .modifier(PrefsFormStyle(plain: plain))
+    }
+
+    private var observers: [(Int, String)] {
+        guard let m = session.meter, !m.observers.isEmpty else { return Self.defaultObservers }
+        return m.observers.contains { $0.0 == 0 } ? m.observers : [(0, "Default")] + m.observers
+    }
+
+    private func available(_ t: ReadingType, _ caps: MeterCaps) -> Bool {
+        switch t {
+        case .display: return true
+        case .telephoto: return caps.telephoto
+        case .ambient: return caps.ambient
+        }
+    }
+
+    private func cell(_ r: Int, _ c: Int) -> Binding<Double> {
+        Binding(get: { session.appPrefs.sensorMatrix[safe: r * 3 + c] ?? (r == c ? 1 : 0) },
+                set: { v in
+                    var m = session.appPrefs.sensorMatrix
+                    if m.count != 9 { m = [1, 0, 0, 0, 1, 0, 0, 0, 1] }
+                    m[r * 3 + c] = v
+                    session.appPrefs.sensorMatrix = m
+                })
+    }
+}
+
 private struct PrefsFormStyle: ViewModifier {
     let plain: Bool
     func body(content: Content) -> some View {
@@ -184,6 +354,11 @@ struct PreferencesSnapshot: View {
     @ObservedObject var session: Session
     let page: Int
     var body: some View {
-        if page == 0 { ReferencesPage(session: session, plain: true) } else { AdvancedPage(session: session, plain: true) }
+        switch page {
+        case 0: ReferencesPage(session: session, plain: true)
+        case 1: AdvancedPage(session: session, plain: true)
+        case 2: GeneralPage(session: session, plain: true)
+        default: SensorPage(session: session, plain: true)
+        }
     }
 }

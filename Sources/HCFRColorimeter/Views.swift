@@ -10,11 +10,18 @@ import SwiftUI
 import Charts
 
 private let channelColors: [Color] = [.red, .green, .blue]
-/// Delta E cell colors and thresholds of HCFR for CIE2000 (MainView.cpp):
-/// green < 2.0, yellow < 3.0, red otherwise — RGB(175,255,175) / (255,255,175) / (255,175,175).
-private func deltaEColor(_ dE: Double) -> Color {
-    if dE < 2.0 { return Color(red: 175 / 255, green: 1, blue: 175 / 255) }
-    if dE < 3.0 { return Color(red: 1, green: 1, blue: 175 / 255) }
+/// Delta E cell colors and thresholds of HCFR (MainView.cpp): green / yellow / red, RGB(175,255,175) /
+/// (255,255,175) / (255,175,175); limits 2 and 3, or 3 and 5 with CIE76(uv). nil with Highlight off.
+enum DeltaEStyle {
+    static var highlight = true
+    static var cie76uv = false
+}
+
+private func deltaEColor(_ dE: Double) -> Color? {
+    guard DeltaEStyle.highlight else { return nil }
+    let (green, yellow) = DeltaEStyle.cie76uv ? (3.0, 5.0) : (2.0, 3.0)
+    if dE < green { return Color(red: 175 / 255, green: 1, blue: 175 / 255) }
+    if dE < yellow { return Color(red: 1, green: 1, blue: 175 / 255) }
     return Color(red: 1, green: 175 / 255, blue: 175 / 255)
 }
 private let blackCell = Color(red: 1.0, green: 0.85, blue: 0.70)
@@ -467,7 +474,7 @@ private struct MeasuresGrid: View {
                     ForEach(results) { r in
                         let de = isBase(r) ? 0.0 : r.deltaE
                         cell(isOverridden(r) ? "" : fmt(de, 1), level: r.level, bold: true,
-                             fill: de.map(deltaEColor))
+                             fill: de.flatMap(deltaEColor))
                     }
                 }
                 row("delta xy", results) { r in isOverridden(r) ? "" : isBase(r) ? fmt(0, 4) : fmt(r.deltaxy, 4) }
@@ -585,7 +592,7 @@ private struct PrimariesGrid: View {
                     label("Delta E")
                     ForEach(results) { r in
                         let de = isBase(r) ? 0.0 : r.deltaE
-                        cell(fmt(de, 1), patch: r.patch, bold: true, fill: de.map(deltaEColor))
+                        cell(fmt(de, 1), patch: r.patch, bold: true, fill: de.flatMap(deltaEColor))
                     }
                     blackColumnCell("", measured: black != nil)
                 }
@@ -967,7 +974,7 @@ private struct SeriesGrid: View {
                 GridRow {
                     label("Delta E")
                     ForEach(results) { r in
-                        cell(fmt(r.deltaE, 1), r, bold: true, fill: r.deltaE.map(deltaEColor))
+                        cell(fmt(r.deltaE, 1), r, bold: true, fill: r.deltaE.flatMap(deltaEColor))
                     }
                 }
                 row("delta xy", results) { r in fmt(r.deltaxy, 4) }

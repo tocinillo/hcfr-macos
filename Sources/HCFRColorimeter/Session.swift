@@ -90,9 +90,23 @@ final class Session: ObservableObject {
     @Published var prefs = ReferencePrefs() {
         didSet {
             prefs.applyCustomColors()
+            applyStaticOptions()
             if let data = try? JSONEncoder().encode(prefs) { defaults.set(data, forKey: "referencePrefs") }
         }
     }
+    /// General / Advanced / sensor options (HCFR's General, Advanced and Argyll meter pages).
+    @Published var appPrefs = AppPrefs() {
+        didSet {
+            if let data = try? JSONEncoder().encode(appPrefs) { defaults.set(data, forKey: "appPrefs") }
+            applyStaticOptions()
+            let s = (oldValue.readingType, oldValue.observer, oldValue.integrationTime, oldValue.hiRes)
+            if s != (appPrefs.readingType, appPrefs.observer, appPrefs.integrationTime, appPrefs.hiRes) { reapplySensorOptions() }
+        }
+    }
+    /// Reading type the meter actually uses (it may not have the one chosen).
+    @Published var activeReadingType: ReadingType = .display
+    /// Patterns shown since the run started (frame insertion every N patterns).
+    var patternCounter = 0
     /// Override black (0 cd/m²): 0 IRE is not measured and black is taken as perfect.
     @Published var overrideBlack: Bool {
         didSet {
@@ -195,9 +209,10 @@ final class Session: ObservableObject {
         standard = defaults.string(forKey: "standard").flatMap(ColorStandard.init(rawValue:)) ?? .sdtv
         white = defaults.string(forKey: "white").flatMap(WhitePoint.init(rawValue:)) ?? .d65
         gamma = defaults.object(forKey: "gamma") as? Double ?? 2.3
-        let loadedPrefs = defaults.data(forKey: "referencePrefs").flatMap { try? JSONDecoder().decode(ReferencePrefs.self, from: $0) } ?? ReferencePrefs()
+        let loadedPrefs = ReferencePrefs.decodeMerging(defaults.data(forKey: "referencePrefs"), over: ReferencePrefs())
         prefs = loadedPrefs
         loadedPrefs.applyCustomColors()
+        appPrefs = AppPrefs.decodeMerging(defaults.data(forKey: "appPrefs"), over: AppPrefs())
         overrideBlack = defaults.object(forKey: "overrideBlack") as? Bool ?? true
         videoLevels = defaults.string(forKey: "videoLevels").flatMap(VideoLevels.init(rawValue:)) ?? .full
         patternArea = defaults.object(forKey: "patternArea") as? Double ?? 100
@@ -222,6 +237,62 @@ final class Session: ObservableObject {
             patternSource = .raspberryPi
         }
         patternWindow.onEscape = { [weak self] in self?.stop() }
+        applyStaticOptions()
+    }
+
+    /// Options kept in static settings read by the formulas and tables.
+    func applyStaticOptions() {
+        Reference.roundDown = appPrefs.roundDown
+        Reference.use10bit = appPrefs.use10bit && !appPrefs.roundDown
+        DeltaEStyle.highlight = appPrefs.highlight
+        DeltaEStyle.cie76uv = prefs.deltaEFormula == DeltaEFormula.cie76uv.rawValue
+    }
+
+    /// "Measure launch: Confirmation message" (Advanced preferences).
+    func confirmRun(_ message: String) async throws {
+        guard appPrefs.confirmMeasures else { return }
+        try await ask("On measure", message, style: .yesNo)
+    }
+
+    /// Sends the sensor options to the meter (before its Display correction, as HCFR).
+    func applySensorOptions(_ m: ArgyllMeter, correction c: MeterCorrection?) async {
+        do {
+            let ms = Int(appPrefs.integrationTime.seconds * 1000)
+            let actual = try await m.applyOptions(readingType: appPrefs.readingType.rawValue, observer: appPrefs.observer,
+                                                  integrationMs: ms, refresh: c?.refresh ?? false, hiRes: appPrefs.hiRes)
+            activeReadingType = ReadingType(rawValue: actual) ?? .display
+            if actual != appPrefs.readingType.rawValue {
+                errorMessage = "Reading mode \(appPrefs.readingType.title) is not available on this meter, using \(activeReadingType.title)."
+            } else if activeReadingType == .ambient {
+                status = "Ambient mode set: values are reported in lux"
+            }
+        } catch {
+            status = "Sensor options not applied: \(error.localizedDescription) (rebuild with build-app.sh to update the meter helper)"
+        }
+    }
+
+    /// Sensor options changed in Preferences: applied now to the connected meter.
+    func reapplySensorOptions() {
+        guard let m = meter, activity == .idle, !connecting else { return }
+        let c = correction
+        Task {
+            await applySensorOptions(m, correction: c)
+            if let c { try? await m.setCorrection(c) }
+        }
+    }
+
+    /// Sensor → "Calibrate meter now": the meter's own calibration (dark / white reference / refresh).
+    func calibrateMeterNow() {
+        guard let m = meter else { return }
+        run(.measuring) {
+            do {
+                try await m.calibrate()
+            } catch MeterError.needsCalibration(let cond, let msg) {
+                try await self.calibrate(meter: m, condition: cond, message: msg)
+            }
+            self.closePattern()
+            self.status = "Meter calibrated. If the meter needs it, put it back in measurement position."
+        }
     }
 
     var ref: CalReference {
@@ -454,6 +525,7 @@ final class Session: ObservableObject {
                 let pick = m.corrections.first { $0.name == saved }
                     ?? m.corrections.first { $0.isCCSS && $0.name.hasPrefix("CRT") }
                     ?? m.corrections.first
+                await applySensorOptions(m, correction: pick)
                 if let pick { try await m.setCorrection(pick) }
                 meter = m
                 correction = pick
@@ -483,6 +555,7 @@ final class Session: ObservableObject {
         guard let meter, activity == .idle, c != correction else { return }
         Task {
             do {
+                if c.refresh != correction?.refresh { await applySensorOptions(meter, correction: c) }
                 try await meter.setCorrection(c)
                 correction = c
                 defaults.set(c.name, forKey: "display")
@@ -517,29 +590,38 @@ final class Session: ObservableObject {
         if kind == .contrast { measureContrast(); return }
         if kind == .freeMeasure { measureFree(); return }
         let graySteps = kind == .grayScale || kind == .grayScaleAndColors ? levels.count : 0
-        // As HCFR for Windows, color tests never measure Black (with or without Override black)
-        let total = graySteps + kind.patches.count
+        // General → "Colors to add when measuring primaries and secondaries": none, white, or
+        // white and black (black only when not overridden, and not again after a gray scale)
+        var patches = kind.patches
+        if appPrefs.colorsToAdd == .none && kind != .grayScaleAndColors { patches.removeAll { $0 == .white } }
+        let addBlack = appPrefs.colorsToAdd == .whiteAndBlack && !patches.isEmpty && graySteps == 0 && !overrideBlack
+        let total = graySteps + patches.count + (addBlack ? 1 : 0)
         var what: [String] = []
         if graySteps > 0 { what.append("\(Reference.label(levels.first!)) to 100 IRE") }
-        if !kind.patches.isEmpty { what.append(kind.patches.map(\.rawValue).joined(separator: ", ")) }
+        if !patches.isEmpty { what.append(patches.map(\.rawValue).joined(separator: ", ") + (addBlack ? ", Black" : "")) }
 
-        view = kind.patches.isEmpty || graySteps > 0 ? .grayScale : .primariesSecondaries
+        view = patches.isEmpty || graySteps > 0 ? .grayScale : .primariesSecondaries
         run(.measuring) {
-            try await self.ask("On measure", """
+            try await self.confirmRun("""
                 Run \(kind.title.lowercased()) measures on \(total) values (\(what.joined(separator: "; ")))?
                 Warning: current data will be lost.
 
                 Note: you can cancel measuring using the ESC key.
-                """, style: .yesNo)
+                """)
             self.isDirty = true
             if graySteps > 0 {
                 self.measurements.removeAll()
                 try await self.measureGrayLevels()
             }
-            if !kind.patches.isEmpty {
+            if !patches.isEmpty {
                 self.colorMeasurements.removeAll()
                 self.view = .primariesSecondaries
-                try await self.measurePatches(kind.patches)
+                try await self.measurePatches(patches)
+                if addBlack {
+                    try await self.present(.gray(0))
+                    self.status = "Measuring Black…"
+                    self.store(try await self.readWithCalibration(pattern: .gray(0)), level: 0)
+                }
             }
             self.status = "\(kind.title) measurement finished"
             Chime.finished()
@@ -653,6 +735,7 @@ final class Session: ObservableObject {
         }
         guard task == nil else { return }
         activity = kind
+        patternCounter = 0
         task = Task {
             defer { closePattern() }
             do {
@@ -701,6 +784,7 @@ final class Session: ObservableObject {
         if patternSource == .raspberryPi {
             guard force || pattern != shownPattern else { return }
             try Task.checkCancellation()
+            try await insertFrameIfDue()
             let black = videoLevels.code(0)
             if let inverted = pattern.ansiInverted {
                 try await piSend { $0.ansiMessage(inverted: inverted) }
@@ -708,19 +792,41 @@ final class Session: ObservableObject {
                 try await piShow(rgb: pattern.rgb.map { videoLevels.code($0) }, background: [black, black, black])
             }
             shownPattern = pattern
-            try await Task.sleep(for: .seconds(settleSeconds))
+            try await latencyWait()
             return
         }
         guard let screen = patternScreen else { return }
         if force || pattern != shownPattern || !patternWindow.isShowing {
+            try await insertFrameIfDue(screen: screen)
             let black = videoLevels.code(0)
             let ansi = pattern.ansiInverted
             let rgb = ansi != nil ? [1.0, 1, 1] : pattern.rgb
             patternWindow.show(rgb: rgb.map { videoLevels.code($0) }, background: [black, black, black],
                                areaPercent: ansi != nil ? 100 : patternArea, ansiInverted: ansi, on: screen)
             shownPattern = pattern
-            try await Task.sleep(for: .seconds(settleSeconds))
+            try await latencyWait()
         }
+    }
+
+    /// Latency time (General → Dynamic iris), with HCFR's optional beep when the reading starts.
+    private func latencyWait() async throws {
+        try await Task.sleep(for: .seconds(settleSeconds))
+        if appPrefs.latencyBeep { NSSound.beep() }
+    }
+
+    /// HCFR's "Frame insertion": every `ablFrequency` patterns a full-field gray frame of `ablLevel` %
+    /// is shown for `ablDuration` ms, so the display's ABL / dynamic dimming does not drift.
+    private func insertFrameIfDue(screen: NSScreen? = nil) async throws {
+        patternCounter += 1
+        let p = appPrefs
+        guard p.ablEnabled, p.ablFrequency > 0, patternCounter % p.ablFrequency == 0 else { return }
+        let code = videoLevels.code(Double(p.ablLevel) / 100)
+        if patternSource == .raspberryPi {
+            try await piSend { $0.rectangleMessage(rgb: [code, code, code], background: [code, code, code], areaPercent: 100) }
+        } else if let screen {
+            patternWindow.show(rgb: [code, code, code], background: [code, code, code], areaPercent: 100, on: screen)
+        }
+        try await Task.sleep(for: .milliseconds(p.ablDuration))
     }
 
     func closePattern() {
@@ -861,7 +967,7 @@ final class Session: ObservableObject {
         while true {
             try Task.checkCancellation()
             do {
-                return try await meter.read()
+                return appPrefs.correct(try await meter.read())
             } catch MeterError.needsCalibration(let cond, let msg) {
                 try await calibrate(meter: meter, condition: cond, message: msg)
                 if let pattern { try await present(pattern) } else { closePattern() }

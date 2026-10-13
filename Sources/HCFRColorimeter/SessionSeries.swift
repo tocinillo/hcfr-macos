@@ -248,12 +248,12 @@ extension Session {
         let total = views.reduce(0) { $0 + seriesCount($1) - ($1 == .nearBlack && overrideBlack ? 1 : 0) }
         view = views[0]
         run(.measuring) {
-            try await self.ask("On measure", """
+            try await self.confirmRun("""
                 Run \(kind.title.lowercased()) measures on \(total) values\(kind == .colorChecker ? " (\(self.ccSet.title))" : "")?
                 Warning: current data will be lost.
 
                 Note: you can cancel measuring using the ESC key.
-                """, style: .yesNo)
+                """)
             self.isDirty = true
             for v in views {
                 self.view = v
@@ -291,13 +291,13 @@ extension Session {
         view = .contrast
         let items = ContrastPatch.allCases.filter { $0 != .black || !overrideBlack }
         run(.measuring) {
-            try await self.ask("On measure", """
+            try await self.confirmRun("""
                 Run contrast measures (\(items.map(\.rawValue).joined(separator: ", ")))?
                 Warning: current data will be lost.
 
                 For ANSI contrast the meter reads the center square of a 5×5 checkerboard: keep it in the center of the screen.
                 Note: you can cancel measuring using the ESC key.
-                """, style: .yesNo)
+                """)
             self.isDirty = true
             self.contrastMeasurements.removeAll()
             for item in items {

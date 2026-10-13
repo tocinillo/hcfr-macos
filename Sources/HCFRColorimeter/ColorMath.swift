@@ -472,8 +472,15 @@ enum Reference {
 
     /// Gray level of a calibration DVD (8 bit, 16–235, normal rounding; HCFR's GrayLevelToGrayProp).
     static func grayProp(_ level: Double) -> Double {
-        (floor(level / 100 * 219 + 16.5) - 16) / 219
+        if roundDown { return (floor(level / 100 * 219 + 16) - 16) / 219 }
+        if use10bit { return (floor(level / 100 * 876 + 64.5) - 64) / 876 }
+        return (floor(level / 100 * 219 + 16.5) - 16) / 219
     }
+
+    /// HCFR's "Gray levels rounding assumption" (General preferences): round down levels
+    /// (AVSHD, DVE discs) or 10-bit targets (HDR10 Blu-ray). Normal rounding when both are off.
+    static var roundDown = false
+    static var use10bit = false
 }
 
 enum ColorMath {
