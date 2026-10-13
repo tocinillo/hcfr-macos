@@ -180,6 +180,8 @@ final class Session: ObservableObject {
     /// Wait after showing a pattern before reading, so the display settles.
     @Published var settleSeconds: Double = 1.0 { didSet { defaults.set(settleSeconds, forKey: "settleSeconds") } }
     let patternWindow = PatternWindowController()
+    /// Column whose values are being edited (grid's right-click → Edit values…).
+    @Published var editingMeasure: EditTarget?
     /// Test pattern on the generator from the Patterns menu (nil = none).
     @Published var testPatternShown: String?
     /// Patterns → "Show color…" dialog (HCFR's Test colors window), with the color in %.

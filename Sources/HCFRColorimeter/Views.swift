@@ -117,6 +117,7 @@ struct ContentView: View {
             Text("The gray scale measurements were taken with \(session.grayCount) points. Changing to \(session.pendingGrayCount ?? 0) points clears them (the colors are kept).")
         }
         .sheet(isPresented: $session.editingTestColor) { TestColorSheet(session: session) }
+        .sheet(item: $session.editingMeasure) { t in EditMeasureSheet(session: session, target: t) }
         .sheet(item: $session.prompt) { p in
             PromptSheet(prompt: p, session: session).onAppear { session.promptDidAppear(p.id) }
         }
@@ -487,6 +488,7 @@ private struct MeasuresGrid: View {
                     ForEach(results) { r in
                         header(Reference.label(r.level), selected: r.level == session.selectedLevel)
                             .onTapGesture { select(r.level) }
+                            .contextMenu { EditMeasureMenu(session: session, target: .gray(r.level)) }
                     }
                 }
                 ForEach(0..<3, id: \.self) { k in
@@ -608,6 +610,7 @@ private struct PrimariesGrid: View {
                             .overlay(Rectangle().stroke(.separator, lineWidth: 0.5))
                             .contentShape(Rectangle())
                             .onTapGesture { session.select(patch: r.patch) }
+                            .contextMenu { EditMeasureMenu(session: session, target: .patch(r.patch)) }
                     }
                     Text("Black").bold()
                         .frame(maxWidth: .infinity, minHeight: 21)
@@ -1090,6 +1093,7 @@ private struct SeriesGrid: View {
             .contentShape(Rectangle())
             .onTapGesture { session.select(index: r.index) }
             .help(r.name)
+            .contextMenu { EditMeasureMenu(session: session, target: session.view == .freeMeasures ? .free(r.index) : .series(session.view, r.index)) }
     }
 
     private func row(_ title: String, _ results: [SeriesResult], _ value: @escaping (SeriesResult) -> String) -> some View {
@@ -1146,6 +1150,7 @@ private struct ContrastGrid: View {
                             .overlay(Rectangle().stroke(.separator, lineWidth: 0.5))
                             .contentShape(Rectangle())
                             .onTapGesture { session.select(index: r.index) }
+                            .contextMenu { EditMeasureMenu(session: session, target: .contrast(r.index)) }
                     }
                     side("", bold: true)
                     side("", bold: true)
@@ -1239,4 +1244,73 @@ private struct TestColorSheet: View {
         .padding(20)
         .frame(width: 440)
     }
+}
+
+// MARK: - Editing measures (HCFR's "Edit" mode of the grid)
+
+private struct EditMeasureMenu: View {
+    @ObservedObject var session: Session
+    let target: EditTarget
+
+    var body: some View {
+        Button("Edit values…") { session.editingMeasure = target }
+        Button("Delete measure", role: .destructive) { session.setMeasure(nil, for: target) }
+            .disabled(session.measure(for: target) == nil)
+    }
+}
+
+private struct EditMeasureSheet: View {
+    @ObservedObject var session: Session
+    let target: EditTarget
+    @StateObject private var draft = EditDraft()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Edit measure — \(session.title(for: target))").font(.headline)
+            Text("Type the values read with another instrument, or correct a reading (as HCFR's Edit mode).")
+                .font(.caption).foregroundStyle(.secondary)
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 6) {
+                GridRow {
+                    Text("x"); TextField("x", value: $draft.x, format: .number.precision(.fractionLength(0...5))).frame(width: 110)
+                }
+                GridRow {
+                    Text("y"); TextField("y", value: $draft.y, format: .number.precision(.fractionLength(0...5))).frame(width: 110)
+                }
+                GridRow {
+                    Text("Y cd/m²"); TextField("Y", value: $draft.Y, format: .number.precision(.fractionLength(0...4))).frame(width: 110)
+                }
+            }
+            HStack {
+                Button("Delete measure", role: .destructive) {
+                    session.setMeasure(nil, for: target)
+                    session.editingMeasure = nil
+                }
+                Spacer()
+                Button("Cancel") { session.editingMeasure = nil }.keyboardShortcut(.cancelAction)
+                Button("Save") {
+                    if draft.y > 0, draft.Y >= 0 {
+                        session.setMeasure(XYZ.fromxyY(x: draft.x, y: draft.y, Y: draft.Y), for: target)
+                    }
+                    session.editingMeasure = nil
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(draft.y <= 0)
+            }
+        }
+        .padding(20)
+        .frame(width: 380)
+        .onAppear {
+            let c = session.measure(for: target) ?? session.ref.white.xyz(Y: 0)
+            draft.x = c.Y > 0 ? c.x : session.ref.white.x
+            draft.y = c.Y > 0 ? c.y : session.ref.white.y
+            draft.Y = c.Y
+        }
+    }
+}
+
+/// Values typed in the edit sheet (an ObservableObject: @State needs Xcode's macro plugin).
+private final class EditDraft: ObservableObject {
+    @Published var x = 0.3127
+    @Published var y = 0.3290
+    @Published var Y = 0.0
 }

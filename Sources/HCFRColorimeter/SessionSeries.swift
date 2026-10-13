@@ -434,3 +434,54 @@ extension Session {
 extension Array {
     subscript(safe i: Int) -> Element? { indices.contains(i) ? self[i] : nil }
 }
+
+// MARK: - Editing measures (HCFR's grid Edit mode)
+
+/// A column of any table.
+enum EditTarget: Identifiable, Hashable {
+    case gray(Double)
+    case patch(PatchColor)
+    case series(MeasureView, Int)
+    case contrast(Int)
+    case free(Int)
+
+    var id: String { "\(self)" }
+}
+
+extension Session {
+    func measure(for t: EditTarget) -> XYZ? {
+        switch t {
+        case .gray(let l): return measurements[l]
+        case .patch(let p): return colorMeasurements[p]
+        case .series(let v, let i): return seriesMeasurements[v]?[i]
+        case .contrast(let i): return contrastMeasurements[ContrastPatch.allCases[min(max(i, 0), 3)]]
+        case .free(let i): return freeMeasurements[safe: i]
+        }
+    }
+
+    func title(for t: EditTarget) -> String {
+        switch t {
+        case .gray(let l): return "\(Reference.label(l))% White"
+        case .patch(let p): return p.rawValue
+        case .series(let v, let i): return "\(v.rawValue) \(seriesPatches(v)[safe: i]?.name ?? "\(i + 1)")"
+        case .contrast(let i): return ContrastPatch.allCases[min(max(i, 0), 3)].rawValue
+        case .free(let i): return "Free measure \(i + 1)"
+        }
+    }
+
+    /// Sets (or deletes with nil) the measure of a column.
+    func setMeasure(_ c: XYZ?, for t: EditTarget) {
+        guard activity == .idle else { return }
+        switch t {
+        case .gray(let l): measurements[l] = c
+        case .patch(let p): colorMeasurements[p] = c
+        case .series(let v, let i): seriesMeasurements[v, default: [:]][i] = c
+        case .contrast(let i): contrastMeasurements[ContrastPatch.allCases[min(max(i, 0), 3)]] = c
+        case .free(let i):
+            guard freeMeasurements.indices.contains(i) else { return }
+            if let c { freeMeasurements[i] = c } else { freeMeasurements.remove(at: i) }
+        }
+        isDirty = true
+        status = c == nil ? "Measure deleted: \(title(for: t))" : "Measure edited: \(title(for: t))"
+    }
+}
