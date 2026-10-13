@@ -52,7 +52,7 @@ private struct Panel<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.caption.bold()).foregroundStyle(.secondary)
+            Text(tr(title)).font(.caption.bold()).foregroundStyle(.secondary)
             content
         }
         .padding(8)
@@ -92,7 +92,7 @@ struct ContentView: View {
         .safeAreaInset(edge: .bottom) {
             HStack {
                 if session.busy || session.scanning { ProgressView().controlSize(.small) }
-                Text(session.status).font(.callout)
+                Text(trMessage(session.status)).font(.callout)
                 Spacer()
                 if session.activity != .idle {
                     Text("ESC cancels measuring").font(.caption).foregroundStyle(.secondary)
@@ -124,7 +124,7 @@ struct ContentView: View {
         .alert("Error", isPresented: Binding(get: { session.errorMessage != nil }, set: { if !$0 { session.errorMessage = nil } })) {
             Button("OK") {}
         } message: {
-            Text(session.errorMessage ?? "")
+            Text(trMessage(session.errorMessage ?? ""))
         }
         .onAppear {
             if autoConnect { session.startScanning() }
@@ -145,8 +145,8 @@ private struct PromptSheet: View {
             Image(systemName: icon)
                 .font(.system(size: 34)).foregroundStyle(prompt.style == .position ? .red : .blue)
             VStack(alignment: .leading, spacing: 16) {
-                Text(prompt.title).font(.headline)
-                Text(prompt.message).fixedSize(horizontal: false, vertical: true)
+                Text(trMessage(prompt.title)).font(.headline)
+                Text(trMessage(prompt.message)).fixedSize(horizontal: false, vertical: true)
                 HStack {
                     Spacer()
                     Button(prompt.style == .yesNo ? "No" : "Cancel") { session.answerPrompt(proceed: false) }
@@ -262,7 +262,7 @@ private struct GeneratorMenu: View {
                 }
                 Divider()
                 Picker("Levels", selection: $session.videoLevels) {
-                    ForEach(VideoLevels.allCases) { Text($0.rawValue).tag($0) }
+                    ForEach(VideoLevels.allCases) { Text(tr($0.rawValue)).tag($0) }
                 }
                 Picker("Patch size", selection: $session.patternArea) {
                     Text("Full field").tag(100.0)
@@ -319,7 +319,7 @@ private enum MeasureMenu {
         for (g, group) in MeasureKind.menu.enumerated() {
             if g > 0 { menu.addItem(.separator()) }
             for kind in group {
-                let item = NSMenuItem(title: kind.title, action: #selector(Target.run(_:)), keyEquivalent: "")
+                let item = NSMenuItem(title: tr(kind.title), action: #selector(Target.run(_:)), keyEquivalent: "")
                 item.target = target
                 item.tag = target.actions.count
                 target.actions.append { session.measure(kind) }
@@ -340,7 +340,7 @@ private struct ActionButton: View {
         Button(action: action) {
             VStack(spacing: 2) {
                 Image(systemName: symbol).font(.system(size: 15)).foregroundStyle(tint)
-                Text(title).font(.caption2).lineLimit(1).minimumScaleFactor(0.8)
+                Text(tr(title)).font(.caption2).lineLimit(1).minimumScaleFactor(0.8)
             }
             .frame(width: 64, height: 38)
         }
@@ -355,7 +355,7 @@ private struct ViewPanel: View {
         Panel(title: "View") {
             HStack(spacing: 8) {
                 Picker("View", selection: $session.view) {
-                    ForEach(MeasureView.allCases) { Text($0.rawValue).tag($0) }
+                    ForEach(MeasureView.allCases) { Text(tr($0.rawValue)).tag($0) }
                 }
                 .labelsHidden()
                 .fixedSize()
@@ -548,7 +548,7 @@ private struct MeasuresGrid: View {
     }
 
     private func header(_ text: String, width: CGFloat? = nil, selected: Bool = false) -> some View {
-        Text(text).bold()
+        Text(tr(text)).bold()
             .frame(minWidth: width ?? 56, maxWidth: width ?? .infinity, minHeight: 21)
             .frame(width: width)
             .background(selected ? Color.accentColor.opacity(0.35) : Color.gray.opacity(0.35))
@@ -557,7 +557,7 @@ private struct MeasuresGrid: View {
     }
 
     private func label(_ text: String) -> some View {
-        Text(text).bold()
+        Text(tr(text)).bold()
             .frame(width: 90, height: 21)
             .background(Color.gray.opacity(0.15))
             .overlay(Rectangle().stroke(.separator, lineWidth: 0.5))
@@ -605,7 +605,7 @@ private struct PrimariesGrid: View {
                 GridRow {
                     label("Color")
                     ForEach(results) { r in
-                        Text(r.patch.rawValue).bold()
+                        Text(tr(r.patch.rawValue)).bold()
                             .foregroundStyle(Self.headerTint[r.patch] != nil ? Color.black : Color.primary)
                             .frame(maxWidth: .infinity, minHeight: 21)
                             .background(Self.headerTint[r.patch] ?? Color.gray.opacity(0.35))
@@ -669,7 +669,7 @@ private struct PrimariesGrid: View {
     }
 
     private func label(_ text: String) -> some View {
-        Text(text).bold()
+        Text(tr(text)).bold()
             .frame(width: 90, height: 21)
             .background(Color.gray.opacity(0.15))
             .overlay(Rectangle().stroke(.separator, lineWidth: 0.5))
@@ -742,7 +742,7 @@ private struct RGBLevels: View {
             let h = (geo.size.height - 18) * k
             VStack(spacing: 3) {
                 Spacer(minLength: 0)
-                Text(text).font(.caption.bold()).lineLimit(1).minimumScaleFactor(0.6)
+                Text(tr(text)).font(.caption.bold()).lineLimit(1).minimumScaleFactor(0.6)
                 RoundedRectangle(cornerRadius: 5)
                     .fill(LinearGradient(colors: [color.opacity(0.7), color, color.opacity(0.55)], startPoint: .leading, endPoint: .trailing))
                     .frame(height: h)
@@ -770,7 +770,7 @@ private struct Swatches: View {
             Color(red: Double(c[0]) / 255, green: Double(c[1]) / 255, blue: Double(c[2]) / 255)
             VStack(spacing: 2) {
                 Text(rgb.map { "\($0[0]),\($0[1]),\($0[2])" } ?? "No measure")
-                Text(label)
+                Text(tr(label))
             }
             .font(.caption.bold())
             .foregroundStyle(bright ? .black : .white)
@@ -961,7 +961,7 @@ private struct ScaleSizeControl: View {
                 Text("Patterns").fixedSize()
                 Picker("Patterns", selection: Binding(get: { session.ccSet }, set: { session.setColorCheckerSet($0) })) {
                     ForEach(ColorCheckerSet.allCases) { s in
-                        Text(s == .user && !session.userCCName.isEmpty ? "User defined (\(session.userCCName))" : s.title).tag(s)
+                        Text(s == .user && !session.userCCName.isEmpty ? tr("User defined") + " (\(session.userCCName))" : tr(s.title)).tag(s)
                     }
                 }
                 .labelsHidden()
@@ -1090,7 +1090,7 @@ private struct SeriesGrid: View {
             bg = Color(red: (c[0] > 0 ? 240 : k) / 255, green: (c[1] > 0 ? 240 : k) / 255, blue: (c[2] > 0 ? 240 : k) / 255)
         }
         let selected = r.index == session.selectedIndex
-        return Text(r.name).bold()
+        return Text(tr(r.name)).bold()
             .lineLimit(2).minimumScaleFactor(0.7)
             .multilineTextAlignment(.center)
             .foregroundStyle(fg)
@@ -1113,7 +1113,7 @@ private struct SeriesGrid: View {
     }
 
     private func label(_ text: String) -> some View {
-        Text(text).bold()
+        Text(tr(text)).bold()
             .lineLimit(1).minimumScaleFactor(0.7)
             .frame(width: 90, height: 21)
             .background(Color.gray.opacity(0.15))
@@ -1152,7 +1152,7 @@ private struct ContrastGrid: View {
                 GridRow {
                     label(" ")
                     ForEach(results) { r in
-                        Text(r.name).bold()
+                        Text(tr(r.name)).bold()
                             .frame(maxWidth: .infinity, minHeight: 21)
                             .background(Color.gray.opacity(0.35))
                             .overlay(r.index == session.selectedIndex ? Rectangle().stroke(Color.accentColor, lineWidth: 2) : nil)
@@ -1194,14 +1194,14 @@ private struct ContrastGrid: View {
     }
 
     private func label(_ text: String) -> some View {
-        Text(text).bold()
+        Text(tr(text)).bold()
             .frame(width: 90, height: 21)
             .background(Color.gray.opacity(0.15))
             .overlay(Rectangle().stroke(.separator, lineWidth: 0.5))
     }
 
     private func side(_ text: String, bold: Bool = false) -> some View {
-        Text(text).fontWeight(bold ? .bold : .regular)
+        Text(tr(text)).fontWeight(bold ? .bold : .regular)
             .frame(maxWidth: .infinity, minHeight: 21, alignment: .trailing)
             .padding(.trailing, 6)
             .background(Color.gray.opacity(bold ? 0.2 : 0.06))

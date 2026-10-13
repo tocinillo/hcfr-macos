@@ -38,6 +38,21 @@ enum Snapshot {
             session.overrideBlack = original
             exit(0)
         }
+        if let l = args.firstIndex(of: "--lang-test"), l + 1 < args.count {
+            // Development check of the Spanish strings file and the message patterns
+            guard let d = NSDictionary(contentsOfFile: args[l + 1]) as? [String: String] else { print("STRINGS FAILED"); exit(1) }
+            LocalizationTest.strings = d
+            MessageRules.active = true
+            print("STRINGS OK \(d.count)")
+            for m in ["Run grey scale and colors measures on 18 values (10 to 100 IRE; Red, Green, Blue, Yellow, Cyan, Magenta, Black)?",
+                      "Warning: current data will be lost.", "Use 100% Red and press Continue.", "Use 45 IRE and press Continue.",
+                      "Measuring red saturation scale: 75% (4 of 5)…", "Measuring 50 IRE…", "Grey scale measurement finished",
+                      "Ready — Display: LCD (White LED)", "3 colorimeters found.", "Pattern: Neutral Gradient — ESC or Patterns → Hide pattern to close",
+                      "Run color checker measures on 24 values (GCD classic)?", "Something not translated, with a comma"] {
+                print(m, "=>", trMessage(m))
+            }
+            exit(0)
+        }
         if let p = args.firstIndex(of: "--prefs"), p + 1 < args.count {
             // Development check: renders the Preferences pages
             let session = Session()

@@ -239,7 +239,7 @@ private struct ReportView: View {
         if v == .colorChecker { summary += "   Patterns: \(session.ccSet.title)" }
         let per = 12
         return VStack(alignment: .leading, spacing: 4) {
-            Text(v.rawValue).font(.system(size: 13, weight: .bold))
+            Text(tr(v.rawValue)).font(.system(size: 13, weight: .bold))
             Text(summary).font(.system(size: 9, design: .monospaced))
             ForEach(Array(stride(from: 0, to: results.count, by: per)), id: \.self) { start in
                 let part = Array(results[start..<min(start + per, results.count)])
@@ -303,7 +303,7 @@ private struct ReportView: View {
     // MARK: Cells
 
     private func headerCell(_ text: String, width: CGFloat? = nil, tint: Color = Color(white: 0.85)) -> some View {
-        Text(text).font(.system(size: 9, weight: .bold))
+        Text(tr(text)).font(.system(size: 9, weight: .bold))
             .frame(maxWidth: width ?? .infinity, minHeight: 16)
             .frame(width: width)
             .background(tint)
@@ -311,7 +311,7 @@ private struct ReportView: View {
     }
 
     private func labelCell(_ text: String) -> some View {
-        Text(text).font(.system(size: 9, weight: .bold))
+        Text(tr(text)).font(.system(size: 9, weight: .bold))
             .frame(width: 70, height: 15)
             .background(Color(white: 0.93))
             .overlay(Rectangle().stroke(Color.gray.opacity(0.6), lineWidth: 0.5))

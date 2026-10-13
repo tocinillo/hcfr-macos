@@ -53,8 +53,8 @@ struct ColorimeterApp: App {
                 Button("Black +1% & +2% moving bars") { session.showMovingBars(white: false) }
                 Button("White −1% & −2% moving bars") { session.showMovingBars(white: true) }
                 ForEach(TestImages.groups, id: \.0) { group in
-                    Menu(group.0) {
-                        ForEach(group.1) { t in Button(t.title) { session.showTestImage(t) } }
+                    Menu(tr(group.0)) {
+                        ForEach(group.1) { t in Button(tr(t.title)) { session.showTestImage(t) } }
                     }
                 }
                 Divider()

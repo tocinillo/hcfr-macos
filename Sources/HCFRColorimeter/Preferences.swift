@@ -28,7 +28,7 @@ struct PreferencesView: View {
 
 private func numberField(_ title: String, _ value: Binding<Double>, digits: Int = 2, width: CGFloat = 70) -> some View {
     HStack(spacing: 6) {
-        Text(title)
+        Text(tr(title))
         TextField(title, value: value, format: .number.precision(.fractionLength(0...digits)))
             .labelsHidden()
             .frame(width: width)
@@ -71,7 +71,7 @@ struct ReferencesPage: View {
 
             Section("Gamma calculation (SDR)") {
                 Picker("Target", selection: $session.prefs.gammaMode) {
-                    ForEach([GammaMode.powerLaw, .blackCompensation, .bt1886, .lStar]) { Text($0.title).tag($0.rawValue) }
+                    ForEach([GammaMode.powerLaw, .blackCompensation, .bt1886, .lStar]) { Text(tr($0.title)).tag($0.rawValue) }
                 }
                 .pickerStyle(.radioGroup)
                 HStack(spacing: 18) {
@@ -97,7 +97,7 @@ struct ReferencesPage: View {
             Section("Color Checker Patterns") {
                 Picker("Patterns", selection: Binding(get: { session.ccSet }, set: { session.setColorCheckerSet($0) })) {
                     ForEach(ColorCheckerSet.allCases) { s in
-                        Text(s == .user && !session.userCCName.isEmpty ? "User defined (\(session.userCCName))" : s.title).tag(s)
+                        Text(s == .user && !session.userCCName.isEmpty ? tr("User defined") + " (\(session.userCCName))" : tr(s.title)).tag(s)
                     }
                 }
                 HStack {
@@ -109,7 +109,7 @@ struct ReferencesPage: View {
 
             Section("EOTF (HDR)") {
                 Picker("HDR", selection: $session.prefs.gammaMode) {
-                    ForEach([GammaMode.hlg, .st2084]) { Text($0.title).tag($0.rawValue) }
+                    ForEach([GammaMode.hlg, .st2084]) { Text(tr($0.title)).tag($0.rawValue) }
                 }
                 .pickerStyle(.radioGroup)
                 let hdr = session.prefs.mode.isHDR
@@ -150,7 +150,7 @@ struct ReferencesPage: View {
 
     private func xyRow(_ name: String, x: Binding<Double>, y: Binding<Double>, shown: (x: Double, y: Double), editable: Bool) -> some View {
         GridRow {
-            Text(name)
+            Text(tr(name))
             if editable {
                 TextField("x", value: x, format: .number.precision(.fractionLength(0...4))).labelsHidden().frame(width: 72)
                 TextField("y", value: y, format: .number.precision(.fractionLength(0...4))).labelsHidden().frame(width: 72)
@@ -194,13 +194,13 @@ struct AdvancedPage: View {
             Section("Delta E") {
                 Toggle("Highlight", isOn: $session.appPrefs.highlight)
                 Picker("dE formula", selection: $session.prefs.deltaEFormula) {
-                    ForEach(DeltaEFormula.allCases) { Text($0.title).tag($0.rawValue) }
+                    ForEach(DeltaEFormula.allCases) { Text(tr($0.title)).tag($0.rawValue) }
                 }
                 Picker("dE gray", selection: $session.prefs.grayDeltaE) {
-                    ForEach(GrayDeltaEMode.allCases) { Text($0.title).tag($0.rawValue) }
+                    ForEach(GrayDeltaEMode.allCases) { Text(tr($0.title)).tag($0.rawValue) }
                 }
                 Picker("dE weight", selection: $session.prefs.deltaEWeight) {
-                    ForEach(DeltaEWeight.allCases) { Text($0.title).tag($0.rawValue) }
+                    ForEach(DeltaEWeight.allCases) { Text(tr($0.title)).tag($0.rawValue) }
                 }
                 Text("Recommended: CIE76(uv) for the gray scale and CIE2000 for colors. dE gray sets the luminance of the gray reference: the measured one (w/o gamma, color error only), the target one (w/gamma) or none (relative).")
                     .font(.caption).foregroundStyle(.secondary)
@@ -213,6 +213,7 @@ struct AdvancedPage: View {
 /// Preferences → General (HCFR's IDD_GENERAL_PROP_PAGE).
 struct GeneralPage: View {
     @ObservedObject var session: Session
+    @StateObject private var language = LanguageChoice()
     var plain = false
 
     var body: some View {
@@ -237,9 +238,15 @@ struct GeneralPage: View {
                 Text("Latency: wait after showing each pattern before reading (also in the Generator menu). Frame insertion shows a full-field gray frame every N patterns, so the ABL / dynamic dimming of the display does not drift during long runs.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Language") {
+                Picker("Interface language", selection: $language.value) {
+                    ForEach(AppLanguage.allCases) { Text($0.title).tag($0) }
+                }
+                Text("The language changes the next time the app starts.").font(.caption).foregroundStyle(.secondary)
+            }
             Section("Colors to add when measuring primaries and secondaries") {
                 Picker("Colors to add", selection: $session.appPrefs.colorsToAdd) {
-                    ForEach(ColorsToAdd.allCases) { Text($0.title).tag($0) }
+                    ForEach(ColorsToAdd.allCases) { Text(tr($0.title)).tag($0) }
                 }
                 .pickerStyle(.radioGroup)
                 .labelsHidden()
@@ -257,7 +264,7 @@ struct GeneralPage: View {
 
     private func intField(_ title: String, _ value: Binding<Int>, _ range: ClosedRange<Int>) -> some View {
         HStack(spacing: 6) {
-            Text(title)
+            Text(tr(title))
             TextField(title, value: Binding(get: { value.wrappedValue }, set: { value.wrappedValue = min(max($0, range.lowerBound), range.upperBound) }),
                       format: .number)
                 .labelsHidden().frame(width: 60).multilineTextAlignment(.trailing)
@@ -286,7 +293,7 @@ struct SensorPage: View {
                     .foregroundStyle(.secondary)
                 Picker("Reading Type", selection: $session.appPrefs.readingType) {
                     ForEach(ReadingType.allCases) { t in
-                        Text(t.title + (known && !available(t, caps!) ? " (not available)" : "")).tag(t)
+                        Text(tr(t.title) + (known && !available(t, caps!) ? tr(" (not available)") : "")).tag(t)
                     }
                 }
                 if session.activeReadingType != .display && session.meter != nil {
@@ -298,7 +305,7 @@ struct SensorPage: View {
                 }
                 .disabled(known && !caps!.observer)
                 Picker("Integration time", selection: $session.appPrefs.integrationTime) {
-                    ForEach(IntegrationTime.allCases) { Text($0.title).tag($0) }
+                    ForEach(IntegrationTime.allCases) { Text(tr($0.title)).tag($0) }
                 }
                 .disabled(known && !caps!.integrationTime)
                 Toggle("Hi-Res", isOn: $session.appPrefs.hiRes)

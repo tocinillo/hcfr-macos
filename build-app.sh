@@ -21,6 +21,8 @@ cp -R Resources/ArgyllCMS "$APP/Contents/Resources/ArgyllCMS"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 # HCFR's test pattern images (Patterns menu), from HCFR's res/patterns
 cp -R Resources/Patterns "$APP/Contents/Resources/Patterns"
+# Interface translations (English keys, Spanish)
+cp -R Resources/en.lproj Resources/es.lproj "$APP/Contents/Resources/"
 cp LICENSE "$APP/Contents/Resources/LICENSE.txt"
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -33,6 +35,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>NSHumanReadableCopyright</key><string>Copyright © 2026 Jorge Velázquez, Mazatlán, México. Mac version based on HCFR. GNU GPL v2.</string>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>CFBundleLocalizations</key><array><string>en</string><string>es</string></array>
   <key>CFBundleShortVersionString</key><string>1.1</string>
   <key>CFBundleVersion</key><string>2</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>

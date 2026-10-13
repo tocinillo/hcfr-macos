@@ -20,7 +20,7 @@ struct InformationPanel: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Picker("Information", selection: $session.infoGraph) {
-                    ForEach(InfoGraph.allCases) { Text($0.rawValue).tag($0) }
+                    ForEach(InfoGraph.allCases) { Text(tr($0.rawValue)).tag($0) }
                 }
                 .labelsHidden()
                 .fixedSize()
@@ -105,7 +105,7 @@ private struct DarkGraph<Content: View>: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Text(title).font(.callout.bold()).foregroundStyle(.yellow)
+            Text(tr(title)).font(.callout.bold()).foregroundStyle(.yellow)
                 .frame(maxWidth: .infinity).padding(.vertical, 4)
             content.frame(maxHeight: .infinity)
         }
@@ -367,11 +367,11 @@ struct SummaryView: View {
 
     private func section(_ title: String, _ rows: [(String, String)]) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.headline)
+            Text(tr(title)).font(.headline)
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 3) {
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                     GridRow {
-                        Text(row.0).foregroundStyle(.secondary)
+                        Text(tr(row.0)).foregroundStyle(.secondary)
                         Text(row.1).font(.callout.monospaced())
                     }
                 }
@@ -383,7 +383,7 @@ struct SummaryView: View {
 @ViewBuilder
 private func legend(_ message: String?) -> some View {
     if let message {
-        Text(message).font(.caption).foregroundStyle(.white.opacity(0.8))
+        Text(tr(message)).font(.caption).foregroundStyle(.white.opacity(0.8))
             .padding(6).background(.black.opacity(0.4)).clipShape(RoundedRectangle(cornerRadius: 4)).padding(8)
     }
 }
@@ -539,7 +539,7 @@ struct GraphOptionsMenu: View {
             switch graph {
             case .luminanceGamma:
                 Picker("Luminance", selection: o.luminance) {
-                    ForEach(LuminanceMode.allCases) { Text($0.rawValue).tag($0) }
+                    ForEach(LuminanceMode.allCases) { Text(tr($0.rawValue)).tag($0) }
                 }
             case .rgbLevels, .rgbGamma, .targetRGBGamma, .auto:
                 Picker("RGB scale", selection: o.rgbScale) {
@@ -620,11 +620,16 @@ struct SpectrumChart: View {
         let sp = session.spectra[target.id] ?? session.spectra.values.first
         let pts: [(Double, Double)] = sp.map { s in s.values.indices.map { (s.wavelength($0), s.values[$0]) } } ?? []
         let peak = max(pts.map(\.1).max() ?? 1, 1e-9)
+        // Area colored by wavelength (the gradient spans the measured range)
+        let lo = pts.first?.0 ?? 380, hi = pts.last?.0 ?? 780
+        let gradient = LinearGradient(stops: stride(from: lo, through: hi, by: max((hi - lo) / 40, 1)).map {
+            Gradient.Stop(color: Self.color($0), location: (hi - lo) > 0 ? ($0 - lo) / (hi - lo) : 0)
+        }, startPoint: .leading, endPoint: .trailing)
         DarkGraph(title: "Spectrum" + (session.spectra[target.id] != nil ? " — \(session.title(for: target))" : "")) {
             Chart {
                 ForEach(Array(pts.enumerated()), id: \.offset) { _, p in
-                    BarMark(x: .value("nm", p.0), y: .value("Relative", p.1 / peak), width: .fixed(3))
-                        .foregroundStyle(Self.color(p.0))
+                    AreaMark(x: .value("nm", p.0), y: .value("Relative", p.1 / peak))
+                        .foregroundStyle(gradient)
                 }
                 ForEach(Array(pts.enumerated()), id: \.offset) { _, p in
                     LineMark(x: .value("nm", p.0), y: .value("Relative", p.1 / peak), series: .value("S", "Spectrum"))
