@@ -76,6 +76,11 @@ private struct ReportView: View {
             header
             graySection
             if !session.colorMeasurements.isEmpty { colorSection }
+            ForEach(MeasureView.allCases.filter { $0.isSeries && $0 != .freeMeasures && !(session.seriesMeasurements[$0]?.isEmpty ?? true) }) { v in
+                seriesSection(v)
+            }
+            if !session.freeMeasurements.isEmpty { seriesSection(.freeMeasures) }
+            if !session.contrastMeasurements.isEmpty { contrastSection }
             Text("HCFR Colorimeter \(AboutPanel.version) for macOS — Mac version by Jorge Velázquez, Mazatlán, México. Unofficial port of HCFR (github.com/arthur-liberman/hcfr-code). GNU GPL v2. Source: \(AboutPanel.sourceURL.replacingOccurrences(of: "https://", with: ""))")
                 .font(.system(size: 8)).foregroundStyle(.secondary)
         }
@@ -93,9 +98,9 @@ private struct ReportView: View {
             ("Printed", Date().formatted(date: .abbreviated, time: .shortened)),
             ("Color space", r.standard.rawValue),
             ("White point", "\(r.white.rawValue) (\(r.white.kelvin) K)"),
-            ("EOTF", r.standard.usesSRGBCurve ? "sRGB" : "Power law, gamma \(String(format: "%.2f", r.gamma))"),
-            ("Override black", session.overrideBlack ? "On (0 cd/m²)" : "Off"),
-            ("Delta E", "CIE2000, Absolute Y w/o gamma"),
+            ("EOTF", session.gammaDescription),
+            ("Override black", session.overrideBlack ? String(format: "On (%.4g cd/m²)", session.prefs.manualBlack) : "Off"),
+            ("Delta E", "\(r.deltaEFormula.title), gray \(r.grayDeltaE.title)"),
         ]
         if let m = session.meter {
             info.append(("Colorimeter", m.serial.isEmpty ? m.name : "\(m.name) — S/N \(m.serial)"))
@@ -208,6 +213,73 @@ private struct ReportView: View {
                         ForEach(results) { r in
                             let de: Double? = row.0 == "Delta E" ? r.deltaE : nil
                             valueCell(row.1(r), fill: de.map(reportDeltaEColor))
+                        }
+                    }
+                }
+            }
+            .overlay(Rectangle().stroke(Color.gray))
+        }
+    }
+
+    // MARK: Near black / white, saturations, Color Checker, free measures
+
+    private func seriesSection(_ v: MeasureView) -> some View {
+        let results = session.seriesResults(v)
+        var rows: [(String, (SeriesResult) -> String)] = [
+            ("x", { rfmt($0.xyz?.x, 4) }), ("y", { rfmt($0.xyz?.y, 4) }), ("Y", { rfmt($0.xyz?.Y, 3) }),
+        ]
+        if v != .freeMeasures {
+            rows += [("Delta E", { rfmt($0.deltaE, 1) }), ("delta xy", { rfmt($0.deltaxy, 4) })]
+            if !v.isGraySeries { rows.append(("delta L", { $0.deltaLText })) }
+            rows.append(("Y target", { rfmt($0.targetY, 3) }))
+        }
+        let d = results.compactMap(\.deltaE)
+        var summary = v == .freeMeasures ? "\(results.count) measures"
+            : "Average dE: \(d.isEmpty ? "—" : rfmt(d.reduce(0, +) / Double(d.count), 2))   Max dE: \(d.max().map { rfmt($0, 2) } ?? "—")"
+        if v == .colorChecker { summary += "   Patterns: \(session.ccSet.title)" }
+        let per = 12
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(v.rawValue).font(.system(size: 13, weight: .bold))
+            Text(summary).font(.system(size: 9, design: .monospaced))
+            ForEach(Array(stride(from: 0, to: results.count, by: per)), id: \.self) { start in
+                let part = Array(results[start..<min(start + per, results.count)])
+                Grid(horizontalSpacing: 0, verticalSpacing: 0) {
+                    GridRow {
+                        headerCell(v.columnTitle.isEmpty ? " " : v.columnTitle, width: 70)
+                        ForEach(part) { r in headerCell(r.name) }
+                        ForEach(part.count..<per, id: \.self) { _ in Color.clear.frame(maxWidth: .infinity, minHeight: 16) }
+                    }
+                    ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                        GridRow {
+                            labelCell(row.0)
+                            ForEach(part) { r in
+                                valueCell(row.1(r), fill: row.0 == "Delta E" ? r.deltaE.map(reportDeltaEColor) : nil)
+                            }
+                            ForEach(part.count..<per, id: \.self) { _ in Color.clear.frame(maxWidth: .infinity, minHeight: 15) }
+                        }
+                    }
+                }
+                .overlay(Rectangle().stroke(Color.gray))
+            }
+        }
+    }
+
+    private var contrastSection: some View {
+        let results = session.contrastResults
+        func c(_ v: Double?) -> String { v.map { $0.isInfinite ? "Infinite" : String(format: "%.0f:1", $0) } ?? "undefined" }
+        return VStack(alignment: .leading, spacing: 4) {
+            Text("Contrast").font(.system(size: 13, weight: .bold))
+            Text("On/off contrast: \(c(session.onOffContrast))   ANSI contrast: \(c(session.ansiContrast))").font(.system(size: 9, design: .monospaced))
+            Grid(horizontalSpacing: 0, verticalSpacing: 0) {
+                GridRow {
+                    headerCell(" ", width: 70)
+                    ForEach(results) { r in headerCell(r.name) }
+                }
+                ForEach(Array([("x", 0), ("y", 1), ("Y", 2)].enumerated()), id: \.offset) { _, row in
+                    GridRow {
+                        labelCell(row.0)
+                        ForEach(results) { r in
+                            valueCell(row.1 == 0 ? rfmt(r.xyz?.x, 4) : row.1 == 1 ? rfmt(r.xyz?.y, 4) : rfmt(r.xyz?.Y, 3), fill: nil)
                         }
                     }
                 }

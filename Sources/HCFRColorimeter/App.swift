@@ -38,6 +38,10 @@ struct ColorimeterApp: App {
                     .keyboardShortcut("s")
                 Button("Save Project As…") { session.saveProject(as: true) }
                     .keyboardShortcut("s", modifiers: [.command, .shift])
+                Divider()
+                Button("Export Measurements (CSV)…") { session.exportCSV() }
+                    .keyboardShortcut("e", modifiers: [.command, .shift])
+                    .disabled(!session.hasMeasurements)
             }
             CommandGroup(replacing: .printItem) {
                 Button("Print…") { Report.printReport(session) }

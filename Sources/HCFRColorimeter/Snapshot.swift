@@ -134,6 +134,13 @@ enum Snapshot {
             print(session.status)
             exit(same ? 0 : 1)
         }
+        if let c = args.firstIndex(of: "--csv"), c + 1 < args.count {
+            try? session.csvText().write(toFile: args[c + 1], atomically: true, encoding: .utf8)
+            if let r = args.firstIndex(of: "--report"), r + 1 < args.count, let pdf = Report.makePDF(session) {
+                try? pdf.write(to: URL(fileURLWithPath: args[r + 1]))
+            }
+            exit(0)
+        }
         session.status = "Ready — Display: CRT (Hitachi CM2112MET, Diamond View 1772ie)"
         session.lastMeasure = Date()
         let view = ContentView(session: session, autoConnect: false).frame(width: args.contains("--small") ? 1180 : 1400, height: args.contains("--small") ? 680 : 900)

@@ -108,6 +108,33 @@ enum InfoGraph: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// Values of the first three table rows (HCFR's display types: xyY, XYZ, RGB, xyz).
+enum ValueMode: String, CaseIterable, Identifiable {
+    case xyY, XYZ, RGB, xyz
+    var id: String { rawValue }
+
+    func label(_ k: Int, _ standard: ColorStandard) -> String {
+        switch self {
+        case .xyY: return ["x", "y", "Y"][k]
+        case .XYZ: return ["X", "Y", "Z"][k]
+        case .xyz: return ["x", "y", "z"][k]
+        case .RGB:
+            let tag: String
+            switch standard {
+            case .sdtv: tag = "601"
+            case .palSecam: tag = "pal"
+            case .uhdtvP3: tag = "DCI-P3"
+            case .uhdtv2020: tag = "2020"
+            case .uhdtvP3in2020: tag = "2020P3"
+            case .uhdtv709in2020: tag = "2020R709"
+            case .custom: tag = "CUSTOM"
+            default: tag = "709"
+            }
+            return ["R", "G", "B"][k] + tag
+        }
+    }
+}
+
 /// What the "Selected color" panel needs, for a gray level or a color patch.
 protocol ColorReading {
     var title: String { get }

@@ -151,6 +151,8 @@ final class Session: ObservableObject {
     @Published var ccSet: ColorCheckerSet = .gcd
     @Published var userCCRows: [ColorCheckerData.Row] = []
     @Published var userCCName = ""
+    /// Values of the first table rows: xyY (default), XYZ, RGB or xyz.
+    @Published var valueMode: ValueMode = .xyY { didSet { defaults.set(valueMode.rawValue, forKey: "valueMode") } }
     /// Table shown (HCFR's "View" selector).
     @Published var view: MeasureView = .grayScale {
         didSet { if selectedIndex >= columnCount(view) { selectedIndex = 0 } }
@@ -230,6 +232,7 @@ final class Session: ObservableObject {
         cieShowReferences = defaults.object(forKey: "cieShowReferences") as? Bool ?? true
         cieUV = defaults.bool(forKey: "cieUV")
         cieShowGrays = defaults.object(forKey: "cieShowGrays") as? Bool ?? true
+        valueMode = defaults.string(forKey: "valueMode").flatMap(ValueMode.init(rawValue:)) ?? .xyY
         if let id = defaults.object(forKey: "patternDisplay") as? UInt32,
            NSScreen.screens.contains(where: { $0.displayID == id }) {
             patternSource = .display(id)

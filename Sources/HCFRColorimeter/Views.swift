@@ -26,6 +26,21 @@ private func deltaEColor(_ dE: Double) -> Color? {
 }
 private let blackCell = Color(red: 1.0, green: 0.85, blue: 0.70)
 
+private let zeroXYZ = XYZ(X: 0, Y: 0, Z: 0)
+
+/// Value row `k` (0…2) of a measure in the chosen display mode (HCFR's xyY / XYZ / RGB / xyz views).
+@MainActor private func valueText(_ c: XYZ?, _ k: Int, _ session: Session) -> String {
+    guard let c else { return "" }
+    switch session.valueMode {
+    case .xyY:
+        if k < 2 { return c.Y == 0 ? "nan" : fmt(k == 0 ? c.x : c.y, 4) }
+        return c.Y == 0 ? "0" : fmt(c.Y, 3)
+    case .XYZ: return fmt([c.X, c.Y, c.Z][k], 3)
+    case .RGB: return fmt(ColorMath.rgb(c, ref: session.ref)[k], 3)
+    case .xyz: return c.Y == 0 ? "nan" : fmt([c.x, c.y, c.z][k], 4)
+    }
+}
+
 private func fmt(_ v: Double?, _ digits: Int) -> String {
     guard let v, v.isFinite else { return "" }
     return String(format: "%.\(digits)f", v)
@@ -343,6 +358,12 @@ private struct ViewPanel: View {
                 .labelsHidden()
                 .fixedSize()
                 .disabled(session.activity == .measuring)
+                Picker("Values", selection: $session.valueMode) {
+                    ForEach(ValueMode.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .labelsHidden()
+                .fixedSize()
+                .help("Values shown in the first three rows of the table, as HCFR's xyY / XYZ / RGB / xyz views")
                 Text(infoLine).font(.system(.caption, design: .monospaced)).lineLimit(2)
             }
             HStack(spacing: 14) {
@@ -466,9 +487,11 @@ private struct MeasuresGrid: View {
                             .onTapGesture { select(r.level) }
                     }
                 }
-                row("x", results) { r in isOverridden(r) ? "nan" : isBase(r) ? fmt(session.white.x, 4) : fmt(r.xyz?.x, 4) }
-                row("y", results) { r in isOverridden(r) ? "nan" : isBase(r) ? fmt(session.white.y, 4) : fmt(r.xyz?.y, 4) }
-                row("Y", results) { r in isOverridden(r) ? "0" : isBase(r) ? fmt(baseWhiteY, 3) : fmt(r.xyz?.Y, 3) }
+                ForEach(0..<3, id: \.self) { k in
+                    row(session.valueMode.label(k, session.standard), results) { r in
+                        valueText(isOverridden(r) ? zeroXYZ : isBase(r) ? session.white.xyz(Y: baseWhiteY) : r.xyz, k, session)
+                    }
+                }
                 GridRow {
                     label("Delta E")
                     ForEach(results) { r in
@@ -585,9 +608,11 @@ private struct PrimariesGrid: View {
                         .background(Color.gray.opacity(0.35))
                         .overlay(Rectangle().stroke(.separator, lineWidth: 0.5))
                 }
-                row("x", results, black: black.map { fmt($0.x, 4) } ?? "nan") { r in isBase(r) ? fmt(session.white.x, 4) : fmt(r.xyz?.x, 4) }
-                row("y", results, black: black.map { fmt($0.y, 4) } ?? "nan") { r in isBase(r) ? fmt(session.white.y, 4) : fmt(r.xyz?.y, 4) }
-                row("Y", results, black: black.map { fmt($0.Y, 3) } ?? "0") { r in isBase(r) ? fmt(session.colorWhiteY, 3) : fmt(r.xyz?.Y, 3) }
+                ForEach(0..<3, id: \.self) { k in
+                    row(session.valueMode.label(k, session.standard), results, black: valueText(black ?? zeroXYZ, k, session)) { r in
+                        valueText(isBase(r) ? session.white.xyz(Y: session.colorWhiteY) : r.xyz, k, session)
+                    }
+                }
                 GridRow {
                     label("Delta E")
                     ForEach(results) { r in
@@ -967,9 +992,11 @@ private struct SeriesGrid: View {
                 label(v.columnTitle)
                 ForEach(results) { r in header(v, r, count: results.count) }
             }
-            row("x", results) { r in overridden(r) ? "nan" : fmt(r.xyz?.x, 4) }
-            row("y", results) { r in overridden(r) ? "nan" : fmt(r.xyz?.y, 4) }
-            row("Y", results) { r in overridden(r) ? "0" : fmt(r.xyz?.Y, 3) }
+            ForEach(0..<3, id: \.self) { k in
+                row(session.valueMode.label(k, session.standard), results) { r in
+                    valueText(overridden(r) ? zeroXYZ : r.xyz, k, session)
+                }
+            }
             if !free {
                 GridRow {
                     label("Delta E")
@@ -1093,23 +1120,13 @@ private struct ContrastGrid: View {
                     side("", bold: true)
                     side("", bold: true)
                 }
-                GridRow {
-                    label("x")
-                    ForEach(results) { r in cell(blackOverridden(r) ? "nan" : fmt(r.xyz?.x, 4), r) }
-                    side("ON/OFF:", bold: true)
-                    side(contrastText(session.onOffContrast))
-                }
-                GridRow {
-                    label("y")
-                    ForEach(results) { r in cell(blackOverridden(r) ? "nan" : fmt(r.xyz?.y, 4), r) }
-                    side("ANSI:", bold: true)
-                    side(contrastText(session.ansiContrast))
-                }
-                GridRow {
-                    label("Y")
-                    ForEach(results) { r in cell(blackOverridden(r) ? fmt(session.prefs.manualBlack, 3) : fmt(r.xyz?.Y, 3), r) }
-                    side("")
-                    side("")
+                ForEach(0..<3, id: \.self) { k in
+                    GridRow {
+                        label(session.valueMode.label(k, session.standard))
+                        ForEach(results) { r in cell(valueText(blackOverridden(r) ? zeroXYZ : r.xyz, k, session), r) }
+                        side(["ON/OFF:", "ANSI:", ""][k], bold: k < 2)
+                        side(k == 0 ? contrastText(session.onOffContrast) : k == 1 ? contrastText(session.ansiContrast) : "")
+                    }
                 }
             }
             .font(.system(.body, design: .monospaced))
