@@ -156,6 +156,9 @@ struct LuminanceChart: View {
         let target = stride(from: 0.0, through: 100, by: 2.5).map {
             LevelPoint(level: $0, value: shown(session.targetRelative(level: $0)), series: "Reference")
         }
+        let compared: [LevelPoint] = session.refData.map { d in
+            d.gray.keys.sorted().compactMap { l in d.gray[l].map { LevelPoint(level: l, value: shown($0.Y / d.whiteY), series: "Compared") } }
+        } ?? []
         let top: Double = mode == .absolute ? max(w, measured.map(\.value).max() ?? 0) * 1.05 : mode == .log ? 2.05 : 105
         let bottom: Double = mode == .log ? -2 : 0
         DarkGraph(title: mode == .relative ? "Luminance" : "Luminance — \(mode.rawValue)" + (mode == .absolute ? " (cd/m²)" : "")) {
@@ -163,6 +166,10 @@ struct LuminanceChart: View {
                 ForEach(target) { p in
                     LineMark(x: .value("Level", p.level), y: .value("%", p.value), series: .value("S", p.series))
                         .foregroundStyle(.white.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                }
+                ForEach(compared) { p in
+                    LineMark(x: .value("Level", p.level), y: .value("%", p.value), series: .value("S", p.series))
+                        .foregroundStyle(.cyan.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
                 }
                 ForEach(measured) { p in
                     LineMark(x: .value("Level", p.level), y: .value("%", p.value), series: .value("S", p.series))
@@ -262,11 +269,18 @@ struct ColorTempChart: View {
         let values = measured.map(\.value) + [refK]
         let (lo, hi) = Self.range(values: values, refK: refK, scale: session.graphOptions.tempScale)
         let shown = measured.map { LevelPoint(level: $0.level, value: min(max($0.value, lo), hi), series: $0.series) }
+        let compared: [LevelPoint] = session.refData.map { d in
+            d.gray.keys.sorted().filter { $0 > 0 }.compactMap { l in d.gray[l].flatMap(ColorMath.cct).map { LevelPoint(level: l, value: min(max($0, lo), hi), series: "Compared") } }
+        } ?? []
         DarkGraph(title: "Color temperature (K)") {
             Chart {
                 RuleMark(y: .value("Ref", refK)).foregroundStyle(.white.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                ForEach(compared) { p in
+                    LineMark(x: .value("Level", p.level), y: .value("K", p.value), series: .value("S", p.series))
+                        .foregroundStyle(.cyan.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
+                }
                 ForEach(shown) { p in
-                    LineMark(x: .value("Level", p.level), y: .value("K", p.value)).foregroundStyle(.orange).lineStyle(StrokeStyle(lineWidth: 2))
+                    LineMark(x: .value("Level", p.level), y: .value("K", p.value), series: .value("S", "Measured")).foregroundStyle(.orange).lineStyle(StrokeStyle(lineWidth: 2))
                     PointMark(x: .value("Level", p.level), y: .value("K", p.value)).foregroundStyle(.orange).symbolSize(24)
                 }
             }

@@ -862,6 +862,13 @@ struct GrayScaleChart: View {
             guard let b = r.balance else { return [] }
             return (0..<3).map { BalancePoint(level: r.level, channel: $0, value: min(max(b[$0], dom.lowerBound), dom.upperBound)) }
         }
+        // Compared project (HCFR's "Display reference measure"), dashed
+        let refBalance: [BalancePoint] = session.refData.map { d in
+            d.gray.filter { $0.key > 0 }.flatMap { level, xyz -> [BalancePoint] in
+                guard let b = ColorMath.rgbBalance(xyz, ref: session.ref) else { return [] }
+                return (0..<3).map { BalancePoint(level: level, channel: $0 + 3, value: min(max(b[$0], dom.lowerBound), dom.upperBound)) }
+            }
+        } ?? []
         let deMax = session.graphOptions.deltaEMax
         let de = results.compactMap { r in r.deltaE.map { (r.level, min($0, deMax)) } }
 
@@ -871,6 +878,11 @@ struct GrayScaleChart: View {
                 .frame(maxWidth: .infinity).padding(.vertical, 4)
             Chart {
                 RuleMark(y: .value("Ref", 100)).foregroundStyle(.white.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                ForEach(refBalance.sorted { $0.level < $1.level }) { p in
+                    LineMark(x: .value("Level", p.level), y: .value("%", p.value), series: .value("Channel", p.channel))
+                        .foregroundStyle(channelColors[p.channel - 3].opacity(0.55))
+                        .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
+                }
                 ForEach(balance) { p in
                     LineMark(x: .value("Level", p.level), y: .value("%", p.value), series: .value("Channel", p.channel))
                         .foregroundStyle(channelColors[p.channel])
