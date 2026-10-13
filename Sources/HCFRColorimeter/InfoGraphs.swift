@@ -149,17 +149,7 @@ struct LuminanceChart: View {
         let mode = session.graphOptions.luminance
         let white = session.whiteY
         let w = white ?? session.prefs.targetMaxL
-        // Value shown for a luminance relative to white (1 = white), as HCFR's graph modes
-        func shown(_ rel: Double) -> Double {
-            switch mode {
-            case .relative: return rel * 100
-            case .absolute: return rel * w
-            case .log: return log10(max(rel * 100, 0.01))
-            case .lStar:
-                let t = max(rel, 0)
-                return t > 216.0 / 24389 ? 116 * cbrt(t) - 16 : 24389.0 / 27 * t
-            }
-        }
+        let shown = { (rel: Double) in Self.value(rel, mode: mode, white: w) }
         let measured: [LevelPoint] = white.map { w in
             session.results.compactMap { r in r.xyz.map { LevelPoint(level: r.level, value: shown($0.Y / w), series: "Measured") } }
         } ?? []
@@ -192,6 +182,18 @@ struct LuminanceChart: View {
             .chartXAxis { levelAxis(step: 20) }
             .chartPlotStyle { $0.background(grayRamp) }
             .overlay(alignment: .topLeading) { legend(white == nil ? "Measure 100% white first" : nil) }
+        }
+    }
+
+    /// Value shown for a luminance relative to white (1 = white), in HCFR's graph modes.
+    static func value(_ rel: Double, mode: LuminanceMode, white w: Double) -> Double {
+        switch mode {
+        case .relative: return rel * 100
+        case .absolute: return rel * w
+        case .log: return log10(max(rel * 100, 0.01))
+        case .lStar:
+            let t = max(rel, 0)
+            return t > 216.0 / 24389 ? 116 * cbrt(t) - 16 : 24389.0 / 27 * t
         }
     }
 }
@@ -246,16 +248,19 @@ struct GammaChart: View {
 struct ColorTempChart: View {
     @ObservedObject var session: Session
 
+    static func range(values: [Double], refK: Double, scale: Int) -> (Double, Double) {
+        switch scale {
+        case 1: return (2000, 10000)
+        case 2: return (4000, 8000)
+        default: return (min(refK - 1500, (values.min() ?? refK) - 300), max(refK + 1500, (values.max() ?? refK) + 300))
+        }
+    }
+
     var body: some View {
         let refK = Double(session.white.kelvin)
         let measured = session.results.filter { $0.level > 0 }.compactMap { r in r.cct.map { LevelPoint(level: r.level, value: $0, series: "Measured") } }
         let values = measured.map(\.value) + [refK]
-        var lo = min(refK - 1500, (values.min() ?? refK) - 300), hi = max(refK + 1500, (values.max() ?? refK) + 300)
-        switch session.graphOptions.tempScale {
-        case 1: lo = 2000; hi = 10000
-        case 2: lo = 4000; hi = 8000
-        default: break
-        }
+        let (lo, hi) = Self.range(values: values, refK: refK, scale: session.graphOptions.tempScale)
         let shown = measured.map { LevelPoint(level: $0.level, value: min(max($0.value, lo), hi), series: $0.series) }
         DarkGraph(title: "Color temperature (K)") {
             Chart {

@@ -7,6 +7,7 @@
 // the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See LICENSE.
 
 import AppKit
+import ImageIO
 
 /// A pattern to show (or ask for): a gray level in IRE or a 100% color patch.
 enum TestPattern: Equatable {
@@ -96,6 +97,11 @@ final class PatternWindowController {
         var areaPercent: Double = 100 { didSet { needsDisplay = true } }
         /// ANSI checkerboard instead of a patch: `rgb` squares on `background` (nil = patch).
         var ansiInverted: Bool? { didSet { needsDisplay = true } }
+        /// Test image (HCFR's Patterns menu), already in the display's color space, fitted on black.
+        var image: CGImage? { didSet { needsDisplay = true } }
+        /// HCFR's moving bars: `rgb` = background, `bars` = the two bar levels, `phase` = position 0…1.
+        var bars: [[Int]]? { didSet { needsDisplay = true } }
+        var phase: CGFloat = 0 { didSet { needsDisplay = true } }
 
         override func draw(_ dirtyRect: NSRect) {
             let space = window?.screen?.colorSpace ?? .deviceRGB
@@ -104,6 +110,26 @@ final class PatternWindowController {
             }
             color(background).setFill()
             bounds.fill()
+            if let image, let ctx = NSGraphicsContext.current?.cgContext {
+                let iw = CGFloat(image.width), ih = CGFloat(image.height)
+                let k = min(bounds.width / iw, bounds.height / ih)
+                let r = CGRect(x: bounds.midX - iw * k / 2, y: bounds.midY - ih * k / 2, width: iw * k, height: ih * k)
+                ctx.interpolationQuality = .high
+                ctx.draw(image, in: r)
+                return
+            }
+            if let bars {
+                // Black +1% / +2% (or white −1% / −2%) bars moving across the screen
+                color(rgb).setFill()
+                bounds.fill()
+                let bw = bounds.width / 10
+                for (i, level) in bars.enumerated() {
+                    let x = (phase + CGFloat(i) * 0.5).truncatingRemainder(dividingBy: 1) * (bounds.width + bw) - bw
+                    color(level).setFill()
+                    NSRect(x: x, y: 0, width: bw, height: bounds.height).fill()
+                }
+                return
+            }
             if let inverted = ansiInverted {
                 // HCFR's FullScreenWindow: 5×5 blocks, the center one black (ANSI 1) or white (ANSI 2)
                 let n = 5, bw = bounds.width / CGFloat(n), bh = bounds.height / CGFloat(n)
@@ -171,6 +197,9 @@ final class PatternWindowController {
             window = w
             view = v
         }
+        stopAnimation()
+        view?.image = nil
+        view?.bars = nil
         view?.areaPercent = areaPercent
         view?.ansiInverted = ansiInverted
         view?.background = background
@@ -178,7 +207,50 @@ final class PatternWindowController {
         view?.displayIfNeeded()
     }
 
+    private var timer: Timer?
+
+    private func stopAnimation() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    /// Test image, full screen (aspect kept). `videoLevels` maps 0–255 to 16–235 as HCFR's "v" images.
+    func showImage(_ url: URL, videoLevels: Bool, on screen: NSScreen) -> Bool {
+        guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let img = CGImageSourceCreateImageAtIndex(src, 0, nil) else { return false }
+        let space = screen.colorSpace?.cgColorSpace ?? CGColorSpaceCreateDeviceRGB()
+        let w = img.width, h = img.height
+        guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: space,
+                                  bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return false }
+        // Same codes on screen as in the file: reinterpret in the display's space instead of converting
+        ctx.draw(img.copy(colorSpace: space) ?? img, in: CGRect(x: 0, y: 0, width: w, height: h))
+        if videoLevels, let data = ctx.data {
+            let p = data.bindMemory(to: UInt8.self, capacity: w * h * 4)
+            var lut = [UInt8](repeating: 0, count: 256)
+            for i in 0..<256 { lut[i] = UInt8((16 + Double(i) * 219 / 255).rounded()) }
+            for i in 0..<(w * h * 4) where i % 4 != 3 { p[i] = lut[Int(p[i])] }
+        }
+        guard let shown = ctx.makeImage() else { return false }
+        let black = videoLevels ? 16 : 0
+        show(rgb: [black, black, black], background: [black, black, black], areaPercent: 100, on: screen)
+        view?.image = shown
+        return true
+    }
+
+    /// HCFR's animated near black / near white bars.
+    func showMovingBars(background: [Int], bars: [[Int]], on screen: NSScreen) {
+        show(rgb: background, background: background, areaPercent: 100, on: screen)
+        view?.bars = bars
+        timer = Timer.scheduledTimer(withTimeInterval: 0.04, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let v = self?.view else { return }
+                v.phase = (v.phase + 0.004).truncatingRemainder(dividingBy: 1)
+            }
+        }
+    }
+
     func close() {
+        stopAnimation()
         window?.orderOut(nil)
         window = nil
         view = nil

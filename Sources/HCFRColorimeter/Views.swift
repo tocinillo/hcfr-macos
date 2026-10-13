@@ -116,6 +116,7 @@ struct ContentView: View {
         } message: {
             Text("The gray scale measurements were taken with \(session.grayCount) points. Changing to \(session.pendingGrayCount ?? 0) points clears them (the colors are kept).")
         }
+        .sheet(isPresented: $session.editingTestColor) { TestColorSheet(session: session) }
         .sheet(item: $session.prompt) { p in
             PromptSheet(prompt: p, session: session).onAppear { session.promptDidAppear(p.id) }
         }
@@ -1183,5 +1184,47 @@ private struct ContrastGrid: View {
             .overlay(Rectangle().stroke(.separator, lineWidth: 0.5))
             .contentShape(Rectangle())
             .onTapGesture { session.select(index: r.index) }
+    }
+}
+
+// MARK: - Test color (HCFR's Test colors window)
+
+private struct TestColorSheet: View {
+    @ObservedObject var session: Session
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Show color").font(.headline)
+            Text("Shows a color on the pattern generator (\(session.videoLevels.rawValue)) to look at or adjust the display.")
+                .font(.caption).foregroundStyle(.secondary)
+            ForEach(0..<3, id: \.self) { i in
+                HStack {
+                    Text(["Red", "Green", "Blue"][i]).frame(width: 50, alignment: .leading)
+                    Slider(value: $session.testColorDraft[i], in: 0...100, step: 1)
+                    TextField("", value: $session.testColorDraft[i], format: .number.precision(.fractionLength(0...1)))
+                        .frame(width: 56).multilineTextAlignment(.trailing)
+                    Text("%")
+                }
+            }
+            HStack {
+                ForEach([("Black", 0.0), ("Gray 50", 50), ("White", 100)], id: \.0) { p in
+                    Button(p.0) { session.testColorDraft = [p.1, p.1, p.1] }
+                }
+                Spacer()
+                let c = session.testColorDraft
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color(red: c[0] / 100, green: c[1] / 100, blue: c[2] / 100))
+                    .frame(width: 60, height: 24)
+                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(.separator))
+            }
+            HStack {
+                Spacer()
+                Button("Hide pattern") { session.hideTestPattern() }.disabled(session.testPatternShown == nil)
+                Button("Close") { session.editingTestColor = false }.keyboardShortcut(.cancelAction)
+                Button("Show") { session.showTestColor(session.testColorDraft.map { $0 / 100 }) }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 440)
     }
 }

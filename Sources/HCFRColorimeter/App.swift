@@ -49,6 +49,20 @@ struct ColorimeterApp: App {
                 Button("Create PDF Report…") { session.exportPDFReport() }
                     .disabled(!session.hasMeasurements)
             }
+            CommandMenu("Patterns") {
+                Button("Black +1% & +2% moving bars") { session.showMovingBars(white: false) }
+                Button("White −1% & −2% moving bars") { session.showMovingBars(white: true) }
+                ForEach(TestImages.groups, id: \.0) { group in
+                    Menu(group.0) {
+                        ForEach(group.1) { t in Button(t.title) { session.showTestImage(t) } }
+                    }
+                }
+                Divider()
+                Button("Show color…") { session.editingTestColor = true }
+                Button("Hide pattern") { session.hideTestPattern() }
+                    .keyboardShortcut(".", modifiers: .command)
+                    .disabled(session.testPatternShown == nil)
+            }
             CommandGroup(after: .pasteboard) {
                 Divider()
                 Button("Copy Table") { session.copyTable() }

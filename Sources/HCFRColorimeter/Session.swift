@@ -179,8 +179,13 @@ final class Session: ObservableObject {
     @Published var patternArea: Double = 100 { didSet { defaults.set(patternArea, forKey: "patternArea") } }
     /// Wait after showing a pattern before reading, so the display settles.
     @Published var settleSeconds: Double = 1.0 { didSet { defaults.set(settleSeconds, forKey: "settleSeconds") } }
-    private let patternWindow = PatternWindowController()
-    private var shownPattern: TestPattern?
+    let patternWindow = PatternWindowController()
+    /// Test pattern on the generator from the Patterns menu (nil = none).
+    @Published var testPatternShown: String?
+    /// Patterns → "Show color…" dialog (HCFR's Test colors window), with the color in %.
+    @Published var editingTestColor = false
+    @Published var testColorDraft: [Double] = [75, 75, 75]
+    var shownPattern: TestPattern?
     /// Raspberry Pi (PGenerator) IP address; empty = find it on the network automatically.
     @Published private(set) var piAddress = ""
     /// Connected Raspberry Pi, shown in the Generator menu (e.g. "192.168.1.50 · 1920×1080").
@@ -705,6 +710,7 @@ final class Session: ObservableObject {
     }
 
     func stop() {
+        testPatternShown = nil
         task?.cancel()
         closePattern()
         // A reading in progress can't be interrupted; if it hasn't finished 5 s after Stop/Cancel/ESC
@@ -747,6 +753,7 @@ final class Session: ObservableObject {
         guard task == nil else { return }
         activity = kind
         patternCounter = 0
+        testPatternShown = nil
         task = Task {
             defer { closePattern() }
             do {
@@ -862,7 +869,7 @@ final class Session: ObservableObject {
     }
 
     /// Sends a message built for the connected Pi; reconnects once if the connection was lost.
-    private func piSend(_ message: (PGeneratorClient) -> String) async throws {
+    func piSend(_ message: (PGeneratorClient) -> String) async throws {
         do {
             let c = try await piClient()
             try await c.send(message(c))

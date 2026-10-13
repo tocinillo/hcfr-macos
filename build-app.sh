@@ -19,6 +19,8 @@ cp .build/meter/hcfr-meter "$APP/Contents/MacOS/hcfr-meter"
 # HCFR CCSS display corrections (third_party/hcfr/Install/color); the helper finds them via XDG_DATA_DIRS
 cp -R Resources/ArgyllCMS "$APP/Contents/Resources/ArgyllCMS"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+# HCFR's test pattern images (Patterns menu), from HCFR's res/patterns
+cp -R Resources/Patterns "$APP/Contents/Resources/Patterns"
 cp LICENSE "$APP/Contents/Resources/LICENSE.txt"
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
