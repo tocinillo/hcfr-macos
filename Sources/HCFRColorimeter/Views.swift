@@ -975,7 +975,8 @@ private struct SeriesGrid: View {
                 row(gray ? "Y target" : "Y Target", results) { r in fmt(r.targetY, 3) }
             }
         }
-        .font(.system(.body, design: .monospaced))
+        // Many columns (Color Checker): smaller text so 24 patches fit the window, as HCFR
+        .font(.system(results.count > 12 ? .caption : .body, design: .monospaced))
         .overlay(Rectangle().stroke(.separator))
     }
 
@@ -1014,10 +1015,11 @@ private struct SeriesGrid: View {
         }
         let selected = r.index == session.selectedIndex
         return Text(r.name).bold()
-            .lineLimit(1).minimumScaleFactor(0.6)
+            .lineLimit(2).minimumScaleFactor(0.7)
+            .multilineTextAlignment(.center)
             .foregroundStyle(fg)
-            .frame(minWidth: 56, maxWidth: .infinity, minHeight: 21)
-            .padding(.horizontal, 2)
+            .frame(minWidth: 40, idealWidth: 44, maxWidth: .infinity, minHeight: 21)
+            .padding(.horizontal, 1)
             .background(bg)
             .overlay(selected ? Rectangle().stroke(Color.accentColor, lineWidth: 2) : nil)
             .overlay(Rectangle().stroke(.separator, lineWidth: 0.5))
@@ -1049,8 +1051,8 @@ private struct SeriesGrid: View {
             .lineLimit(1)
             .minimumScaleFactor(0.7)
             .foregroundStyle(fill != nil ? Color.black : (ov ? Color.blue : Color.primary))
-            .frame(minWidth: 50, maxWidth: .infinity, minHeight: 21, alignment: .trailing)
-            .padding(.trailing, 6)
+            .frame(minWidth: 40, idealWidth: 44, maxWidth: .infinity, minHeight: 21, alignment: .trailing)
+            .padding(.trailing, 3)
             .background(background)
             .overlay(Rectangle().stroke(.separator, lineWidth: 0.5))
             .contentShape(Rectangle())
