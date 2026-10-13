@@ -68,6 +68,8 @@ struct AppPrefs: Codable, Equatable {
     var hiRes = false
     /// HCFR's sensor matrix: applied to every reading (identity = no correction), row major.
     var sensorMatrix: [Double] = [1, 0, 0, 0, 1, 0, 0, 0, 1]
+    /// Advanced → "Do not use white in matrix calculus (R1.x)".
+    var matrixOnlyPrimaries = false
 
     var hasSensorMatrix: Bool { sensorMatrix != [1, 0, 0, 0, 1, 0, 0, 0, 1] && sensorMatrix.count == 9 }
 

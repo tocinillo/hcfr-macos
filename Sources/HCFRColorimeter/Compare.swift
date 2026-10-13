@@ -107,3 +107,74 @@ extension Session {
                              refWhiteY: gray ? d.whiteY : d.colorWhiteY, isGray: gray, ref: ref)
     }
 }
+
+// MARK: - Sensor matrix from a reference meter (HCFR's ComputeConversionMatrix, libHCFR/Color.cpp)
+
+extension Mat3 {
+    static func * (a: Mat3, b: Mat3) -> Mat3 {
+        Mat3(m: (0..<3).map { r in (0..<3).map { c in (0..<3).reduce(0) { $0 + a.m[r][$1] * b.m[$1][c] } } })
+    }
+
+    static func diagonal(_ d: [Double]) -> Mat3 { Mat3(m: [[d[0], 0, 0], [0, d[1], 0], [0, 0, d[2]]]) }
+
+    var determinant: Double {
+        let a = m
+        return a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1]) - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0])
+            + a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0])
+    }
+}
+
+enum SensorMatrix {
+    /// Matrix taking this meter's readings of red, green, blue (and white) to the reference meter's.
+    /// With white (HCFR default): the four-color method (white gains on chromaticities, then the
+    /// white luminance matched); without: references × measures⁻¹.
+    static func compute(measures: [XYZ], references: [XYZ], whiteMeasure: XYZ?, whiteReference: XYZ?,
+                        onlyPrimaries: Bool) -> Mat3? {
+        func cols(_ v: [XYZ]) -> Mat3 { Mat3.columns([v[0].X, v[0].Y, v[0].Z], [v[1].X, v[1].Y, v[1].Z], [v[2].X, v[2].Y, v[2].Z]) }
+        func chroma(_ v: [XYZ]) -> Mat3 { Mat3.columns([v[0].x, v[0].y, v[0].z], [v[1].x, v[1].y, v[1].z], [v[2].x, v[2].y, v[2].z]) }
+        guard measures.count == 3, references.count == 3 else { return nil }
+        guard !onlyPrimaries, let wm = whiteMeasure, let wr = whiteReference, wm.Y > 0, wr.Y > 0 else {
+            let m = cols(measures)
+            guard abs(m.determinant) > 1e-12 else { return nil }
+            return cols(references) * m.inverse
+        }
+        let mx = chroma(measures), rx = chroma(references)
+        guard abs(mx.determinant) > 1e-12, abs(rx.determinant) > 1e-12 else { return nil }
+        let kr = Mat3.diagonal(rx.inverse.apply([wr.x, wr.y, wr.z]))
+        let km = Mat3.diagonal(mx.inverse.apply([wm.x, wm.y, wm.z]))
+        let n = rx * kr, mm = mx * km
+        guard abs(mm.determinant) > 1e-12 else { return nil }
+        var t = n * mm.inverse
+        let test = t.apply([wm.X, wm.Y, wm.Z])
+        guard test[1] != 0 else { return nil }
+        let k = wr.Y / test[1]
+        t.m = t.m.map { $0.map { $0 * k } }
+        return t
+    }
+}
+
+extension Session {
+    /// Sensor → "Compute from the compared project": this meter's red, green, blue and white against the
+    /// same patches measured with a reference meter (a spectro) in the compared project.
+    func computeSensorMatrixFromReference() {
+        guard let d = refData else { errorMessage = "Open the reference meter's project first (File → Compare with Project…)."; return }
+        let rgb: [PatchColor] = [.red, .green, .blue]
+        let mine = rgb.compactMap { colorMeasurements[$0] }, theirs = rgb.compactMap { d.colors[$0] }
+        guard mine.count == 3, theirs.count == 3 else {
+            errorMessage = "Both projects need red, green and blue measured (Measure → Primary colors), on the same display and patterns."
+            return
+        }
+        let wm = colorMeasurements[.white] ?? measurements[100], wr = d.colors[.white] ?? d.grayXYZ(100)
+        guard let t = SensorMatrix.compute(measures: mine, references: theirs, whiteMeasure: wm, whiteReference: wr,
+                                           onlyPrimaries: appPrefs.matrixOnlyPrimaries) else {
+            errorMessage = "The matrix could not be computed (the measures are not independent)."
+            return
+        }
+        // These readings already went through the current matrix: chain them
+        let old = appPrefs.sensorMatrix.count == 9 ? Mat3(m: [Array(appPrefs.sensorMatrix[0..<3]), Array(appPrefs.sensorMatrix[3..<6]), Array(appPrefs.sensorMatrix[6..<9])])
+                                                   : Mat3.diagonal([1, 1, 1])
+        let total = t * old
+        appPrefs.sensorMatrix = total.m.flatMap { $0 }
+        status = "Sensor matrix computed against \(d.name). It applies to the next readings: measure again."
+    }
+}

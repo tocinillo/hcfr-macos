@@ -169,6 +169,11 @@ struct AdvancedPage: View {
 
     var body: some View {
         Form {
+            Section("Calibration files - Advanced use") {
+                Toggle("Do not use white in matrix calculus (R1.x)", isOn: $session.appPrefs.matrixOnlyPrimaries)
+                Text("Sensor matrix from a reference meter: with white (default) the four-color method; without, red, green and blue only.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Measure launch") {
                 Toggle("Confirmation message", isOn: $session.appPrefs.confirmMeasures)
                 Text("Asks \"Run … measures?\" before every measurement run.").font(.caption).foregroundStyle(.secondary)
@@ -309,6 +314,9 @@ struct SensorPage: View {
                     Text(session.appPrefs.hasSensorMatrix ? "Correction matrix in use" : "Identity: no correction")
                         .foregroundStyle(.secondary)
                     Spacer()
+                    Button("Compute from compared project") { session.computeSensorMatrixFromReference() }
+                        .disabled(session.refData == nil)
+                        .help("Measure red, green, blue and white with this meter; open (File → Compare with Project…) a project where the same patches were measured with a reference meter (a spectro). The matrix makes this meter read like the reference.")
                     Button("Reset") { session.appPrefs.sensorMatrix = [1, 0, 0, 0, 1, 0, 0, 0, 1] }
                 }
                 Text("Every reading (X, Y, Z) is multiplied by this matrix, as HCFR's sensor matrix. Leave the identity unless you have a correction matrix for your meter and display.")
