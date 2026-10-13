@@ -136,8 +136,11 @@ enum Snapshot {
         }
         if args.contains("--spectrum") {
             // Synthetic white LED-like spectrum for the selected column
-            let v = stride(from: 380.0, through: 730, by: 10).map { nm in
-                exp(-pow((nm - 450) / 12, 2)) + 0.75 * exp(-pow((nm - 560) / 60, 2))
+            var v: [Double] = []
+            for nm in stride(from: 380.0, through: 730.0, by: 10.0) {
+                let blue: Double = exp(-pow((nm - 450) / 12, 2))
+                let yellow: Double = 0.75 * exp(-pow((nm - 560) / 60, 2))
+                v.append(blue + yellow)
             }
             session.spectra[session.selectedTarget.id] = Spectrum(start: 380, end: 730, values: v)
         }
