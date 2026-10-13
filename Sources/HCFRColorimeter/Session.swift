@@ -151,6 +151,8 @@ final class Session: ObservableObject {
     @Published var ccSet: ColorCheckerSet = .gcd
     @Published var userCCRows: [ColorCheckerData.Row] = []
     @Published var userCCName = ""
+    /// Another project compared with this one (HCFR's data reference): "dE / ref" and "xy / ref" rows.
+    @Published var refData: ReferenceData?
     /// Values of the first table rows: xyY (default), XYZ, RGB or xyz.
     @Published var valueMode: ValueMode = .xyY { didSet { defaults.set(valueMode.rawValue, forKey: "valueMode") } }
     /// Table shown (HCFR's "View" selector).

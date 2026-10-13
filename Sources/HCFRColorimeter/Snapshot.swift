@@ -134,6 +134,15 @@ enum Snapshot {
             print(session.status)
             exit(same ? 0 : 1)
         }
+        if args.contains("--compare") {
+            // Reference project: the same readings, a little bluer
+            func shift(_ c: XYZ) -> XYZ { XYZ(X: c.X * 0.99, Y: c.Y, Z: c.Z * 1.03) }
+            var d = ReferenceData(name: "Before calibration")
+            d.gray = session.measurements.mapValues(shift)
+            d.colors = session.colorMeasurements.mapValues(shift)
+            d.series = session.seriesMeasurements.mapValues { $0.mapValues(shift) }
+            session.refData = d
+        }
         if let c = args.firstIndex(of: "--csv"), c + 1 < args.count {
             try? session.csvText().write(toFile: args[c + 1], atomically: true, encoding: .utf8)
             if let r = args.firstIndex(of: "--report"), r + 1 < args.count, let pdf = Report.makePDF(session) {

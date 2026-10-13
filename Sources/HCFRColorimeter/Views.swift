@@ -409,6 +409,7 @@ private struct ViewPanel: View {
         var s = "Color Space: \(r.standard.shortName), White Point: \(r.white.rawValue) (\(r.white.kelvin) K), EOTF: \(r.gammaMode.isHDR ? "HDR" : "SDR"), "
         s += session.gammaDescription
         s += ", # of measures: \(session.measureCount)"
+        if let d = session.refData { s += ", Ref: \(d.name)" }
         if let d = session.lastMeasure {
             s += " [\(d.formatted(date: .omitted, time: .standard))]"
         }
@@ -502,6 +503,10 @@ private struct MeasuresGrid: View {
                 }
                 row("delta xy", results) { r in isOverridden(r) ? "" : isBase(r) ? fmt(0, 4) : fmt(r.deltaxy, 4) }
                 row("Y target", results) { r in fmt(r.targetY, 3) }
+                if session.refData != nil {
+                    row("dE / ref", results) { r in fmt(session.grayComparison(r).deltaE, 1) }
+                    row("xy / ref", results) { r in fmt(session.grayComparison(r).deltaxy, 4) }
+                }
             }
             .font(.system(.body, design: .monospaced))
             .overlay(Rectangle().stroke(.separator))
@@ -623,6 +628,11 @@ private struct PrimariesGrid: View {
                 }
                 row("delta xy", results, black: "") { r in isBase(r) ? fmt(0, 4) : fmt(r.deltaxy, 4) }
                 row("delta L", results, black: "") { r in isBase(r) ? "=" : r.deltaLText }
+                row("Y Target", results, black: "") { r in fmt(r.reference.Y * session.colorWhiteY, 3) }
+                if session.refData != nil {
+                    row("dE / ref", results, black: "") { r in fmt(session.colorComparison(r).deltaE, 1) }
+                    row("xy / ref", results, black: "") { r in fmt(session.colorComparison(r).deltaxy, 4) }
+                }
             }
             .font(.system(.body, design: .monospaced))
             .overlay(Rectangle().stroke(.separator))
@@ -1007,6 +1017,10 @@ private struct SeriesGrid: View {
                 row("delta xy", results) { r in fmt(r.deltaxy, 4) }
                 if !gray { row("delta L", results) { r in r.deltaLText } }
                 row(gray ? "Y target" : "Y Target", results) { r in fmt(r.targetY, 3) }
+            }
+            if session.refData != nil {
+                row("dE / ref", results) { r in fmt(session.seriesComparison(v, r).deltaE, 1) }
+                row("xy / ref", results) { r in fmt(session.seriesComparison(v, r).deltaxy, 4) }
             }
         }
         // Many columns (Color Checker): smaller text so 24 patches fit the window, as HCFR

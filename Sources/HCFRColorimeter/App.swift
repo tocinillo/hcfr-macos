@@ -39,6 +39,10 @@ struct ColorimeterApp: App {
                 Button("Save Project As…") { session.saveProject(as: true) }
                     .keyboardShortcut("s", modifiers: [.command, .shift])
                 Divider()
+                Button("Compare with Project…") { session.chooseReferenceProject() }
+                Button("Stop Comparing") { session.refData = nil }
+                    .disabled(session.refData == nil)
+                Divider()
                 Button("Export Measurements (CSV)…") { session.exportCSV() }
                     .keyboardShortcut("e", modifiers: [.command, .shift])
                     .disabled(!session.hasMeasurements)
