@@ -72,6 +72,31 @@ enum Snapshot {
             session.view = .primariesSecondaries
             session.selectedPatch = args.contains("--level10") ? .green : .red
         }
+        if let v = args.firstIndex(of: "--view"), v + 1 < args.count,
+           let view = MeasureView.allCases.first(where: { "\($0)" == args[v + 1] }) {
+            // Synthetic readings for every series view: the references, slightly off
+            let w = 120.0
+            for sv in MeasureView.allCases where sv.isSeries && sv != .freeMeasures {
+                var m: [Int: XYZ] = [:]
+                for r in session.seriesResults(sv) {
+                    let k = 1 + 0.03 * sin(Double(r.index) * 1.7)
+                    if sv.isGraySeries, let t = r.targetY {
+                        m[r.index] = session.ref.white.xyz(Y: max(t, 0.01) * k)
+                    } else if let ref = r.reference {
+                        var xyz = ref.scaled(w * k)
+                        xyz.X *= 1 + 0.02 * cos(Double(r.index))
+                        m[r.index] = xyz
+                    }
+                }
+                session.seriesMeasurements[sv] = m
+            }
+            session.freeMeasurements = (0..<12).map { i in XYZ.fromxyY(x: 0.3127 + 0.002 * sin(Double(i)), y: 0.329, Y: 118 + Double(i % 4)) }
+            session.contrastMeasurements = [.black: XYZ.fromxyY(x: 0.31, y: 0.32, Y: 0.05), .white: XYZ.fromxyY(x: 0.313, y: 0.329, Y: 121),
+                                            .ansi1: XYZ.fromxyY(x: 0.31, y: 0.32, Y: 0.4), .ansi2: XYZ.fromxyY(x: 0.313, y: 0.329, Y: 118)]
+            session.view = view
+            session.selectedIndex = 2
+            session.infoGraph = .auto
+        }
         if let r = args.firstIndex(of: "--report"), r + 1 < args.count {
             defer { exit(0) }
             for s in [(10.0, 0.2969, 0.3102, 0.880), (50.0, 0.3114, 0.3262, 26.810), (100.0, 0.3130, 0.3276, 123.189)] {
@@ -90,7 +115,7 @@ enum Snapshot {
         } else {
             for s in sample where s.0 <= maxLevel { session.measurements[s.0] = XYZ.fromxyY(x: s.1, y: s.2, Y: s.3) }
         }
-        session.infoGraph = args.contains("--cie") ? .cie : .rgbLevels
+        if !args.contains("--view") { session.infoGraph = args.contains("--cie") ? .cie : .rgbLevels }
         if let g = args.firstIndex(of: "--graph"), g + 1 < args.count,
            let graph = InfoGraph.allCases.first(where: { "\($0)" == args[g + 1] }) { session.infoGraph = graph }
         session.cieUV = args.contains("--uv")

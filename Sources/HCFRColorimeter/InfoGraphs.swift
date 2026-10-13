@@ -25,7 +25,7 @@ struct InformationPanel: View {
                 .fixedSize()
                 Spacer()
             }
-            graph(session.infoGraph == .auto ? (session.view == .grayScale ? .rgbLevels : .cie) : session.infoGraph)
+            graph(session.infoGraph == .auto ? autoGraph : session.infoGraph)
         }
         .padding(8)
         .frame(maxHeight: .infinity, alignment: .topLeading)
@@ -33,9 +33,31 @@ struct InformationPanel: View {
         .overlay(RoundedRectangle(cornerRadius: 6).stroke(.separator))
     }
 
+    /// Auto: the graph that goes with the table shown.
+    private var autoGraph: InfoGraph {
+        switch session.view {
+        case .grayScale: return .rgbLevels
+        case .nearBlack, .nearWhite: return .nearBlackWhite
+        case .freeMeasures: return .freeHistogram
+        case .contrast: return .summary
+        default: return .cie
+        }
+    }
+
     @ViewBuilder
     private func graph(_ g: InfoGraph) -> some View {
         switch g {
+        case .freeHistogram: FreeMeasuresChart(session: session)
+        case .nearBlackWhite:
+            HStack(spacing: 8) {
+                NearScaleChart(session: session, view: .nearBlack)
+                NearScaleChart(session: session, view: .nearWhite)
+            }
+        case .saturationShift:
+            HStack(spacing: 8) {
+                SaturationChart(session: session, shift: false)
+                SaturationChart(session: session, shift: true)
+            }
         case .summary: SummaryView(session: session)
         case .targetCIE:
             HStack(spacing: 8) {
@@ -310,5 +332,143 @@ private func legend(_ message: String?) -> some View {
     if let message {
         Text(message).font(.caption).foregroundStyle(.white.opacity(0.8))
             .padding(6).background(.black.opacity(0.4)).clipShape(RoundedRectangle(cornerRadius: 4)).padding(8)
+    }
+}
+
+// MARK: - Near black / near white
+
+/// Luminance of the near black or near white scale against its target (cd/m²).
+struct NearScaleChart: View {
+    @ObservedObject var session: Session
+    let view: MeasureView
+
+    var body: some View {
+        let results = session.seriesResults(view)
+        let levels = results.indices.map { session.seriesLevel(view, $0) }
+        let measured = zip(levels, results).compactMap { l, r in r.xyz.map { LevelPoint(level: l, value: $0.Y, series: "Measured") } }
+        let target = zip(levels, results).compactMap { l, r in r.targetY.map { LevelPoint(level: l, value: $0, series: "Reference") } }
+        let lo = levels.first ?? 0, hi = max(levels.last ?? 1, lo + 1)
+        DarkGraph(title: view == .nearBlack ? "Near Black (cd/m²)" : "Near White (cd/m²)") {
+            Chart {
+                ForEach(target) { p in
+                    LineMark(x: .value("Level", p.level), y: .value("Y", p.value), series: .value("S", p.series))
+                        .foregroundStyle(.white.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                    PointMark(x: .value("Level", p.level), y: .value("Y", p.value))
+                        .foregroundStyle(.white.opacity(0.8)).symbol(.square).symbolSize(20)
+                }
+                ForEach(measured) { p in
+                    LineMark(x: .value("Level", p.level), y: .value("Y", p.value), series: .value("S", p.series))
+                        .foregroundStyle(.yellow).lineStyle(StrokeStyle(lineWidth: 2))
+                    PointMark(x: .value("Level", p.level), y: .value("Y", p.value)).foregroundStyle(.yellow).symbolSize(24)
+                }
+            }
+            .chartXScale(domain: lo...hi)
+            .chartXAxis { AxisMarks(values: levels) { v in
+                AxisGridLine().foregroundStyle(.teal.opacity(0.4))
+                AxisValueLabel { Text("\(Reference.label(v.as(Double.self) ?? 0))%").font(.caption2.monospaced()).foregroundStyle(.white) }
+            } }
+            .chartYAxis { AxisMarks(position: .leading) { v in
+                AxisGridLine().foregroundStyle(.teal.opacity(0.4))
+                AxisValueLabel { Text(String(format: "%.3g", v.as(Double.self) ?? 0)).foregroundStyle(.white) }
+            } }
+            .chartPlotStyle { $0.background(grayRamp) }
+            .overlay(alignment: .topLeading) { legend(measured.isEmpty ? "Measure → \(view == .nearBlack ? "Near black" : "Near white")" : nil) }
+        }
+    }
+}
+
+// MARK: - Saturations
+
+/// HCFR's "Saturation Luminance - Shift": luminance error (%) or saturation shift (measured
+/// saturation − expected, %) at every step of the six saturation scales.
+struct SaturationChart: View {
+    @ObservedObject var session: Session
+    let shift: Bool
+
+    var body: some View {
+        let points: [LevelPoint] = MeasureView.saturations.flatMap { v -> [LevelPoint] in
+            let results = session.seriesResults(v)
+            let n = results.count
+            guard n > 1, let color = v.saturationColor else { return [] }
+            let full = session.ref.rgbToXYZ.apply(color.rgb)
+            let end = XYZ(X: full[0], Y: full[1], Z: full[2])
+            let w = session.ref.white
+            let span = hypot(end.x - w.x, end.y - w.y)
+            return results.compactMap { r -> LevelPoint? in
+                guard let xyz = r.xyz, xyz.Y > 0 else { return nil }
+                let pct = Double(r.index) * 100 / Double(n - 1)
+                if shift {
+                    guard span > 0, let ref = r.reference else { return nil }
+                    let measured = hypot(xyz.x - w.x, xyz.y - w.y) / span * 100
+                    let expected = hypot(ref.x - w.x, ref.y - w.y) / span * 100
+                    return LevelPoint(level: pct, value: measured - expected, series: color.rawValue)
+                }
+                guard let d = r.deltaL else { return nil }
+                return LevelPoint(level: pct, value: d * 100, series: color.rawValue)
+            }
+        }
+        let maxAbs = max(5, (points.map { abs($0.value) }.max() ?? 0) * 1.1)
+        DarkGraph(title: shift ? "Saturation shift (%)" : "Saturation luminance (delta %)") {
+            Chart {
+                RuleMark(y: .value("Ref", 0)).foregroundStyle(.white.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                ForEach(points) { p in
+                    LineMark(x: .value("Sat", p.level), y: .value("%", p.value), series: .value("Color", p.series))
+                        .foregroundStyle(CIEChart.markerColor(PatchColor(rawValue: p.series) ?? .white))
+                        .lineStyle(StrokeStyle(lineWidth: 2))
+                    PointMark(x: .value("Sat", p.level), y: .value("%", p.value))
+                        .foregroundStyle(CIEChart.markerColor(PatchColor(rawValue: p.series) ?? .white)).symbolSize(20)
+                }
+            }
+            .chartXScale(domain: 0...100)
+            .chartYScale(domain: -maxAbs...maxAbs)
+            .chartXAxis { AxisMarks(values: [0, 25, 50, 75, 100]) { v in
+                AxisGridLine().foregroundStyle(.teal.opacity(0.4))
+                AxisValueLabel { Text("\(v.as(Int.self) ?? 0)% Sat").font(.caption2.monospaced()).foregroundStyle(.white) }
+            } }
+            .chartYAxis { AxisMarks(position: .leading) { v in
+                AxisGridLine().foregroundStyle(.teal.opacity(0.4))
+                AxisValueLabel { Text(String(format: "%.0f", v.as(Double.self) ?? 0)).foregroundStyle(.white) }
+            } }
+            .chartPlotStyle { $0.background(Color(white: 0.2)) }
+            .overlay(alignment: .topLeading) { legend(points.isEmpty ? "Measure → saturations" : nil) }
+        }
+    }
+}
+
+// MARK: - Free measures
+
+/// HCFR's "Combined histogram for free measures": Y, x and y of every free measure in order.
+struct FreeMeasuresChart: View {
+    @ObservedObject var session: Session
+
+    var body: some View {
+        let m = session.freeMeasurements
+        VStack(spacing: 6) {
+            series("Y (cd/m²)", m.map(\.Y), .yellow)
+            series("x", m.map(\.x), .pink)
+            series("y", m.map(\.y), .green)
+        }
+    }
+
+    private func series(_ title: String, _ values: [Double], _ color: Color) -> some View {
+        DarkGraph(title: title) {
+            Chart {
+                ForEach(Array(values.enumerated()), id: \.offset) { i, v in
+                    LineMark(x: .value("#", i + 1), y: .value(title, v)).foregroundStyle(color)
+                    PointMark(x: .value("#", i + 1), y: .value(title, v)).foregroundStyle(color).symbolSize(14)
+                }
+            }
+            .chartYScale(domain: .automatic(includesZero: false))
+            .chartXAxis { AxisMarks { v in
+                AxisGridLine().foregroundStyle(.teal.opacity(0.3))
+                AxisValueLabel { Text("\(v.as(Int.self) ?? 0)").font(.caption2).foregroundStyle(.white) }
+            } }
+            .chartYAxis { AxisMarks(position: .leading) { v in
+                AxisGridLine().foregroundStyle(.teal.opacity(0.3))
+                AxisValueLabel { Text(String(format: "%.4g", v.as(Double.self) ?? 0)).font(.caption2).foregroundStyle(.white) }
+            } }
+            .chartPlotStyle { $0.background(Color(white: 0.2)) }
+            .overlay(alignment: .topLeading) { legend(values.isEmpty ? "Measure → Free measure" : nil) }
+        }
     }
 }

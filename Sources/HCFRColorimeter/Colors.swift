@@ -36,9 +36,20 @@ enum PatchColor: String, CaseIterable, Identifiable, Codable {
     }
 }
 
-/// What the Measure button can run.
-enum MeasureKind: CaseIterable {
+/// What the Measure button can run (HCFR's Measures menu).
+enum MeasureKind: Hashable {
     case grayScale, primaries, primariesSecondaries, grayScaleAndColors
+    case nearBlack, nearWhite
+    case saturation(MeasureView), allSaturations
+    case colorChecker, contrast, freeMeasure
+
+    /// Menu groups, separated by a line.
+    static let menu: [[MeasureKind]] = [
+        [.grayScale, .nearBlack, .nearWhite],
+        [.primaries, .primariesSecondaries, .grayScaleAndColors],
+        MeasureView.saturations.map { .saturation($0) } + [.allSaturations],
+        [.colorChecker, .contrast, .freeMeasure],
+    ]
 
     var title: String {
         switch self {
@@ -46,16 +57,35 @@ enum MeasureKind: CaseIterable {
         case .grayScaleAndColors: return "Grey scale and colors"
         case .primaries: return "Primary colors"
         case .primariesSecondaries: return "Primary and secondary colors"
+        case .nearBlack: return "Near black"
+        case .nearWhite: return "Near white"
+        case .saturation(let v): return "\(v.saturationColor?.rawValue ?? "") saturation"
+        case .allSaturations: return "All saturations"
+        case .colorChecker: return "Color checker"
+        case .contrast: return "Contrast (on/off and ANSI)"
+        case .freeMeasure: return "Free measure (one reading of the screen as it is)"
         }
     }
 
     /// Patches measured, in HCFR's order (plus White, as HCFR's default "BWColorsToAdd = 1").
     var patches: [PatchColor] {
         switch self {
-        case .grayScale: return []
         case .grayScaleAndColors: return [.red, .green, .blue, .yellow, .cyan, .magenta, .white]
         case .primaries: return [.red, .green, .blue, .white]
         case .primariesSecondaries: return [.red, .green, .blue, .yellow, .cyan, .magenta, .white]
+        default: return []
+        }
+    }
+
+    /// Series views measured by this kind.
+    var seriesViews: [MeasureView] {
+        switch self {
+        case .nearBlack: return [.nearBlack]
+        case .nearWhite: return [.nearWhite]
+        case .saturation(let v): return [v]
+        case .allSaturations: return MeasureView.saturations
+        case .colorChecker: return [.colorChecker]
+        default: return []
         }
     }
 }
@@ -69,16 +99,12 @@ enum InfoGraph: String, CaseIterable, Identifiable {
     case rgbLevels = "RGB Levels"
     case colorTemperature = "Color temperature"
     case cie = "CIE Diagram"
+    case freeHistogram = "Combined histogram for free measures"
+    case nearBlackWhite = "NearBlack - NearWhite"
+    case saturationShift = "Saturation Luminance - Shift"
     case targetRGBGamma = "Target - RGB - Gamma"
     /// RGB Levels for the gray scale table, CIE Diagram for the colors table.
     case auto = "Auto"
-    var id: String { rawValue }
-}
-
-/// Table shown in the main grid (HCFR's "View" selector).
-enum MeasureView: String, CaseIterable, Identifiable {
-    case grayScale = "Gray scale"
-    case primariesSecondaries = "Primaries and secondaries"
     var id: String { rawValue }
 }
 

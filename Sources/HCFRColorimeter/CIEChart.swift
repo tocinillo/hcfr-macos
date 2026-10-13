@@ -663,6 +663,11 @@ struct CIEChart: View {
         let selectedPatch = session.view == .primariesSecondaries ? session.selectedPatch : nil
         let selectedLevel = session.view == .grayScale ? session.selectedLevel : nil
         let showRefs = session.cieShowReferences
+        // Saturation scales (all six), Color Checker or free measures: their points as well
+        let seriesViews: [MeasureView] = session.view.saturationColor != nil ? MeasureView.saturations
+            : (session.view == .colorChecker || session.view == .freeMeasures ? [session.view] : [])
+        let series = seriesViews.map { v in (v, session.seriesResults(v)) }
+        let currentView = session.view, selectedIndex = session.selectedIndex
         let sx = size.width / CIEBackground.bitmapSize.width, sy = size.height / CIEBackground.bitmapSize.height
         let small = min(size.width, size.height) < 260
         let penWidth: CGFloat = small ? 2 : 3
@@ -824,6 +829,34 @@ struct CIEChart: View {
                 ctx.stroke(sq, with: .color(Self.markerColor(p)), lineWidth: 2)
                 if sel {
                     ctx.stroke(Path(ellipseIn: CGRect(x: c.x - s, y: c.y - s, width: 2 * s, height: 2 * s)), with: .color(.orange), lineWidth: 2)
+                }
+            }
+
+            // Series: reference (white ring), line to the measure (dot in the patch color)
+            for (v, results) in series {
+                let tint = v.saturationColor.map { Self.markerColor($0) }
+                for r in results {
+                    let selected = v == currentView && r.index == selectedIndex
+                    var refPoint: CGPoint?
+                    if let ref = r.reference, ref.Y > 0 {
+                        let c = pos((ref.x, ref.y))
+                        refPoint = c
+                        let rr: CGFloat = small ? 2.5 : 3.5
+                        ctx.stroke(Path(ellipseIn: CGRect(x: c.x - rr, y: c.y - rr, width: 2 * rr, height: 2 * rr)),
+                                   with: .color(tint ?? .white), lineWidth: 1.2)
+                    }
+                    guard let xyz = r.xyz, xyz.Y > 0 else { continue }
+                    let p = pos((xyz.x, xyz.y))
+                    if let refPoint {
+                        var l = Path(); l.move(to: refPoint); l.addLine(to: p)
+                        ctx.stroke(l, with: .color(.white.opacity(0.7)), lineWidth: 1)
+                    }
+                    let s = r.measureRGB ?? [255, 255, 255]
+                    let fill = tint ?? Color(red: Double(s[0]) / 255, green: Double(s[1]) / 255, blue: Double(s[2]) / 255)
+                    let rr: CGFloat = selected ? 5 : 3.5
+                    let dot = Path(ellipseIn: CGRect(x: p.x - rr, y: p.y - rr, width: 2 * rr, height: 2 * rr))
+                    ctx.fill(dot, with: .color(fill))
+                    ctx.stroke(dot, with: .color(selected ? .orange : .black), lineWidth: selected ? 2 : 1)
                 }
             }
 

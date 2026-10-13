@@ -76,7 +76,7 @@ final class Session: ObservableObject {
     enum Activity { case idle, measuring, continuous }
 
     // Settings (remembered between launches)
-    private let defaults = UserDefaults.standard
+    let defaults = UserDefaults.standard
     @Published var standard: ColorStandard { didSet { defaults.set(standard.rawValue, forKey: "standard") } }
     @Published var white: WhitePoint { didSet { defaults.set(white.rawValue, forKey: "white") } }
     @Published var gamma: Double {
@@ -121,8 +121,26 @@ final class Session: ObservableObject {
     /// Primary / secondary color measurements (and the White measured with them).
     @Published var colorMeasurements: [PatchColor: XYZ] = [:]
     @Published var selectedPatch: PatchColor = .red
-    /// Table shown: gray scale or primaries and secondaries.
-    @Published var view: MeasureView = .grayScale
+    /// Near black, near white, saturation and Color Checker measurements: by view, by column.
+    @Published var seriesMeasurements: [MeasureView: [Int: XYZ]] = [:]
+    /// Free measures, in the order they were taken.
+    @Published var freeMeasurements: [XYZ] = []
+    /// Contrast view: black, white and the two ANSI checkerboards.
+    @Published var contrastMeasurements: [ContrastPatch: XYZ] = [:]
+    /// Selected column of the series and contrast views.
+    @Published var selectedIndex = 0
+    /// HCFR's "Scale sizes": number of near black, near white and saturation points.
+    @Published var nearBlackCount = 5
+    @Published var nearWhiteCount = 5
+    @Published var saturationCount = 5
+    /// Color Checker pattern set, and the patches of the user's own file ("User defined").
+    @Published var ccSet: ColorCheckerSet = .gcd
+    @Published var userCCRows: [ColorCheckerData.Row] = []
+    @Published var userCCName = ""
+    /// Table shown (HCFR's "View" selector).
+    @Published var view: MeasureView = .grayScale {
+        didSet { if selectedIndex >= columnCount(view) { selectedIndex = 0 } }
+    }
     /// Graph of the Information panel (HCFR's graph views).
     @Published var infoGraph: InfoGraph = .rgbLevels { didSet { defaults.set(infoGraph.rawValue, forKey: "infoGraph") } }
     /// CIE diagram: show the illuminants and color temperatures (HCFR's "Show references").
@@ -186,6 +204,13 @@ final class Session: ObservableObject {
         settleSeconds = defaults.object(forKey: "settleSeconds") as? Double ?? 1.0
         piAddress = defaults.string(forKey: "piAddress") ?? ""
         if let n = defaults.object(forKey: "grayCount") as? Int, n >= 3, n <= 101 { grayCount = n }
+        if let n = defaults.object(forKey: "nearBlackCount") as? Int, n >= 2, n <= 101 { nearBlackCount = n }
+        if let n = defaults.object(forKey: "nearWhiteCount") as? Int, n >= 2, n <= 101 { nearWhiteCount = n }
+        if let n = defaults.object(forKey: "saturationCount") as? Int, n >= 2, n <= 101 { saturationCount = n }
+        ccSet = (defaults.object(forKey: "ccSet") as? Int).flatMap(ColorCheckerSet.init(rawValue:)) ?? .gcd
+        userCCName = defaults.string(forKey: "userCCName") ?? ""
+        userCCRows = ColorCheckerSet.readCSV(defaults.string(forKey: "userCCData") ?? "")
+        if ccSet == .user && userCCRows.isEmpty { ccSet = .gcd }
         infoGraph = defaults.string(forKey: "infoGraph").flatMap(InfoGraph.init(rawValue:)) ?? .rgbLevels
         cieShowReferences = defaults.object(forKey: "cieShowReferences") as? Bool ?? true
         cieUV = defaults.bool(forKey: "cieUV")
@@ -316,9 +341,24 @@ final class Session: ObservableObject {
     var colorDeltaEs: [Double] { patchResults.filter { $0.patch != .white }.compactMap(\.deltaE) }
 
     /// The reading shown in "Selected color" for the current view.
-    var selectedReading: ColorReading { view == .grayScale ? selectedResult : selectedPatchResult }
+    var selectedReading: ColorReading {
+        switch view {
+        case .grayScale: return selectedResult
+        case .primariesSecondaries: return selectedPatchResult
+        case .contrast:
+            let r = contrastResults
+            return r[min(selectedIndex, r.count - 1)]
+        default:
+            let r = seriesResults(view)
+            if r.isEmpty { return selectedResult }
+            return r[min(selectedIndex, r.count - 1)]
+        }
+    }
 
-    var hasMeasurements: Bool { !measurements.isEmpty || !colorMeasurements.isEmpty }
+    var hasMeasurements: Bool {
+        !measurements.isEmpty || !colorMeasurements.isEmpty || seriesMeasurements.values.contains { !$0.isEmpty }
+            || !freeMeasurements.isEmpty || !contrastMeasurements.isEmpty
+    }
 
     var results: [StepResult] {
         allLevels.map { result(for: $0) }
@@ -459,9 +499,13 @@ final class Session: ObservableObject {
         stop()
         measurements.removeAll()
         colorMeasurements.removeAll()
+        seriesMeasurements.removeAll()
+        freeMeasurements.removeAll()
+        contrastMeasurements.removeAll()
         lastMeasure = nil
         selectedLevel = 100
         selectedPatch = .red
+        selectedIndex = 0
         projectURL = nil
         isDirty = false
         status = meter == nil ? "Colorimeter not connected" : "New project — ready to measure"
@@ -469,6 +513,9 @@ final class Session: ObservableObject {
 
     /// Measure button: runs the chosen test.
     func measure(_ kind: MeasureKind = .grayScale) {
+        if !kind.seriesViews.isEmpty { measureSeries(kind); return }
+        if kind == .contrast { measureContrast(); return }
+        if kind == .freeMeasure { measureFree(); return }
         let graySteps = kind == .grayScale || kind == .grayScaleAndColors ? levels.count : 0
         // As HCFR for Windows, color tests never measure Black (with or without Override black)
         let total = graySteps + kind.patches.count
@@ -500,7 +547,7 @@ final class Session: ObservableObject {
     }
 
     /// Grey scale: 10%–100% (0% too without Override black), asking for each pattern.
-    private func measureGrayLevels() async throws {
+    func measureGrayLevels() async throws {
         for level in levels {
             try Task.checkCancellation()
             selectedLevel = level
@@ -512,7 +559,7 @@ final class Session: ObservableObject {
     }
 
     /// Colors at 100% in HCFR's order (MeasurePrimaries / MeasureSecondaries / MeasureGrayScaleAndColors).
-    private func measurePatches(_ patches: [PatchColor]) async throws {
+    func measurePatches(_ patches: [PatchColor]) async throws {
         for patch in patches {
             try Task.checkCancellation()
             selectedPatch = patch
@@ -530,7 +577,9 @@ final class Session: ObservableObject {
         if view == .grayScale && !levels.contains(selectedLevel) { selectedLevel = 100 }
         run(.continuous) {
             while !Task.isCancelled {
-                if self.view == .grayScale {
+                if self.view != .grayScale && self.view != .primariesSecondaries {
+                    try await self.continuousStep()
+                } else if self.view == .grayScale {
                     let level = self.selectedLevel
                     self.status = "Continuous reading at \(Reference.label(level)) IRE — click another column to measure it, Stop to finish"
                     try await self.showIfGenerator(.gray(level))
@@ -597,7 +646,7 @@ final class Session: ObservableObject {
         isDirty = true
     }
 
-    private func run(_ kind: Activity, _ body: @escaping @MainActor () async throws -> Void) {
+    func run(_ kind: Activity, _ body: @escaping @MainActor () async throws -> Void) {
         guard meter != nil else {
             errorMessage = "Connect a colorimeter first. This program needs a colorimeter to measure."
             return
@@ -637,7 +686,7 @@ final class Session: ObservableObject {
 
     /// Manual generator: asks the user for the pattern. Built-in generator: shows it on the chosen
     /// display and waits for it to settle.
-    private func present(_ pattern: TestPattern) async throws {
+    func present(_ pattern: TestPattern) async throws {
         if !automaticGenerator {
             Chime.request()
             try await ask("Information", "Use \(pattern.manualName) and press Continue.", style: .continueCancel)
@@ -648,12 +697,16 @@ final class Session: ObservableObject {
 
     /// Shows the pattern on the generator display (if one is selected) and waits `settleSeconds`
     /// when it changed.
-    private func showIfGenerator(_ pattern: TestPattern, force: Bool = false) async throws {
+    func showIfGenerator(_ pattern: TestPattern, force: Bool = false) async throws {
         if patternSource == .raspberryPi {
             guard force || pattern != shownPattern else { return }
             try Task.checkCancellation()
             let black = videoLevels.code(0)
-            try await piShow(rgb: pattern.rgb.map { videoLevels.code($0) }, background: [black, black, black])
+            if let inverted = pattern.ansiInverted {
+                try await piSend { $0.ansiMessage(inverted: inverted) }
+            } else {
+                try await piShow(rgb: pattern.rgb.map { videoLevels.code($0) }, background: [black, black, black])
+            }
             shownPattern = pattern
             try await Task.sleep(for: .seconds(settleSeconds))
             return
@@ -661,14 +714,16 @@ final class Session: ObservableObject {
         guard let screen = patternScreen else { return }
         if force || pattern != shownPattern || !patternWindow.isShowing {
             let black = videoLevels.code(0)
-            patternWindow.show(rgb: pattern.rgb.map { videoLevels.code($0) }, background: [black, black, black],
-                               areaPercent: patternArea, on: screen)
+            let ansi = pattern.ansiInverted
+            let rgb = ansi != nil ? [1.0, 1, 1] : pattern.rgb
+            patternWindow.show(rgb: rgb.map { videoLevels.code($0) }, background: [black, black, black],
+                               areaPercent: ansi != nil ? 100 : patternArea, ansiInverted: ansi, on: screen)
             shownPattern = pattern
             try await Task.sleep(for: .seconds(settleSeconds))
         }
     }
 
-    private func closePattern() {
+    func closePattern() {
         patternWindow.close()
         // Raspberry Pi: back to black, as HCFR for Windows does at the end of a run
         if shownPattern != nil, patternSource == .raspberryPi, let pi {
@@ -685,13 +740,19 @@ final class Session: ObservableObject {
 
     /// Sends a patch to the Raspberry Pi; if the connection was lost (Pi restarted…), reconnects once.
     private func piShow(rgb: [Int], background: [Int]) async throws {
+        let area = patternArea
+        try await piSend { $0.rectangleMessage(rgb: rgb, background: background, areaPercent: area) }
+    }
+
+    /// Sends a message built for the connected Pi; reconnects once if the connection was lost.
+    private func piSend(_ message: (PGeneratorClient) -> String) async throws {
         do {
             let c = try await piClient()
-            try await c.send(c.rectangleMessage(rgb: rgb, background: background, areaPercent: patternArea))
+            try await c.send(message(c))
         } catch PGeneratorError.communication {
             dropPi()
             let c = try await piClient()
-            try await c.send(c.rectangleMessage(rgb: rgb, background: background, areaPercent: patternArea))
+            try await c.send(message(c))
         }
     }
 
@@ -793,7 +854,9 @@ final class Session: ObservableObject {
         }
     }
 
-    private func readWithCalibration(pattern: TestPattern) async throws -> XYZ {
+    /// Reads the meter, calibrating it first if it asks; `pattern` (nil for free measures) is shown
+    /// again after the calibration.
+    func readWithCalibration(pattern: TestPattern?) async throws -> XYZ {
         guard let meter else { throw MeterError.failed("Colorimeter not connected") }
         while true {
             try Task.checkCancellation()
@@ -801,7 +864,7 @@ final class Session: ObservableObject {
                 return try await meter.read()
             } catch MeterError.needsCalibration(let cond, let msg) {
                 try await calibrate(meter: meter, condition: cond, message: msg)
-                try await present(pattern)
+                if let pattern { try await present(pattern) } else { closePattern() }
             } catch MeterError.incorrectPosition(let msg) {
                 try await ask("Incorrect Position", msg, style: .position)
             }
@@ -844,7 +907,7 @@ final class Session: ObservableObject {
         }
     }
 
-    private func ask(_ title: String, _ message: String, style: UserPrompt.Style) async throws {
+    func ask(_ title: String, _ message: String, style: UserPrompt.Style) async throws {
         // A pattern covering the app's screen would hide the message
         if patternWindow.isShowing, let main = NSApp.mainWindow?.screen, patternWindow.screen == main {
             closePattern()

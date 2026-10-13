@@ -259,6 +259,13 @@ final class PGeneratorClient: @unchecked Sendable {
         return "RGB=RECTANGLE;\(w),\(h);100;\(c[0]),\(c[1]),\(c[2]);\(b[0]),\(b[1]),\(b[2]);-1,-1,0,0"
     }
 
+    /// ANSI contrast checkerboard: the images that PGenerator keeps for HCFR (FullScreenWindow.cpp,
+    /// "ansi1.png" black center / "ansi2.png" white center in /var/lib/PGenerator/images-HCFR/).
+    func ansiMessage(inverted: Bool) -> String {
+        "RGB=IMAGE;\(width),\(height),;100;255,255,255;0,0,0;-1,-1;/var/lib/PGenerator/images-HCFR/"
+            + (inverted ? "ansi2.png" : "ansi1.png")
+    }
+
     /// Text line on the Pi screen (HCFR shows "Initializing PGenerator at…" / "End of sequence").
     static func textMessage(_ text: String) -> String {
         "RGB=TEXT;12,0;100;16,128,128;0,0,0;100,300;\(text)"

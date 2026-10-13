@@ -34,6 +34,17 @@ struct ProjectFile: Codable {
     var references: ReferencePrefs? = nil
     /// Primary/secondary colors ("Red", …, "White") -> [X, Y, Z]. Absent in older projects.
     var colors: [String: [Double]]? = nil
+    /// Near black / near white / saturation / Color Checker views: view name -> column -> [X, Y, Z].
+    var series: [String: [String: [Double]]]? = nil
+    /// Scale sizes ("Near black", "Near white", "Saturations").
+    var scaleSizes: [String: Int]? = nil
+    /// Color Checker set (HCFR's CCPatterns number) and, for "User defined", its patches (R,G,B,name).
+    var colorChecker: Int? = nil
+    var userColorChecker: [String]? = nil
+    var userColorCheckerName: String? = nil
+    var freeMeasures: [[Double]]? = nil
+    /// Contrast view: "Black", "White", "ANSI 1", "ANSI 2" -> [X, Y, Z].
+    var contrast: [String: [Double]]? = nil
 }
 
 extension UTType {
@@ -64,7 +75,16 @@ extension Session {
             measurements: Dictionary(uniqueKeysWithValues: measurements.map { (Self.levelKey($0.key), [$0.value.X, $0.value.Y, $0.value.Z]) }),
             grayCount: grayCount,
             references: prefs,
-            colors: Dictionary(uniqueKeysWithValues: colorMeasurements.map { ($0.key.rawValue, [$0.value.X, $0.value.Y, $0.value.Z]) }))
+            colors: Dictionary(uniqueKeysWithValues: colorMeasurements.map { ($0.key.rawValue, [$0.value.X, $0.value.Y, $0.value.Z]) }),
+            series: Dictionary(uniqueKeysWithValues: seriesMeasurements.filter { !$0.value.isEmpty }.map { v, m in
+                (v.rawValue, Dictionary(uniqueKeysWithValues: m.map { ("\($0.key)", [$0.value.X, $0.value.Y, $0.value.Z]) }))
+            }),
+            scaleSizes: ["Near black": nearBlackCount, "Near white": nearWhiteCount, "Saturations": saturationCount],
+            colorChecker: ccSet.rawValue,
+            userColorChecker: ccSet == .user ? userCCRows.map { "\($0.r),\($0.g),\($0.b),\($0.name)" } : nil,
+            userColorCheckerName: ccSet == .user ? userCCName : nil,
+            freeMeasures: freeMeasurements.isEmpty ? nil : freeMeasurements.map { [$0.X, $0.Y, $0.Z] },
+            contrast: contrastMeasurements.isEmpty ? nil : Dictionary(uniqueKeysWithValues: contrastMeasurements.map { ($0.key.rawValue, [$0.value.X, $0.value.Y, $0.value.Z]) }))
         do {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -118,7 +138,35 @@ extension Session {
                 if let patch = PatchColor(rawValue: k) { c[patch] = XYZ(X: v[0], Y: v[1], Z: v[2]) }
             }
             colorMeasurements = c
-            view = c.isEmpty || !m.isEmpty ? .grayScale : .primariesSecondaries
+            let sizes = file.scaleSizes ?? [:]
+            applySeriesSizes(nearBlack: sizes["Near black"], nearWhite: sizes["Near white"], saturation: sizes["Saturations"])
+            if let rows = file.userColorChecker, !rows.isEmpty {
+                setUserColorChecker(ColorCheckerSet.readCSV(rows.joined(separator: "\n")), name: file.userColorCheckerName ?? "Project")
+            }
+            if let n = file.colorChecker, let set = ColorCheckerSet(rawValue: n), set != .user || !userCCRows.isEmpty {
+                applyColorCheckerSet(set)
+            }
+            var series: [MeasureView: [Int: XYZ]] = [:]
+            for (name, cols) in file.series ?? [:] {
+                guard let v = MeasureView(rawValue: name) else { continue }
+                for (k, x) in cols where x.count == 3 {
+                    if let i = Int(k) { series[v, default: [:]][i] = XYZ(X: x[0], Y: x[1], Z: x[2]) }
+                }
+            }
+            seriesMeasurements = series
+            freeMeasurements = (file.freeMeasures ?? []).filter { $0.count == 3 }.map { XYZ(X: $0[0], Y: $0[1], Z: $0[2]) }
+            var con: [ContrastPatch: XYZ] = [:]
+            for (k, x) in file.contrast ?? [:] where x.count == 3 {
+                if let p = ContrastPatch(rawValue: k) { con[p] = XYZ(X: x[0], Y: x[1], Z: x[2]) }
+            }
+            contrastMeasurements = con
+            selectedIndex = 0
+            if !m.isEmpty { view = .grayScale }
+            else if !c.isEmpty { view = .primariesSecondaries }
+            else if let v = MeasureView.allCases.first(where: { !(series[$0]?.isEmpty ?? true) }) { view = v }
+            else if !con.isEmpty { view = .contrast }
+            else if !freeMeasurements.isEmpty { view = .freeMeasures }
+            else { view = .grayScale }
             selectedPatch = .red
             lastMeasure = file.lastMeasure
             selectedLevel = 100

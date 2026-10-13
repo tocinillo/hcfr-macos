@@ -12,6 +12,11 @@ import AppKit
 enum TestPattern: Equatable {
     case gray(Double)
     case color(PatchColor)
+    /// Any RGB signal (0…1 of the video range), with the text asked for with the manual generator.
+    case custom([Double], String)
+    /// HCFR's ANSI contrast checkerboard (5×5): `inverted` false = black square in the center
+    /// ("Contrast ANSI 1"), true = white square in the center ("Contrast ANSI 2").
+    case ansi(inverted: Bool)
 
     /// Text used in the "Use … and press Continue" message of the manual (DVD) generator.
     var manualName: String {
@@ -19,6 +24,10 @@ enum TestPattern: Equatable {
         case .gray(let level): return "\(Reference.label(level)) IRE"
         case .color(.white): return "100% White (100 IRE)"
         case .color(let p): return "100% \(p.rawValue)"
+        case .custom(_, let name): return name
+        case .ansi(let inverted):
+            return inverted ? "the ANSI contrast pattern 2 (chapter 'Contrast ANSI 2', white square in the center)"
+                            : "the ANSI contrast pattern 1 (chapter 'Contrast ANSI 1', black square in the center)"
         }
     }
 
@@ -27,7 +36,14 @@ enum TestPattern: Equatable {
         switch self {
         case .gray(let level): return Array(repeating: Double(level) / 100, count: 3)
         case .color(let p): return p.rgb
+        case .custom(let rgb, _): return rgb
+        case .ansi: return [0, 0, 0]
         }
+    }
+
+    var ansiInverted: Bool? {
+        if case .ansi(let inverted) = self { return inverted }
+        return nil
     }
 }
 
@@ -78,6 +94,8 @@ final class PatternWindowController {
         var background: [Int] = [0, 0, 0] { didSet { needsDisplay = true } }
         /// Share of the screen area covered by the patch (100 = full field), on black.
         var areaPercent: Double = 100 { didSet { needsDisplay = true } }
+        /// ANSI checkerboard instead of a patch: `rgb` squares on `background` (nil = patch).
+        var ansiInverted: Bool? { didSet { needsDisplay = true } }
 
         override func draw(_ dirtyRect: NSRect) {
             let space = window?.screen?.colorSpace ?? .deviceRGB
@@ -86,6 +104,17 @@ final class PatternWindowController {
             }
             color(background).setFill()
             bounds.fill()
+            if let inverted = ansiInverted {
+                // HCFR's FullScreenWindow: 5×5 blocks, the center one black (ANSI 1) or white (ANSI 2)
+                let n = 5, bw = bounds.width / CGFloat(n), bh = bounds.height / CGFloat(n)
+                color(rgb).setFill()
+                for row in 0..<n {
+                    for col in 0..<n where ((row + col) & 1 == 1) != inverted {
+                        NSRect(x: CGFloat(col) * bw, y: CGFloat(row) * bh, width: bw, height: bh).fill()
+                    }
+                }
+                return
+            }
             let k = sqrt(min(max(areaPercent, 1), 100) / 100)
             let w = bounds.width * k, h = bounds.height * k
             color(rgb).setFill()
@@ -122,7 +151,7 @@ final class PatternWindowController {
     var isShowing: Bool { window != nil }
     var screen: NSScreen? { window?.screen }
 
-    func show(rgb: [Int], background: [Int] = [0, 0, 0], areaPercent: Double, on screen: NSScreen) {
+    func show(rgb: [Int], background: [Int] = [0, 0, 0], areaPercent: Double, ansiInverted: Bool? = nil, on screen: NSScreen) {
         if window == nil || window?.screen != screen {
             close()
             let w = PatternWindow(contentRect: screen.frame, styleMask: .borderless, backing: .buffered,
@@ -143,6 +172,7 @@ final class PatternWindowController {
             view = v
         }
         view?.areaPercent = areaPercent
+        view?.ansiInverted = ansiInverted
         view?.background = background
         view?.rgb = rgb
         view?.displayIfNeeded()

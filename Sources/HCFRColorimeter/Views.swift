@@ -53,10 +53,11 @@ struct ContentView: View {
             }
             .frame(height: 122)
 
-            if session.view == .grayScale {
-                MeasuresGrid(session: session)
-            } else {
-                PrimariesGrid(session: session)
+            switch session.view {
+            case .grayScale: MeasuresGrid(session: session)
+            case .primariesSecondaries: PrimariesGrid(session: session)
+            case .contrast: ContrastGrid(session: session)
+            default: SeriesGrid(session: session)
             }
 
             HStack(alignment: .top, spacing: 8) {
@@ -194,7 +195,7 @@ private struct ActionsPanel: View {
                 } else {
                     ActionButton(title: "Measure", symbol: "checklist", tint: .blue) { MeasureMenu.show(for: session) }
                         .disabled(session.busy || session.meter == nil)
-                        .help("Choose the test: Grey scale (\(Reference.label(session.levels.first ?? 10)) to 100 IRE, \(session.levels.count) steps), Grey scale and colors, Primary colors, or Primary and secondary colors")
+                        .help("Choose the test: grey scale (\(Reference.label(session.levels.first ?? 10)) to 100 IRE, \(session.levels.count) steps), near black, near white, primary and secondary colors, saturations, color checker, contrast or a free measure")
                 }
 
                 GeneratorMenu(session: session)
@@ -290,13 +291,16 @@ private enum MeasureMenu {
 
     static func show(for session: Session) {
         let menu = NSMenu()
-        target.actions = MeasureKind.allCases.map { kind in { session.measure(kind) } }
-        for (i, kind) in MeasureKind.allCases.enumerated() {
-            let item = NSMenuItem(title: kind.title,
-                                  action: #selector(Target.run(_:)), keyEquivalent: "")
-            item.target = target
-            item.tag = i
-            menu.addItem(item)
+        target.actions = []
+        for (g, group) in MeasureKind.menu.enumerated() {
+            if g > 0 { menu.addItem(.separator()) }
+            for kind in group {
+                let item = NSMenuItem(title: kind.title, action: #selector(Target.run(_:)), keyEquivalent: "")
+                item.target = target
+                item.tag = target.actions.count
+                target.actions.append { session.measure(kind) }
+                menu.addItem(item)
+            }
         }
         menu.popUp(positioning: menu.item(at: 0), at: NSEvent.mouseLocation, in: nil)
     }
@@ -361,17 +365,7 @@ private struct ViewPanel: View {
                 }
                 .disabled(session.standard.usesSRGBCurve)
                 .help(session.standard.usesSRGBCurve ? "sRGB uses its own tone curve instead of a power law gamma." : "Target gamma (power law). Default 2.3.")
-                HStack(spacing: 4) {
-                    Text("Gray steps").fixedSize()
-                    Picker("Gray steps", selection: Binding(get: { session.grayCount }, set: { session.setGrayCount($0) })) {
-                        ForEach(Reference.grayCounts, id: \.self) { n in
-                            Text("\(n) (every \(Reference.label(100 / Double(n - 1)))%)").tag(n)
-                        }
-                    }
-                    .labelsHidden()
-                    .fixedSize()
-                }
-                .help("Number of gray scale points, 0 and 100% included (HCFR's Scale sizes → Gray). Changing it clears the gray scale measurements.")
+                ScaleSizeControl(session: session)
                 Toggle("Override black", isOn: $session.overrideBlack)
                     .help("""
                         Override black (0 cd/m²): when on, 0 IRE is not measured and black is taken as a perfect 0 cd/m².                         CRT and LCD displays never reach a true black and colorimeters read such low light poorly,                         so measuring it adds noise to contrast and the low end.                         Turn it off to measure 0 IRE, e.g. on an OLED, whose black is truly black and measures well.
@@ -386,10 +380,7 @@ private struct ViewPanel: View {
         let r = session.ref
         var s = "Color Space: \(r.standard.shortName), White Point: \(r.white.rawValue) (\(r.white.kelvin) K), EOTF: \(r.gammaMode.isHDR ? "HDR" : "SDR"), "
         s += session.gammaDescription
-        let count = session.view == .grayScale
-            ? session.measurements.filter { $0.key > 0 || !session.overrideBlack }.count
-            : session.colorMeasurements.count
-        s += ", # of measures: \(count)"
+        s += ", # of measures: \(session.measureCount)"
         if let d = session.lastMeasure {
             s += " [\(d.formatted(date: .omitted, time: .standard))]"
         }
@@ -874,5 +865,280 @@ struct GrayScaleChart: View {
         .background(Color(white: 0.12))
         .clipShape(RoundedRectangle(cornerRadius: 4))
         }
+    }
+}
+
+// MARK: - Scale sizes (contextual: gray steps, near black / white and saturation points, Color Checker set)
+
+private struct ScaleSizeControl: View {
+    @ObservedObject var session: Session
+
+    var body: some View {
+        switch session.view {
+        case .grayScale:
+            HStack(spacing: 4) {
+                Text("Gray steps").fixedSize()
+                Picker("Gray steps", selection: Binding(get: { session.grayCount }, set: { session.setGrayCount($0) })) {
+                    ForEach(Reference.grayCounts, id: \.self) { n in
+                        Text("\(n) (every \(Reference.label(100 / Double(n - 1)))%)").tag(n)
+                    }
+                }
+                .labelsHidden()
+                .fixedSize()
+            }
+            .help("Number of gray scale points, 0 and 100% included (HCFR's Scale sizes → Gray). Changing it clears the gray scale measurements.")
+        case .nearBlack, .nearWhite:
+            steps([3, 4, 5, 6, 8, 11, 16, 21], help: "Number of near black / near white points (HCFR's Scale sizes): 0, 1, 2…% for near black, …98, 99, 100% for near white.")
+        case .colorChecker:
+            HStack(spacing: 4) {
+                Text("Patterns").fixedSize()
+                Picker("Patterns", selection: Binding(get: { session.ccSet }, set: { session.setColorCheckerSet($0) })) {
+                    ForEach(ColorCheckerSet.allCases) { s in
+                        Text(s == .user && !session.userCCName.isEmpty ? "User defined (\(session.userCCName))" : s.title).tag(s)
+                    }
+                }
+                .labelsHidden()
+                .fixedSize()
+                if session.ccSet == .user {
+                    Button("Load file…") { session.loadUserColorChecker() }
+                }
+            }
+            .help("Color Checker pattern set (HCFR's References → Color Checker Patterns). User defined reads a CSV file as HCFR's usercolors.csv: R,G,B,name per line with video levels 16-235.")
+        default:
+            if session.view.saturationColor != nil {
+                steps([3, 4, 5, 6, 9, 11, 21], help: "Number of points of every saturation scale (HCFR's Scale sizes → Saturations): 5 = 0, 25, 50, 75 and 100%.")
+            }
+        }
+    }
+
+    private func steps(_ options: [Int], help: String) -> some View {
+        let v = session.view
+        let current = session.seriesCount(v)
+        let all = Array(Set(options + [current])).sorted()
+        return HStack(spacing: 4) {
+            Text("Points").fixedSize()
+            Picker("Points", selection: Binding(get: { current }, set: { session.setSeriesCount(v, $0) })) {
+                ForEach(all, id: \.self) { Text("\($0)").tag($0) }
+            }
+            .labelsHidden()
+            .fixedSize()
+        }
+        .help(help)
+    }
+}
+
+// MARK: - Series table (near black / white, saturations, Color Checker, free measures)
+
+private struct SeriesGrid: View {
+    @ObservedObject var session: Session
+
+    var body: some View {
+        let v = session.view
+        let results = session.seriesResults(v)
+        VStack(alignment: .leading, spacing: 4) {
+            Text(summary(results)).font(.caption.monospaced()).foregroundStyle(.secondary)
+            if results.isEmpty {
+                Text(v == .freeMeasures
+                     ? "No free measures yet. Measure → Free measure reads the screen as it is; Start adds a reading continuously."
+                     : "No points.")
+                    .foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 80)
+                    .overlay(Rectangle().stroke(.separator))
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    grid(v, results)
+                    ScrollView(.horizontal) { grid(v, results).padding(.bottom, 12) }
+                }
+            }
+        }
+    }
+
+    private func grid(_ v: MeasureView, _ results: [SeriesResult]) -> some View {
+        let gray = v.isGraySeries
+        let free = v == .freeMeasures
+        return Grid(horizontalSpacing: 0, verticalSpacing: 0) {
+            GridRow {
+                label(v.columnTitle)
+                ForEach(results) { r in header(v, r, count: results.count) }
+            }
+            row("x", results) { r in overridden(r) ? "nan" : fmt(r.xyz?.x, 4) }
+            row("y", results) { r in overridden(r) ? "nan" : fmt(r.xyz?.y, 4) }
+            row("Y", results) { r in overridden(r) ? "0" : fmt(r.xyz?.Y, 3) }
+            if !free {
+                GridRow {
+                    label("Delta E")
+                    ForEach(results) { r in
+                        cell(fmt(r.deltaE, 1), r, bold: true, fill: r.deltaE.map(deltaEColor))
+                    }
+                }
+                row("delta xy", results) { r in fmt(r.deltaxy, 4) }
+                if !gray { row("delta L", results) { r in r.deltaLText } }
+                row(gray ? "Y target" : "Y Target", results) { r in fmt(r.targetY, 3) }
+            }
+        }
+        .font(.system(.body, design: .monospaced))
+        .overlay(Rectangle().stroke(.separator))
+    }
+
+    private func overridden(_ r: SeriesResult) -> Bool { session.view == .nearBlack && r.index == 0 && session.overrideBlack }
+
+    private func summary(_ results: [SeriesResult]) -> String {
+        let v = session.view
+        if v == .freeMeasures { return "( \(results.count) free measures )" }
+        let d = results.compactMap(\.deltaE)
+        let avg = d.isEmpty ? "—" : fmt(d.reduce(0, +) / Double(d.count), 2)
+        let mx = d.max().map { fmt($0, 2) } ?? "—"
+        let f = session.ref.deltaEFormula
+        let formula = v.isGraySeries ? (f == .recommended ? "CIE76(uv)" : f.title) : (f == .recommended ? "CIE2000" : f.title)
+        var s = "( Average dE: \(avg), max: \(mx) [\(formula)] )"
+        if v == .colorChecker { s += "  Patterns: \(session.ccSet.title), \(results.count) colors" }
+        if v.saturationColor != nil { s += "  Reference: \(session.standard.shortName), \(session.saturationCount) points" }
+        if v.isGraySeries { s += "  [\(session.ref.grayDeltaE.title)]" }
+        return s
+    }
+
+    /// Column header tinted as HCFR: gray ramp, saturation gradient, or the patch color.
+    private func header(_ v: MeasureView, _ r: SeriesResult, count: Int) -> some View {
+        let i = Double(r.index), step = 120.0 / Double(max(count, 1))
+        var bg: Color
+        var fg = Color.black
+        switch v {
+        case .colorChecker:
+            let s = r.referenceRGB.map { Double($0) / 255 }
+            bg = Color(red: s[0], green: s[1], blue: s[2])
+            if 0.2126 * pow(s[0], 2.2) + 0.7152 * pow(s[1], 2.2) + 0.0722 * pow(s[2], 2.2) < 0.4 { fg = .white }
+        case .nearBlack, .nearWhite, .freeMeasures:
+            bg = Color(white: min(i * step + 130, 250) / 255)
+        default:
+            let k = 240 - i * step * 2, c = v.saturationColor?.rgb ?? [1, 1, 1]
+            bg = Color(red: (c[0] > 0 ? 240 : k) / 255, green: (c[1] > 0 ? 240 : k) / 255, blue: (c[2] > 0 ? 240 : k) / 255)
+        }
+        let selected = r.index == session.selectedIndex
+        return Text(r.name).bold()
+            .lineLimit(1).minimumScaleFactor(0.6)
+            .foregroundStyle(fg)
+            .frame(minWidth: 56, maxWidth: .infinity, minHeight: 21)
+            .padding(.horizontal, 2)
+            .background(bg)
+            .overlay(selected ? Rectangle().stroke(Color.accentColor, lineWidth: 2) : nil)
+            .overlay(Rectangle().stroke(.separator, lineWidth: 0.5))
+            .contentShape(Rectangle())
+            .onTapGesture { session.select(index: r.index) }
+            .help(r.name)
+    }
+
+    private func row(_ title: String, _ results: [SeriesResult], _ value: @escaping (SeriesResult) -> String) -> some View {
+        GridRow {
+            label(title)
+            ForEach(results) { r in cell(value(r), r) }
+        }
+    }
+
+    private func label(_ text: String) -> some View {
+        Text(text).bold()
+            .lineLimit(1).minimumScaleFactor(0.7)
+            .frame(width: 90, height: 21)
+            .background(Color.gray.opacity(0.15))
+            .overlay(Rectangle().stroke(.separator, lineWidth: 0.5))
+    }
+
+    private func cell(_ text: String, _ r: SeriesResult, bold: Bool = false, fill: Color? = nil) -> some View {
+        let ov = overridden(r)
+        let background: Color = fill ?? (ov ? blackCell : (r.index == session.selectedIndex ? Color.accentColor.opacity(0.10) : .clear))
+        return Text(text)
+            .fontWeight(bold ? .bold : .regular)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .foregroundStyle(fill != nil ? Color.black : (ov ? Color.blue : Color.primary))
+            .frame(minWidth: 50, maxWidth: .infinity, minHeight: 21, alignment: .trailing)
+            .padding(.trailing, 6)
+            .background(background)
+            .overlay(Rectangle().stroke(.separator, lineWidth: 0.5))
+            .contentShape(Rectangle())
+            .onTapGesture { session.select(index: r.index) }
+    }
+}
+
+// MARK: - Contrast table
+
+/// HCFR's Contrast view: Black, White, ANSI 1 and ANSI 2 readings, and the on/off and ANSI contrasts.
+private struct ContrastGrid: View {
+    @ObservedObject var session: Session
+
+    var body: some View {
+        let results = session.contrastResults
+        VStack(alignment: .leading, spacing: 4) {
+            Text("( On/off: black and white full field · ANSI: center of a 5×5 checkerboard, black then white square )")
+                .font(.caption.monospaced()).foregroundStyle(.secondary)
+            Grid(horizontalSpacing: 0, verticalSpacing: 0) {
+                GridRow {
+                    label(" ")
+                    ForEach(results) { r in
+                        Text(r.name).bold()
+                            .frame(maxWidth: .infinity, minHeight: 21)
+                            .background(Color.gray.opacity(0.35))
+                            .overlay(r.index == session.selectedIndex ? Rectangle().stroke(Color.accentColor, lineWidth: 2) : nil)
+                            .overlay(Rectangle().stroke(.separator, lineWidth: 0.5))
+                            .contentShape(Rectangle())
+                            .onTapGesture { session.select(index: r.index) }
+                    }
+                    side("", bold: true)
+                    side("", bold: true)
+                }
+                GridRow {
+                    label("x")
+                    ForEach(results) { r in cell(blackOverridden(r) ? "nan" : fmt(r.xyz?.x, 4), r) }
+                    side("ON/OFF:", bold: true)
+                    side(contrastText(session.onOffContrast))
+                }
+                GridRow {
+                    label("y")
+                    ForEach(results) { r in cell(blackOverridden(r) ? "nan" : fmt(r.xyz?.y, 4), r) }
+                    side("ANSI:", bold: true)
+                    side(contrastText(session.ansiContrast))
+                }
+                GridRow {
+                    label("Y")
+                    ForEach(results) { r in cell(blackOverridden(r) ? fmt(session.prefs.manualBlack, 3) : fmt(r.xyz?.Y, 3), r) }
+                    side("")
+                    side("")
+                }
+            }
+            .font(.system(.body, design: .monospaced))
+            .overlay(Rectangle().stroke(.separator))
+        }
+    }
+
+    private func blackOverridden(_ r: SeriesResult) -> Bool { r.index == 0 && session.overrideBlack && r.xyz == nil }
+
+    private func contrastText(_ c: Double?) -> String {
+        guard let c else { return "undefined" }
+        return c.isInfinite ? "Infinite" : String(format: "%.0f:1", c)
+    }
+
+    private func label(_ text: String) -> some View {
+        Text(text).bold()
+            .frame(width: 90, height: 21)
+            .background(Color.gray.opacity(0.15))
+            .overlay(Rectangle().stroke(.separator, lineWidth: 0.5))
+    }
+
+    private func side(_ text: String, bold: Bool = false) -> some View {
+        Text(text).fontWeight(bold ? .bold : .regular)
+            .frame(maxWidth: .infinity, minHeight: 21, alignment: .trailing)
+            .padding(.trailing, 6)
+            .background(Color.gray.opacity(bold ? 0.2 : 0.06))
+            .overlay(Rectangle().stroke(.separator, lineWidth: 0.5))
+    }
+
+    private func cell(_ text: String, _ r: SeriesResult) -> some View {
+        let ov = r.index == 0 && session.overrideBlack
+        return Text(text)
+            .foregroundStyle(ov ? Color.blue : Color.primary)
+            .frame(maxWidth: .infinity, minHeight: 21, alignment: .trailing)
+            .padding(.trailing, 6)
+            .background(ov ? blackCell : (r.index == session.selectedIndex ? Color.accentColor.opacity(0.10) : .clear))
+            .overlay(Rectangle().stroke(.separator, lineWidth: 0.5))
+            .contentShape(Rectangle())
+            .onTapGesture { session.select(index: r.index) }
     }
 }
