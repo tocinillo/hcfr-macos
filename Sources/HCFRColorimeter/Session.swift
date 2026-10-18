@@ -535,8 +535,8 @@ final class Session: ObservableObject {
             errorMessage = "Choose a colorimeter first."
             return
         }
-        guard activity == .idle else { return }
-        meter?.close()
+        guard activity == .idle, !connecting else { return }
+        let old = meter
         meter = nil
         connectedPortName = nil
         correction = nil
@@ -544,6 +544,8 @@ final class Session: ObservableObject {
         status = "Connecting to \(port.displayName)…"
         Task {
             defer { connecting = false }
+            // Reconnecting: let the previous helper release the meter before opening it again
+            await old?.closeAndWait()
             do {
                 let m = try await ArgyllMeter.open(port: port)
                 connectedPortName = port.name

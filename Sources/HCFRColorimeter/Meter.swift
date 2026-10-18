@@ -196,6 +196,19 @@ final class MeterHelper: @unchecked Sendable {
         }
     }
 
+    /// Asks the helper to quit and waits (up to 3 s) so the driver closes the USB device cleanly;
+    /// opening the same meter again while the old process still holds it fails on the i1 Display Pro
+    /// ("Communication protocol breakdown").
+    func stopAndWait() async {
+        guard process.isRunning else { return }
+        send("quit")
+        for _ in 0..<30 where process.isRunning {
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        if process.isRunning { process.terminate() }
+        try? await Task.sleep(nanoseconds: 300_000_000)
+    }
+
     var isRunning: Bool { process.isRunning && !dead }
 
     /// Stops a stuck helper; the pending command fails with `reason`.
@@ -279,6 +292,16 @@ final class ArgyllMeter {
 
     /// Opens the meter like HCFR for Windows: no forced mode; the Display (correction) is applied afterwards.
     static func open(port: MeterPort) async throws -> ArgyllMeter {
+        do {
+            return try await openOnce(port: port)
+        } catch MeterError.failed(let msg) where msg.hasPrefix("Communication failed") {
+            // The device may still be held by a helper that is closing: try again once
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            return try await openOnce(port: port)
+        }
+    }
+
+    private static func openOnce(port: MeterPort) async throws -> ArgyllMeter {
         let helper = try MeterHelper()
         _ = try await helper.nextLine() // READY
         helper.send("open \(port.index) default")
@@ -408,6 +431,9 @@ final class ArgyllMeter {
     }
 
     func close() { helper.stop() }
+
+    /// Closes the meter and waits until the device is free to be opened again.
+    func closeAndWait() async { await helper.stopAndWait() }
 
     /// Stops the helper even in the middle of a reading (the pending command fails with `reason`).
     func abort(reason: String) { helper.kill(reason: reason) }
