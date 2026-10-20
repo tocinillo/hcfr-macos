@@ -93,6 +93,9 @@ struct AppPrefs: Codable, Equatable {
     var observer = 0
     var integrationTime = IntegrationTime.best
     var hiRes = false
+    /// Low-light averaging (HCFR's "Adapt"): several readings averaged below 10 cd/m². Off as in
+    /// HCFR, because on black each extra reading of a colorimeter can take many seconds.
+    var lowLightAveraging = false
     /// HCFR's sensor matrix: applied to every reading (identity = no correction), row major.
     var sensorMatrix: [Double] = [1, 0, 0, 0, 1, 0, 0, 0, 1]
     /// Luxmeter (Advanced → Luxmeter LX-1108): serial port ("" = none), imperial units (ft-cd), and

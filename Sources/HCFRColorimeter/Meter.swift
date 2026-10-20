@@ -411,7 +411,8 @@ final class ArgyllMeter {
     }
 
     /// Applies HCFR's sensor options; returns the reading type actually set (the meter may not have it).
-    func applyOptions(readingType: Int, observer: Int, integrationMs: Int, refresh: Bool, hiRes: Bool) async throws -> Int {
+    func applyOptions(readingType: Int, observer: Int, integrationMs: Int, refresh: Bool, hiRes: Bool,
+                      averaging: Bool) async throws -> Int {
         helper.send("rtype \(readingType)")
         let r = try await helper.nextLine()
         try parseStatus(r)
@@ -422,6 +423,9 @@ final class ArgyllMeter {
         try parseStatus(try await helper.nextLine())
         helper.send("hires \(hiRes ? 1 : 0)")
         try parseStatus(try await helper.nextLine())
+        // An older helper answers "Unknown command": averaging then stays as it was
+        helper.send("adapt \(averaging ? 1 : 0)")
+        _ = try await helper.nextLine()
         return actual
     }
 

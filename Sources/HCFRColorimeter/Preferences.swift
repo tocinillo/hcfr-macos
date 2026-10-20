@@ -328,6 +328,8 @@ struct SensorPage: View {
                 .disabled(known && !caps!.integrationTime)
                 Toggle("Hi-Res", isOn: $session.appPrefs.hiRes)
                     .disabled(known && !caps!.hiRes)
+                Toggle("Low light averaging (slow on black)", isOn: $session.appPrefs.lowLightAveraging)
+                    .help("HCFR's adaptive averaging: below 10 cd/m² 2 to 5 readings are averaged. Off as in HCFR for Windows: on black every extra reading can take many seconds.")
                 Text("As HCFR: the observer applies to CCSS corrections and spectro meters; the integration time to i1 Display Pro / ColorMunki Display (with refresh display types it is rounded to whole refresh periods); Hi-Res to i1Pro / ColorMunki spectros.")
                     .font(.caption).foregroundStyle(.secondary)
                 HStack {

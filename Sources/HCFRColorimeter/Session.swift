@@ -99,8 +99,10 @@ final class Session: ObservableObject {
         didSet {
             if let data = try? JSONEncoder().encode(appPrefs) { defaults.set(data, forKey: "appPrefs") }
             applyStaticOptions()
-            let s = (oldValue.readingType, oldValue.observer, oldValue.integrationTime, oldValue.hiRes)
-            if s != (appPrefs.readingType, appPrefs.observer, appPrefs.integrationTime, appPrefs.hiRes) { reapplySensorOptions() }
+            let s = (oldValue.readingType, oldValue.observer, oldValue.integrationTime, oldValue.hiRes, oldValue.lowLightAveraging)
+            if s != (appPrefs.readingType, appPrefs.observer, appPrefs.integrationTime, appPrefs.hiRes, appPrefs.lowLightAveraging) {
+                reapplySensorOptions()
+            }
             if oldValue.luxPort != appPrefs.luxPort { applyLuxPort() }
         }
     }
@@ -294,7 +296,8 @@ final class Session: ObservableObject {
         do {
             let ms = Int(appPrefs.integrationTime.seconds * 1000)
             let actual = try await m.applyOptions(readingType: appPrefs.readingType.rawValue, observer: appPrefs.observer,
-                                                  integrationMs: ms, refresh: c?.refresh ?? false, hiRes: appPrefs.hiRes)
+                                                  integrationMs: ms, refresh: c?.refresh ?? false, hiRes: appPrefs.hiRes,
+                                                  averaging: appPrefs.lowLightAveraging)
             activeReadingType = ReadingType(rawValue: actual) ?? .display
             if actual != appPrefs.readingType.rawValue {
                 errorMessage = "Reading mode \(appPrefs.readingType.title) is not available on this meter, using \(activeReadingType.title)."

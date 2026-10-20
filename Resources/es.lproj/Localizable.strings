@@ -517,3 +517,5 @@
 "Custom patch size" = "Tamaño de parche personalizado";
 "Share of the screen area covered by the patch, from 1 to 100% (100 = full field). Used by the Raspberry Pi and by the displays of this Mac." = "Porcentaje del área de la pantalla que ocupa el parche, de 1 a 100% (100 = campo completo). Se usa en la Raspberry Pi y en las pantallas de este Mac.";
 "The patch size must be a number from 1 to 100 (% of the screen area)." = "El tamaño del parche debe ser un número de 1 a 100 (% del área de la pantalla).";
+"Low light averaging (slow on black)" = "Promediar con poca luz (lento en el negro)";
+"HCFR's adaptive averaging: below 10 cd/m² 2 to 5 readings are averaged. Off as in HCFR for Windows: on black every extra reading can take many seconds." = "Promedio adaptativo de HCFR: por debajo de 10 cd/m² se promedian de 2 a 5 lecturas. Desactivado como en HCFR para Windows: en el negro cada lectura extra puede tardar muchos segundos.";

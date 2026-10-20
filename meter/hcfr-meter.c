@@ -34,6 +34,8 @@
  *   itime <ms> <refresh 0|1> -> minimum integration time of i1d3 / ColorMunki colorimeters
  *                    (0 = Argyll default); "@ITIME <seconds set>" or "@ERR"
  *   hires <0|1>   -> high resolution spectral mode (i1Pro, ColorMunki); "@OK"
+ *   adapt <0|1>   -> HCFR's low-light averaging (off by default, as HCFR): up to 5 readings
+ *                    below 10 cd/m²; "@OK"
  *   quit
  *
  * Argyll diagnostic messages go to stderr.
@@ -185,6 +187,7 @@ static const char *position_message(void) {
 
 /* Diffuser-position check of the i1d3 driver: off for meter models the app has not tested */
 static int g_diffcheck = 1;
+static int g_adapt = 0;   /* HCFR's "Adapt" (ArgyllSensor), off by default */
 
 static void cmd_diffcheck(int on) {
 	g_diffcheck = on != 0;
@@ -458,7 +461,7 @@ static void cmd_read(void) {
 
 	/* HCFR adaptive averaging (ArgyllMeterWrapper::takeReading): more readings in low light */
 	double X = val.XYZ[0], Y = val.XYZ[1], Z = val.XYZ[2];
-	int extra = Y < 1.0 ? 4 : Y < 2.0 ? 3 : Y < 5.0 ? 2 : Y < 10.0 ? 1 : 0;
+	int extra = !g_adapt ? 0 : Y < 1.0 ? 4 : Y < 2.0 ? 3 : Y < 5.0 ? 2 : Y < 10.0 ? 1 : 0;
 	int count = 1;
 	xspect sp = val.sp;
 	for (int i = 0; i < extra; i++) {
@@ -500,6 +503,7 @@ int main(int argc, char *argv[]) {
 		if (strcmp(cmd, "obs") == 0)            { cmd_obs(arg1); continue; }
 		if (strcmp(cmd, "itime") == 0)          { cmd_itime(arg1, atoi(arg2)); continue; }
 		if (strcmp(cmd, "hires") == 0)          { cmd_hires(arg1); continue; }
+		if (strcmp(cmd, "adapt") == 0)          { g_adapt = arg1 != 0; reply("OK"); continue; }
 		if (strcmp(cmd, "list") == 0)      cmd_list();
 		else if (strcmp(cmd, "open") == 0) cmd_open(arg1, arg2);
 		else if (strcmp(cmd, "read") == 0) cmd_read();
