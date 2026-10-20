@@ -519,3 +519,6 @@
 "The patch size must be a number from 1 to 100 (% of the screen area)." = "El tamaño del parche debe ser un número de 1 a 100 (% del área de la pantalla).";
 "Low light averaging (slow on black)" = "Promediar con poca luz (lento en el negro)";
 "HCFR's adaptive averaging: below 10 cd/m² 2 to 5 readings are averaged. Off as in HCFR for Windows: on black every extra reading can take many seconds." = "Promedio adaptativo de HCFR: por debajo de 10 cd/m² se promedian de 2 a 5 lecturas. Desactivado como en HCFR para Windows: en el negro cada lectura extra puede tardar muchos segundos.";
+"Export HCFR sheets (CSV)…" = "Exportar hojas de HCFR (CSV)…";
+"Export HCFR sheets (CSV)" = "Exportar hojas de HCFR (CSV)";
+"Creates the five files of HCFR for Windows' export: name.GeneralSheet.csv, name.GrayScaleSheet.csv, name.PrimariesSheet.csv, name.CCSheet.csv and name.SpectralSheet.csv." = "Crea los cinco archivos de la exportación de HCFR para Windows: nombre.GeneralSheet.csv, nombre.GrayScaleSheet.csv, nombre.PrimariesSheet.csv, nombre.CCSheet.csv y nombre.SpectralSheet.csv.";

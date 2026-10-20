@@ -111,6 +111,7 @@ enum MessageRules {
         ("Connecting the second meter (.+)…", "Conectando la segunda sonda $1…"),
         ("Connecting to (.+)…", "Conectando con $1…"),
         ("Comparing with (.+): rows dE / ref and xy / ref", "Comparando con $1: filas dE / ref y xy / ref"),
+        ("Exported: (.+) and the other HCFR sheets", "Exportado: $1 y las demás hojas de HCFR"),
         ("Exported: (.+)", "Exportado: $1"),
         ("Graph saved: (.+)", "Gráfico guardado: $1"),
         ("Project saved: (.+)", "Proyecto guardado: $1"),

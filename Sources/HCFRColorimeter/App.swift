@@ -46,6 +46,8 @@ struct ColorimeterApp: App {
                 Button("Export Measurements (CSV)…") { session.exportCSV() }
                     .keyboardShortcut("e", modifiers: [.command, .shift])
                     .disabled(!session.hasMeasurements)
+                Button("Export HCFR sheets (CSV)…") { session.exportHCFRSheets() }
+                    .disabled(!session.hasMeasurements)
                 Button("Create PDF Report…") { session.exportPDFReport() }
                     .disabled(!session.hasMeasurements)
             }

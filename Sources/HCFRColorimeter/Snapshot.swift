@@ -171,6 +171,12 @@ enum Snapshot {
             d.series = session.seriesMeasurements.mapValues { $0.mapValues(shift) }
             session.refData = d
         }
+        if let h = args.firstIndex(of: "--sheets"), h + 1 < args.count {
+            for (suffix, text) in session.hcfrSheets() {
+                try? text.write(toFile: args[h + 1] + "." + suffix + ".csv", atomically: true, encoding: .utf8)
+            }
+            exit(0)
+        }
         if let c = args.firstIndex(of: "--csv"), c + 1 < args.count {
             try? session.csvText().write(toFile: args[c + 1], atomically: true, encoding: .utf8)
             if let r = args.firstIndex(of: "--report"), r + 1 < args.count, let pdf = Report.makePDF(session) {
