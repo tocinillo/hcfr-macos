@@ -508,3 +508,7 @@
 "ΔE 3 / 10" = "ΔE 3 / 10";
 "−a* (green)" = "−a* (verde)";
 "−b* (blue)" = "−b* (azul)";
+"Ambient with an i1 Display Pro / ColorMunki Display: the CCSS chosen in Display (and a loaded .ccmx) also correct the lux readings. Argyll and HCFR for Windows use only the meter's factory ambient calibration." = "Ambiente con un i1 Display Pro / ColorMunki Display: el CCSS elegido en Pantalla (y un .ccmx cargado) también corrigen las lecturas en lux. Argyll y HCFR para Windows solo usan la calibración de ambiente de fábrica de la sonda.";
+"Raspberry Pi address: " = "Dirección de la Raspberry Pi: ";
+"automatic" = "automática";
+"IP address (empty = automatic)" = "Dirección IP (vacía = automática)";

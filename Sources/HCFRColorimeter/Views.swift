@@ -293,7 +293,7 @@ private struct GeneratorMenu: View {
     }
 
     private var piAddressTitle: String {
-        "Raspberry Pi address: " + (session.piAddress.isEmpty ? "automatic" : session.piAddress) + "…"
+        tr("Raspberry Pi address: ") + (session.piAddress.isEmpty ? tr("automatic") : session.piAddress) + "…"
     }
 
     private var label: String {

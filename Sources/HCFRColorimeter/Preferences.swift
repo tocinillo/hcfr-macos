@@ -238,6 +238,20 @@ struct GeneralPage: View {
                 Text("Latency: wait after showing each pattern before reading (also in the Generator menu). Frame insertion shows a full-field gray frame every N patterns, so the ABL / dynamic dimming of the display does not drift during long runs.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Raspberry Pi (PGenerator)") {
+                HStack {
+                    TextField("IP address (empty = automatic)", text: $session.piAddressDraft)
+                        .frame(width: 200)
+                        .onAppear { session.piAddressDraft = session.piAddress }
+                    Button("Connect") { session.usePi(at: session.piAddressDraft) }
+                        .disabled(session.activity != .idle)
+                    if session.patternSource == .raspberryPi, let s = session.piStatus {
+                        Text("Raspberry Pi connected: \(s)").font(.caption).foregroundStyle(.green)
+                    }
+                }
+                Text("IP address of the Raspberry Pi running PGenerator (for example 192.168.1.50). Leave it empty to find the Pi automatically on the local network.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Language") {
                 Picker("Interface language", selection: $language.value) {
                     ForEach(AppLanguage.allCases) { Text($0.title).tag($0) }
@@ -298,6 +312,10 @@ struct SensorPage: View {
                 }
                 if session.activeReadingType != .display && session.meter != nil {
                     Text("In use: \(session.activeReadingType.title)\(session.activeReadingType == .ambient ? " — values in lux" : "")")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                if session.appPrefs.readingType == .ambient {
+                    Text("Ambient with an i1 Display Pro / ColorMunki Display: the CCSS chosen in Display (and a loaded .ccmx) also correct the lux readings. Argyll and HCFR for Windows use only the meter's factory ambient calibration.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Picker("Observer", selection: $session.appPrefs.observer) {

@@ -970,6 +970,23 @@ final class Session: ObservableObject {
         if patternSource == .raspberryPi { connectPi() }
     }
 
+    /// Preferences → PGenerator: uses the Pi at this address (or found automatically) as the
+    /// pattern generator and connects now.
+    func usePi(at text: String) {
+        let a = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard a.isEmpty || PGeneratorClient.isValidIPv4(a) else {
+            errorMessage = PGeneratorError.badAddress(a).localizedDescription
+            return
+        }
+        if a != piAddress {
+            piAddress = a
+            defaults.set(a, forKey: "piAddress")
+            dropPi(goodbye: true)
+        }
+        patternSource = .raspberryPi
+        if pi == nil { connectPi() }
+    }
+
     /// Display used as pattern generator, nil for the manual (DVD) generator or if it was disconnected.
     var patternScreen: NSScreen? {
         guard case .display(let id) = patternSource else { return nil }
