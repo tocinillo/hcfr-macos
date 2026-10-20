@@ -209,6 +209,9 @@ final class Session: ObservableObject {
     /// Generator → "Raspberry Pi address…" dialog: shown, and the text being typed.
     /// (Kept here rather than in the view: @State is a macro in the macOS 27 SDK that needs Xcode.)
     @Published var editingPiAddress = false
+    /// Generator → "Custom patch size…" dialog: shown, and the % being typed.
+    @Published var editingPatchSize = false
+    @Published var patchSizeDraft = ""
     @Published var piAddressDraft = ""
     private var pi: PGeneratorClient?
     private var piConnecting: Task<PGeneratorClient, Error>?
@@ -968,6 +971,17 @@ final class Session: ObservableObject {
         defaults.set(a, forKey: "piAddress")
         dropPi(goodbye: true)
         if patternSource == .raspberryPi { connectPi() }
+    }
+
+    /// Generator → Custom patch size: any share of the screen area from 1 to 100%.
+    func setPatchSize(_ text: String) {
+        let t = text.replacingOccurrences(of: "%", with: "").replacingOccurrences(of: ",", with: ".")
+            .trimmingCharacters(in: .whitespaces)
+        guard let v = Double(t), v >= 1, v <= 100 else {
+            errorMessage = tr("The patch size must be a number from 1 to 100 (% of the screen area).")
+            return
+        }
+        patternArea = (v * 10).rounded() / 10
     }
 
     /// Preferences → PGenerator: uses the Pi at this address (or found automatically) as the

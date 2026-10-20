@@ -266,9 +266,16 @@ private struct GeneratorMenu: View {
                 }
                 Picker("Patch size", selection: $session.patternArea) {
                     Text("Full field").tag(100.0)
-                    Text("Window 50%").tag(50.0)
-                    Text("Window 25%").tag(25.0)
-                    Text("Window 10%").tag(10.0)
+                    ForEach(Self.patchSizes, id: \.self) { v in
+                        Text(Self.windowTitle(v)).tag(v)
+                    }
+                    if !Self.patchSizes.contains(session.patternArea) && session.patternArea != 100 {
+                        Text(Self.windowTitle(session.patternArea)).tag(session.patternArea)
+                    }
+                }
+                Button("Custom patch size…") {
+                    session.patchSizeDraft = Reference.label(session.patternArea)
+                    session.editingPatchSize = true
                 }
                 Picker("Wait before reading", selection: $session.settleSeconds) {
                     ForEach([0.5, 1.0, 1.5, 2.0, 3.0], id: \.self) { Text(String(format: "%.1f s", $0)).tag($0) }
@@ -282,6 +289,13 @@ private struct GeneratorMenu: View {
             .help("Where the patterns come from: your DVD / external generator (the app asks for each one), a Raspberry Pi running PGenerator on your network, or a display connected to this Mac (the app shows each pattern full screen)")
         }
         .padding(.leading, 4)
+        .alert("Custom patch size", isPresented: $session.editingPatchSize) {
+            TextField("%", text: $session.patchSizeDraft)
+            Button("OK") { session.setPatchSize(session.patchSizeDraft) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Share of the screen area covered by the patch, from 1 to 100% (100 = full field). Used by the Raspberry Pi and by the displays of this Mac.")
+        }
         .alert("Raspberry Pi address", isPresented: $session.editingPiAddress) {
             TextField("Automatic", text: $session.piAddressDraft)
             Button("OK") { session.setPiAddress(session.piAddressDraft) }
@@ -291,6 +305,10 @@ private struct GeneratorMenu: View {
             Text("IP address of the Raspberry Pi running PGenerator (for example 192.168.1.50). Leave it empty to find the Pi automatically on the local network.")
         }
     }
+
+    static let patchSizes: [Double] = [75, 50, 25, 18, 10, 5, 2]
+
+    static func windowTitle(_ v: Double) -> String { tr("Window") + " " + Reference.label(v) + "%" }
 
     private var piAddressTitle: String {
         tr("Raspberry Pi address: ") + (session.piAddress.isEmpty ? tr("automatic") : session.piAddress) + "…"
