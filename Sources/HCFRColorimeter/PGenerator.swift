@@ -229,7 +229,10 @@ final class PGeneratorClient: @unchecked Sendable {
         var buf = [UInt8](repeating: 0, count: 1024)
         let deadline = Date().addingTimeInterval(timeout)
         while !reply.ends(with: Self.terminator) {
-            let left = deadline.timeIntervalSinceNow
+            // Once part of the answer has arrived, a short pause ends it: some PGenerator
+            // versions (PGenerator+) don't send the end bytes, and waiting for them until the
+            // timeout made every command take seconds
+            let left = reply.isEmpty ? deadline.timeIntervalSinceNow : min(deadline.timeIntervalSinceNow, 0.15)
             guard left > 0, Self.waitReadable(fd, seconds: left) else {
                 // Some PGenerator versions may not end every answer: accept what arrived
                 if !reply.isEmpty { break }
