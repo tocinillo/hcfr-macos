@@ -546,10 +546,10 @@ final class Session: ObservableObject {
                 let found = try await ArgyllMeter.listPorts(knownSerials: serials,
                                                             skipIdentify: Set([connectedPortName].compactMap { $0 }))
                 for p in found { if let sn = p.serial, !sn.isEmpty { serials[p.name] = sn } }
-                let changed = found != ports
-                ports = found
+                let changed = found != ports.filter { !$0.isSimulated }
+                ports = found + [MeterPort.simulated]
                 if let sel = selectedPort {
-                    selectedPort = found.first { $0 == sel }   // keep selection, with its serial
+                    selectedPort = ports.first { $0 == sel }   // keep selection, with its serial
                 }
                 if found.isEmpty {
                     if meter == nil { status = "No colorimeter found. Plug one in — it will be detected automatically." }
@@ -1151,6 +1151,7 @@ final class Session: ObservableObject {
                 let started = Date()
                 let second = simultaneous ? meter2 : nil
                 async let other: XYZ? = Self.readIfPresent(second)
+                if meter.isSimulated { try await meter.setStimulus((pattern ?? shownPattern)?.rgb ?? [1, 1, 1]) }
                 let xyz = appPrefs.correct(try await meter.read())
                 lastSecondXYZ = await other
                 lastSpectrum = meter.lastSpectrum

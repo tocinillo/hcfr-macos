@@ -37,6 +37,9 @@
  *   hires <0|1>   -> high resolution spectral mode (i1Pro, ColorMunki); "@OK"
  *   adapt <0|1>   -> HCFR's low-light averaging (off by default, as HCFR): up to 5 readings
  *                    below 10 cd/m²; "@OK"
+ *   open 1000     -> simulated sensor (HCFR's "Simulated sensor"): no hardware; "stim <r> <g> <b>"
+ *                    (0…1 signal of the pattern shown) sets what the next "read" returns, from a
+ *                    model display (Rec.709 primaries, D65 at 120 cd/m², gamma about 2.3)
  *   quit
  *
  * Argyll diagnostic messages go to stderr.
@@ -511,6 +514,47 @@ static void cmd_read(void) {
 	reply("XYZ %.6f %.6f %.6f", X / count, Y / count, Z / count);
 }
 
+/* ---- Simulated sensor (HCFR's CSimulatedSensor): a display model, no instrument ---- */
+#define SIM_PORT 1000
+static int g_sim = 0;
+static double g_stim[3] = { 0, 0, 0 };
+
+static double sim_noise(void) {
+	return ((double)rand() / RAND_MAX - 0.5) * 0.004;
+}
+
+static void sim_read(void) {
+	/* Rec.709 → XYZ (D65), channel gammas a little different and a small black level, as a real display */
+	static const double m[3][3] = { { 0.4124, 0.3576, 0.1805 }, { 0.2126, 0.7152, 0.0722 }, { 0.0193, 0.1192, 0.9505 } };
+	static const double gam[3] = { 2.32, 2.28, 2.36 }, gain[3] = { 1.02, 1.0, 0.97 };
+	double lin[3], xyz[3];
+	for (int c = 0; c < 3; c++) {
+		double v = g_stim[c] < 0 ? 0 : g_stim[c] > 1 ? 1 : g_stim[c];
+		lin[c] = gain[c] * pow(v, gam[c]) * 120.0;
+	}
+	for (int r = 0; r < 3; r++) {
+		xyz[r] = 0.05 * (r == 1 ? 1.0 : r == 0 ? 0.95 : 1.09);
+		for (int c = 0; c < 3; c++) xyz[r] += m[r][c] * lin[c];
+		xyz[r] *= 1 + sim_noise();
+	}
+	reply("XYZ %f %f %f", xyz[0], xyz[1], xyz[2]);
+}
+
+/* Commands of the simulated sensor; returns 1 when handled */
+static int sim_command(const char *cmd, const char *line) {
+	if (strcmp(cmd, "read") == 0)          { sim_read(); return 1; }
+	if (strcmp(cmd, "stim") == 0)          { sscanf(line, "%*s %lf %lf %lf", &g_stim[0], &g_stim[1], &g_stim[2]); reply("OK"); return 1; }
+	if (strcmp(cmd, "types") == 0)         { reply("TYPE 0\tSimulated display\t0\tbuiltin\trefresh=0"); reply("OK"); return 1; }
+	if (strcmp(cmd, "caps") == 0)          { reply("CAPS tele=0 ambient=0 hires=0 observer=0 itime=0"); return 1; }
+	if (strcmp(cmd, "observers") == 0)     { reply("OK"); return 1; }
+	if (strcmp(cmd, "itime") == 0)         { reply("ITIME 0"); return 1; }
+	if (strcmp(cmd, "pos") == 0)           { reply("POS ok"); return 1; }
+	if (strcmp(cmd, "cal") == 0 || strcmp(cmd, "settype") == 0 || strcmp(cmd, "rtype") == 0 || strcmp(cmd, "obs") == 0
+	    || strcmp(cmd, "hires") == 0 || strcmp(cmd, "adapt") == 0 || strcmp(cmd, "diffcheck") == 0
+	    || strcmp(cmd, "highres") == 0) { reply("OK"); return 1; }
+	return 0;
+}
+
 int main(int argc, char *argv[]) {
 	char line[256];
 
@@ -525,6 +569,14 @@ int main(int argc, char *argv[]) {
 		char cmd[32] = "", arg2[8] = "crt";
 		int arg1 = 0;
 		sscanf(line, "%31s %d %7s", cmd, &arg1, arg2);
+		if (strcmp(cmd, "open") == 0 && arg1 == SIM_PORT) {
+			if (g_it != NULL) { g_it->del(g_it); g_it = NULL; }
+			g_sim = 1;
+			reply("OPENED Simulated sensor\tSimulated display\t1\tSIM-0001\t0");
+			continue;
+		}
+		if (strcmp(cmd, "open") == 0) g_sim = 0;
+		if (g_sim && sim_command(cmd, line)) continue;
 		if (strcmp(cmd, "caps") == 0)           { cmd_caps(); continue; }
 		if (strcmp(cmd, "observers") == 0)      { cmd_observers(); continue; }
 		if (strcmp(cmd, "rtype") == 0)          { cmd_rtype(arg1); continue; }

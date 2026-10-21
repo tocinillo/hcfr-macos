@@ -502,7 +502,7 @@ private struct SensorPanel: View {
             // 1) Colorimeter
             HStack(spacing: 6) {
                 Circle().fill(session.meter != nil ? .green : .red).frame(width: 9, height: 9)
-                if session.ports.count > 1 {
+                if !session.ports.isEmpty {
                     Picker("", selection: Binding(get: { session.selectedPort }, set: { session.choosePort($0) })) {
                         ForEach(session.ports) { Text($0.displayName).tag(MeterPort?.some($0)) }
                     }

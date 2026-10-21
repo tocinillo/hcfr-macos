@@ -46,6 +46,10 @@ struct MeterPort: Identifiable, Hashable {
     }
 
     static func == (a: MeterPort, b: MeterPort) -> Bool { a.name == b.name }
+
+    /// HCFR's "Simulated sensor": a model display in the meter helper, for training and demos.
+    static let simulated = MeterPort(index: 1000, name: "Simulated sensor")
+    var isSimulated: Bool { index == 1000 }
     func hash(into h: inout Hasher) { h.combine(name) }
 }
 
@@ -399,6 +403,15 @@ final class ArgyllMeter {
 
     /// Spectrum of the last reading (spectral meters only).
     private(set) var lastSpectrum: Spectrum?
+
+    var isSimulated: Bool { name == "Simulated sensor" }
+
+    /// Simulated sensor: the signal (0…1 per channel) of the pattern on screen, which the next
+    /// reading returns through the model display.
+    func setStimulus(_ rgb: [Double]) async throws {
+        helper.send(String(format: "stim %.6f %.6f %.6f", rgb[0], rgb[1], rgb[2]))
+        _ = try await helper.nextLine()
+    }
 
     func read() async throws -> XYZ {
         helper.send("read")
