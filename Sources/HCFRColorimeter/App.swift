@@ -94,7 +94,7 @@ enum AboutPanel {
     /// The app's version (Info.plist, from the VERSION file); the fallback is for `swift run`.
     static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.1"
     /// Public repository with this program's complete source code (GPL v2 requirement).
-    static let sourceURL = "https://github.com/salondigital/hcfr-macos"
+    static let sourceURL = "https://github.com/tocinillo/hcfr-macos"
 
     static func show() {
         let body = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)

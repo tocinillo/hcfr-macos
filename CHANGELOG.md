@@ -1,6 +1,6 @@
 # Changes
 
-Each version has its DMG in [Releases](https://github.com/salondigital/hcfr-macos/releases).
+Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
 ## 1.3.1
 

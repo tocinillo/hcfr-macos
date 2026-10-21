@@ -16,8 +16,8 @@ enum HelpLinks {
     static let install = URL(string: "https://www.argyllcms.com/doc/Installing_OSX.html")!
     /// "Support": the HCFR thread at AVS Forum, as HCFR for Windows.
     static let support = URL(string: "https://www.avsforum.com/threads/hcfr-open-source-projector-display-calibration-software.1393853/")!
-    static let releasesAPI = URL(string: "https://api.github.com/repos/salondigital/hcfr-macos/releases/latest")!
-    static let tagsAPI = URL(string: "https://api.github.com/repos/salondigital/hcfr-macos/tags")!
+    static let releasesAPI = URL(string: "https://api.github.com/repos/tocinillo/hcfr-macos/releases/latest")!
+    static let tagsAPI = URL(string: "https://api.github.com/repos/tocinillo/hcfr-macos/tags")!
     static let releases = URL(string: AboutPanel.sourceURL + "/releases")!
 
     static func open(_ url: URL) { NSWorkspace.shared.open(url) }
