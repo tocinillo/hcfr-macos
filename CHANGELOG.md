@@ -2,6 +2,12 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.5
+
+- File menu: Save Project, Save Project As… (⇧⌘S), Compare with Project, the exports and the
+  PDF report were missing from the menu since 1.3.2 (the project windows made macOS drop that
+  menu group). They are back.
+
 ## 1.3.4
 
 - **Measure the selected column once**: Measure → Measure Selected Column (⌘R) or the "Once"
