@@ -21,7 +21,8 @@ extension Session {
 
     private static func num(_ v: Double?) -> String {
         guard let v, v.isFinite else { return String(format: "%f", 0.0) }
-        return String(format: "%f", Double(Float(v)))
+        let f = Double(Float(v))
+        return String(format: "%f", abs(f) < 5e-7 ? 0 : f)   // no "-0.000000"
     }
 
     private var generatorName: String {
