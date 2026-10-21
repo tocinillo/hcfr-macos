@@ -162,6 +162,11 @@ final class Session: ObservableObject {
     @Published var userCCName = ""
     /// Another project compared with this one (HCFR's data reference): "dE / ref" and "xy / ref" rows.
     @Published var refData: ReferenceData?
+    /// This window's project is the reference of the others (File → Set as Reference Project).
+    @Published var isReferenceProject = false
+    /// The open project windows (for the reference project).
+    @MainActor static var open: [Session] { openSessions.allObjects }
+    @MainActor private static let openSessions = NSHashTable<Session>.weakObjects()
     /// Graph scales and display options.
     @Published var graphOptions = GraphOptions() {
         didSet { if let d = try? JSONEncoder().encode(graphOptions) { defaults.set(d, forKey: "graphOptions") } }
@@ -298,6 +303,7 @@ final class Session: ObservableObject {
     var connectedPortName: String?
 
     init() {
+        Session.openSessions.add(self)
         standard = defaults.string(forKey: "standard").flatMap(ColorStandard.init(rawValue:)) ?? .sdtv
         white = defaults.string(forKey: "white").flatMap(WhitePoint.init(rawValue:)) ?? .d65
         gamma = defaults.object(forKey: "gamma") as? Double ?? 2.3

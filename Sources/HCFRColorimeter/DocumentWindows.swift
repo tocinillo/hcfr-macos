@@ -40,6 +40,7 @@ struct DocumentWindow: View {
             .frame(minWidth: 1180, minHeight: 680)
             .background(WindowTabber())
             .onAppear {
+                if let (d, owner) = ProjectReference.current, owner !== session { session.refData = d }
                 guard let r = request, let p = r.path else { return }
                 let url = URL(fileURLWithPath: p)
                 session.openProject(url)

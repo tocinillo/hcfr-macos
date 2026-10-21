@@ -53,6 +53,10 @@ struct ColorimeterApp: App {
                 Button("Compare with Project…") { s.chooseReferenceProject() }
                 Button("Stop Comparing") { s.refData = nil }
                     .disabled(s.refData == nil)
+                Button(s.isReferenceProject ? "Update Reference Project" : "Set as Reference Project") { s.setAsReferenceProject() }
+                    .disabled(!s.hasMeasurements)
+                Button("Clear Reference Project") { s.clearReferenceProject() }
+                    .disabled(ProjectReference.current == nil)
                 Divider()
                 Button("Export Measurements (CSV)…") { s.exportCSV() }
                     .keyboardShortcut("e", modifiers: [.command, .shift])
@@ -128,7 +132,7 @@ struct ColorimeterApp: App {
 
 enum AboutPanel {
     /// The app's version (Info.plist, from the VERSION file); the fallback is for `swift run`.
-    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.5"
+    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.6"
     /// Public repository with this program's complete source code (GPL v2 requirement).
     static let sourceURL = "https://github.com/tocinillo/hcfr-macos"
 

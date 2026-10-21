@@ -2,6 +2,13 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.6
+
+- **Reference project** (HCFR for Windows' "Set as reference"): File → Set as Reference Project
+  makes the measures of the window in front the reference of every other open project (and of
+  the ones opened later), which show the dE / ref and xy / ref rows and the compared curves.
+  Update Reference Project takes its new measures; Clear Reference Project removes it.
+
 ## 1.3.5
 
 - File menu: Save Project, Save Project As… (⇧⌘S), Compare with Project, the exports and the

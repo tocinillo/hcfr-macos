@@ -11,8 +11,15 @@
 import AppKit
 
 /// Measurements of another project, compared column by column with the current ones.
+/// The reference project set with File → Set as Reference Project, for the windows opened later.
+enum ProjectReference {
+    @MainActor static var current: (ReferenceData, Session)?
+}
+
 struct ReferenceData {
-    let name: String
+    var name: String
+
+    func renamed(_ n: String) -> ReferenceData { var c = self; c.name = n; return c }
     var gray: [Double: XYZ] = [:]
     var colors: [PatchColor: XYZ] = [:]
     var series: [MeasureView: [Int: XYZ]] = [:]
@@ -86,6 +93,40 @@ extension Session {
             status = "Comparing with \(url.lastPathComponent): rows dE / ref and xy / ref"
         } catch {
             errorMessage = "Could not open \(url.lastPathComponent). It is not an HCFR Colorimeter project."
+        }
+    }
+
+    // MARK: - Reference project (HCFR for Windows: "Set as reference" on an open document)
+
+    /// File → "Set as Reference Project": the measures of the window in front become the
+    /// reference of every other open project window (and of the ones opened later), which show
+    /// the dE / ref and xy / ref rows against it, as with Compare with Project.
+    func setAsReferenceProject() {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("HCFR reference \(UUID().uuidString).hcfrex")
+        saveProject(copyTo: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        guard var d = try? ReferenceData.load(url) else {
+            errorMessage = "The reference project could not be read."
+            return
+        }
+        d = d.renamed(projectName)
+        ProjectReference.current = (d, self)
+        isReferenceProject = true
+        for s in Session.open where s !== self {
+            s.isReferenceProject = false
+            s.refData = d
+            s.status = "Comparing with \(projectName): rows dE / ref and xy / ref"
+        }
+        status = "Reference project: \(projectName)"
+    }
+
+    /// File → "Clear Reference Project".
+    func clearReferenceProject() {
+        guard let (d, _) = ProjectReference.current else { return }
+        ProjectReference.current = nil
+        for s in Session.open {
+            s.isReferenceProject = false
+            if s.refData?.name == d.name { s.refData = nil }
         }
     }
 

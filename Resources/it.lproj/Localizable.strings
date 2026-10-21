@@ -802,3 +802,9 @@
 "One reading of the selected column (⌘R)" = "Una lettura della colonna selezionata (⌘R)";
 "New Tab" = "Nuova scheda";
 "Open Project in New Tab…" = "Apri progetto in una nuova scheda…";
+
+/* 1.3.6 */
+"Set as Reference Project" = "Imposta come progetto di riferimento";
+"Update Reference Project" = "Aggiorna il progetto di riferimento";
+"Clear Reference Project" = "Rimuovi il progetto di riferimento";
+"The reference project could not be read." = "Impossibile leggere il progetto di riferimento.";
