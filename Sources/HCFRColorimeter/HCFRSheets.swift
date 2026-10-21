@@ -110,11 +110,12 @@ extension Session {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         let base = url.pathExtension.lowercased() == "csv" ? url.deletingPathExtension() : url
         do {
-            for (suffix, text) in hcfrSheets() {
+            let chosen = appPrefs.exportSheets.isEmpty ? ["GrayScaleSheet"] : appPrefs.exportSheets
+            for (suffix, text) in hcfrSheets() where chosen.contains(suffix) {
                 let file = base.deletingLastPathComponent().appendingPathComponent(base.lastPathComponent + "." + suffix + ".csv")
                 try text.write(to: file, atomically: true, encoding: .utf8)
             }
-            status = "Exported: \(base.lastPathComponent).GrayScaleSheet.csv and the other HCFR sheets"
+            status = "Exported: \(base.lastPathComponent) (\(chosen.count) HCFR sheets)"
         } catch {
             errorMessage = "Could not export: \(error.localizedDescription)"
         }

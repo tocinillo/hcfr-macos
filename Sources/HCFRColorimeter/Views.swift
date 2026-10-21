@@ -89,6 +89,9 @@ struct ContentView: View {
         }
         .padding(8)
         .background(Color(nsColor: .windowBackgroundColor))
+        .overlay {
+            if session.wizardShown { WizardView(session: session, w: session.wizardModel) }
+        }
         .safeAreaInset(edge: .bottom) {
             HStack {
                 if session.busy || session.scanning { ProgressView().controlSize(.small) }
@@ -224,6 +227,10 @@ private struct ActionsPanel: View {
                         .disabled(session.busy || session.meter == nil)
                         .help("Choose the test: grey scale (\(Reference.label(session.levels.first ?? 10)) to 100 IRE, \(session.levels.count) steps), near black, near white, primary and secondary colors, saturations, color checker, contrast or a free measure")
                 }
+
+                ActionButton(title: "Wizard", symbol: "wand.and.stars", tint: .purple) { session.openWizard() }
+                    .disabled(session.activity != .idle)
+                    .help("Calibration wizard: a guided workflow from connecting the meter to the final report")
 
                 GeneratorMenu(session: session)
             }

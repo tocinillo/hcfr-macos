@@ -192,6 +192,20 @@ struct AdvancedPage: View {
                 Text(session.luxStatus ?? "The luxmeter is read on its serial port (USB adapter: /dev/cu.usbserial…) during every reading; a Lux row is added to the tables.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Export HCFR sheets (CSV)") {
+                ForEach([("GrayScaleSheet", "Gray scale"), ("PrimariesSheet", "Primaries and secondaries"),
+                         ("CCSheet", "Color Checker"), ("SpectralSheet", "Spectra"), ("GeneralSheet", "General information")],
+                        id: \.0) { item in
+                    Toggle(tr(item.1) + "  (.\(item.0).csv)", isOn: Binding(
+                        get: { session.appPrefs.exportSheets.contains(item.0) },
+                        set: { on in
+                            session.appPrefs.exportSheets.removeAll { $0 == item.0 }
+                            if on { session.appPrefs.exportSheets.append(item.0) }
+                        }))
+                }
+                Text("Files written by File → Export HCFR sheets (CSV)…, as HCFR for Windows' export. For PCG and other gamma tools only the gray scale is needed.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Measure launch") {
                 Toggle("Confirmation message", isOn: $session.appPrefs.confirmMeasures)
                 Text("Asks \"Run … measures?\" before every measurement run.").font(.caption).foregroundStyle(.secondary)

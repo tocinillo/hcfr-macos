@@ -129,6 +129,9 @@ struct AppPrefs: Codable, Equatable {
     /// "RealTime display of measures": the selected column follows each step while measuring.
     var realTimeDisplay = true
 
+    /// File → Export HCFR sheets: which of HCFR's five files are written (Advanced preferences).
+    var exportSheets = ["GeneralSheet", "GrayScaleSheet", "PrimariesSheet", "CCSheet", "SpectralSheet"]
+
     // Appearance → Charts
     var whiteCharts = false
     var saveChartsWhite = false

@@ -195,6 +195,11 @@ final class Session: ObservableObject {
     /// Second meter for simultaneous measures; its readings go to the compared data.
     @Published var meter2: ArgyllMeter?
     @Published var selectedPort2: MeterPort?
+    /// Calibration wizard (Wizard.swift): shown over the main window, its choices and results.
+    @Published var wizardShown = false
+    let wizardModel = WizardModel()
+    /// The wizard's measures don't ask "Run … measures?" (one run).
+    var wizardSkipConfirm = false
     @Published var simultaneous = false
     /// Column whose values are being edited (grid's right-click → Edit values…).
     @Published var editingMeasure: EditTarget?
@@ -288,6 +293,7 @@ final class Session: ObservableObject {
 
     /// "Measure launch: Confirmation message" (Advanced preferences).
     func confirmRun(_ message: String) async throws {
+        if wizardSkipConfirm { wizardSkipConfirm = false; return }
         guard appPrefs.confirmMeasures else { return }
         try await ask("On measure", message, style: .yesNo)
     }

@@ -27,6 +27,11 @@ struct ColorimeterApp: App {
             CommandGroup(replacing: .appInfo) {
                 Button("About HCFR Colorimeter") { AboutPanel.show() }
             }
+            CommandGroup(before: .newItem) {
+                Button("Calibration Wizard…") { session.openWizard() }
+                    .keyboardShortcut("w", modifiers: [.command, .shift])
+                Divider()
+            }
             CommandGroup(replacing: .newItem) {
                 Button("New Project") { session.confirmNewProject = true }
                     .keyboardShortcut("n")

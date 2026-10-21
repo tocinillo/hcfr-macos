@@ -184,6 +184,22 @@ enum Snapshot {
             }
             exit(0)
         }
+        if let wz = args.firstIndex(of: "--wizard"), wz + 1 < args.count, let n = Int(args[wz + 1]),
+           let step = WizardModel.Step(rawValue: n) {
+            // Development check of the wizard pages (with the sample readings)
+            let w = session.wizardModel
+            w.step = step
+            w.before = WizardSummary(session)
+            w.after = WizardSummary(session)
+            let view = WizardView(session: session, w: w).frame(width: 1040, height: 720)
+            let renderer = ImageRenderer(content: view)
+            renderer.scale = 1
+            if let img = renderer.nsImage, let tiff = img.tiffRepresentation,
+               let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
+                try? png.write(to: URL(fileURLWithPath: args[i + 1]))
+            }
+            exit(0)
+        }
         session.status = "Ready — Display: CRT (Hitachi CM2112MET, Diamond View 1772ie)"
         session.lastMeasure = Date()
         let view = ContentView(session: session, autoConnect: false).frame(width: args.contains("--small") ? 1180 : 1400, height: args.contains("--small") ? 680 : 900)
