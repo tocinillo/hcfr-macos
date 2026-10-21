@@ -1,11 +1,12 @@
-# Builds the app and its DMG on GitHub's Macs and publishes them as a Release.
-# Runs when a version tag is pushed (v1.3.1, v1.3.1.1, …): the tag must match the VERSION file.
-# The release notes are that version's section of CHANGELOG.md.
+# Builds the app and its DMG on GitHub's Macs and publishes them as a Release "v<VERSION>"
+# (the tag is created here) each time main changes; pushing the same version again replaces its
+# release. The release notes are that version's section of CHANGELOG.md.
 name: Release
 
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+    paths-ignore: ["**.md", ".gitattributes"]
   workflow_dispatch:
 
 permissions:
@@ -24,9 +25,6 @@ jobs:
         run: |
           V="$(tr -d ' \n' < VERSION)"
           echo "version=$V" >> "$GITHUB_OUTPUT"
-          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v$V" ]; then
-            echo "::error::Tag ${GITHUB_REF_NAME} does not match VERSION ($V)"; exit 1
-          fi
 
       - name: Build app and DMG
         run: bash make-dmg.sh
@@ -51,5 +49,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           V="${{ steps.v.outputs.version }}"
-          gh release delete "v$V" --yes 2>/dev/null || true
-          gh release create "v$V" "HCFR Colorimeter $V.dmg" --title "HCFR Colorimeter $V" --notes-file notes.md --latest
+          gh release delete "v$V" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "v$V" "HCFR Colorimeter $V.dmg" --target "$GITHUB_SHA" \
+            --title "HCFR Colorimeter $V" --notes-file notes.md --latest

@@ -167,6 +167,6 @@ HCFR's C++ code (`libHCFR/Color.cpp`, `Views/MainView.cpp`, `datasetdoc.cpp`, `E
 ## Versions and releases
 
 The version is in the `VERSION` file (e.g. `1.3.1`, then `1.3.1.1`, `1.3.1.2`… for each change)
-and each one is described in [CHANGELOG.md](CHANGELOG.md). Pushing a tag `v<version>` makes
+and each one is described in [CHANGELOG.md](CHANGELOG.md). Each change pushed to `main` makes
 GitHub build the app and its DMG on a Mac (`.github/workflows/release.yml`) and publish them in
-**Releases**.
+**Releases** as `v<version>`.
