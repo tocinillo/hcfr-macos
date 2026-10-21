@@ -97,9 +97,8 @@ extension Session {
                     let r = StepResult(level: level, xyz: xyz, whiteY: white, baseY: white ?? baseWhiteY,
                                        blackY: self.targetBlackY, ref: self.ref)
                     let rgb = ColorMath.rgb(xyz, ref: self.ref)
-                    let xy = xyz.xy
                     finish(true, "Measured \(Reference.label(level)) IRE", extra: [
-                        "level": level, "X": xyz.X, "Y": xyz.Y, "Z": xyz.Z, "x": xy.x, "y": xy.y,
+                        "level": level, "X": xyz.X, "Y": xyz.Y, "Z": xyz.Z, "x": xyz.x, "y": xyz.y,
                         "R": rgb[0], "G": rgb[1], "B": rgb[2],
                         "targetY": r.targetY ?? 0, "deltaE": r.deltaE ?? 0, "gamma": r.gamma ?? 0,
                         "whiteY": white ?? 0,
