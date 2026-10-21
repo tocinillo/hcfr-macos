@@ -191,7 +191,7 @@ enum Snapshot {
             w.step = step
             w.before = WizardSummary(session)
             w.after = WizardSummary(session)
-            let view = WizardView(session: session, w: w).frame(width: 1040, height: 720)
+            let view = WizardView(session: session, w: w, scrolls: false).frame(width: 1040, height: 720)
             let renderer = ImageRenderer(content: view)
             renderer.scale = 1
             if let img = renderer.nsImage, let tiff = img.tiffRepresentation,

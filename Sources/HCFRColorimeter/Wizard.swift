@@ -112,6 +112,8 @@ extension Session {
 struct WizardView: View {
     @ObservedObject var session: Session
     @ObservedObject var w: WizardModel
+    /// Development snapshots: ImageRenderer doesn't draw scroll views.
+    var scrolls = true
 
     var body: some View {
         ZStack {
@@ -120,10 +122,10 @@ struct WizardView: View {
                 WizardSidebar(w: w)
                 Divider()
                 VStack(spacing: 0) {
-                    ScrollView {
-                        WizardStepView(session: session, w: w)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(24)
+                    if scrolls {
+                        ScrollView { page }
+                    } else {
+                        page.frame(maxHeight: .infinity, alignment: .top)
                     }
                     Divider()
                     WizardFooter(session: session, w: w)
@@ -134,6 +136,12 @@ struct WizardView: View {
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .shadow(color: .black.opacity(0.35), radius: 30, y: 12)
         }
+    }
+
+    private var page: some View {
+        WizardStepView(session: session, w: w)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(24)
     }
 }
 
@@ -178,6 +186,7 @@ private struct WizardStepRow: View {
                 }
             }
             Text(tr(step.title)).font(on ? .callout.bold() : .callout).foregroundStyle(on ? .primary : .secondary)
+                .lineLimit(1).minimumScaleFactor(0.8)
             Spacer()
         }
         .padding(.vertical, 5).padding(.horizontal, 6)
