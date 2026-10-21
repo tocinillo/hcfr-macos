@@ -74,22 +74,33 @@ enum XLSXWriter {
     /// ZIP with stored (uncompressed) entries.
     static func zip(_ files: [(String, Data)]) -> Data {
         var out = Data(), central = Data()
-        func le16(_ v: Int) -> [UInt8] { [UInt8(v & 0xFF), UInt8((v >> 8) & 0xFF)] }
-        func le32(_ v: UInt32) -> [UInt8] { MadVRClient.le(v) }
+        func u16(_ d: inout Data, _ v: Int) { d.append(UInt8(v & 0xFF)); d.append(UInt8((v >> 8) & 0xFF)) }
+        func u32(_ d: inout Data, _ v: UInt32) { for k in 0..<4 { d.append(UInt8((v >> (8 * UInt32(k))) & 0xFF)) } }
         for (name, data) in files {
-            let n = Array(name.utf8), crc = MadVRClient.crc32(Array(data)), size = UInt32(data.count)
+            let n = Array(name.utf8)
+            let crc = MadVRClient.crc32(Array(data))
+            let size = UInt32(data.count)
             let offset = UInt32(out.count)
-            out.append(contentsOf: [0x50, 0x4B, 0x03, 0x04] + le16(20) + le16(0x0800) + le16(0) + le16(0) + le16(0x21)
-                       + le32(crc) + le32(size) + le32(size) + le16(n.count) + le16(0) + n)
+            // Local file header
+            out.append(contentsOf: [0x50, 0x4B, 0x03, 0x04])
+            u16(&out, 20); u16(&out, 0x0800); u16(&out, 0); u16(&out, 0); u16(&out, 0x21)
+            u32(&out, crc); u32(&out, size); u32(&out, size)
+            u16(&out, n.count); u16(&out, 0)
+            out.append(contentsOf: n)
             out.append(data)
-            central.append(contentsOf: [0x50, 0x4B, 0x01, 0x02] + le16(20) + le16(20) + le16(0x0800) + le16(0) + le16(0) + le16(0x21)
-                           + le32(crc) + le32(size) + le32(size) + le16(n.count) + le16(0) + le16(0) + le16(0) + le16(0)
-                           + le32(0) + le32(offset) + n)
+            // Central directory entry
+            central.append(contentsOf: [0x50, 0x4B, 0x01, 0x02])
+            u16(&central, 20); u16(&central, 20); u16(&central, 0x0800); u16(&central, 0); u16(&central, 0); u16(&central, 0x21)
+            u32(&central, crc); u32(&central, size); u32(&central, size)
+            u16(&central, n.count); u16(&central, 0); u16(&central, 0); u16(&central, 0); u16(&central, 0)
+            u32(&central, 0); u32(&central, offset)
+            central.append(contentsOf: n)
         }
         let cdOffset = UInt32(out.count)
         out.append(central)
-        out.append(contentsOf: [0x50, 0x4B, 0x05, 0x06] + le16(0) + le16(0) + le16(files.count) + le16(files.count)
-                   + le32(UInt32(central.count)) + le32(cdOffset) + le16(0))
+        out.append(contentsOf: [0x50, 0x4B, 0x05, 0x06])
+        u16(&out, 0); u16(&out, 0); u16(&out, files.count); u16(&out, files.count)
+        u32(&out, UInt32(central.count)); u32(&out, cdOffset); u16(&out, 0)
         return out
     }
 }

@@ -60,10 +60,10 @@ extension Session {
     var projectName: String { projectURL?.deletingPathExtension().lastPathComponent ?? "Untitled" }
 
     /// Save project: asks for a file the first time, then saves to the same file.
-    func saveProject(as saveAs: Bool = false) {
-        guard activity == .idle else { return }
-        var url = projectURL
-        if url == nil || saveAs {
+    func saveProject(as saveAs: Bool = false, copyTo: URL? = nil) {
+        guard activity == .idle || copyTo != nil else { return }
+        var url = copyTo ?? projectURL
+        if copyTo == nil && (url == nil || saveAs) {
             let panel = NSSavePanel()
             panel.title = "Save project"
             panel.allowedContentTypes = [.hcfrProject]
@@ -95,6 +95,7 @@ extension Session {
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             encoder.dateEncodingStrategy = .iso8601
             try encoder.encode(file).write(to: url, options: .atomic)
+            if copyTo != nil { return }   // a copy (Duplicate): this window keeps its own file
             projectURL = url
             isDirty = false
             NSDocumentController.shared.noteNewRecentDocumentURL(url)

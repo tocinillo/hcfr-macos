@@ -31,21 +31,64 @@ struct CCSSEntry: Codable, Hashable {
 }
 
 enum CCSSLibrary {
-    static let entries: [CCSSEntry] = {
-        var urls: [URL] = []
-        if let u = Bundle.main.url(forResource: "ccss-library", withExtension: "json") { urls.append(u) }
-        if let dir = MeterHelper.correctionsDataDir { urls.append(URL(fileURLWithPath: dir).appendingPathComponent("ccss-library.json")) }
-        for u in urls {
-            if let d = try? Data(contentsOf: u), let e = try? JSONDecoder().decode([CCSSEntry].self, from: d) { return e }
-        }
-        return []
-    }()
+    /// Kind of display, technology, brand and model of a CCSS, from its description
+    /// ("LG C3 (WRGB OLED) - JETI 1501 HiRes 2nm"), cached. nil for HCFR's own families.
+    static func entry(_ descriptor: String) -> CCSSEntry? { cache.entry(descriptor) }
 
-    static let byDescriptor: [String: CCSSEntry] = {
-        var d: [String: CCSSEntry] = [:]
-        for e in entries { d[e.descriptor] = e }
-        return d
-    }()
+    private final class Cache: @unchecked Sendable {
+        private var d: [String: CCSSEntry?] = [:]
+        private let lock = NSLock()
+        func entry(_ s: String) -> CCSSEntry? {
+            lock.lock(); defer { lock.unlock() }
+            if let e = d[s] { return e }
+            let e = CCSSLibrary.classify(s)
+            d[s] = e
+            return e
+        }
+    }
+    private static let cache = Cache()
+
+    /// Only CCSS of a display library: "<model> (<detail>) - <instrument>"; HCFR's families
+    /// ("CRT", "WLED Family 07Feb11"…) are not classified.
+    static func classify(_ d: String) -> CCSSEntry? {
+        guard d.contains(" - ") else { return nil }
+        let parts = d.components(separatedBy: " - ")
+        let name = parts[0].trimmingCharacters(in: .whitespaces)
+        let instrument = parts.dropFirst().joined(separator: " - ").trimmingCharacters(in: .whitespaces)
+        var model = name, detail = ""
+        if let open = name.firstIndex(of: "("), name.hasSuffix(")") {
+            model = String(name[..<open]).trimmingCharacters(in: .whitespaces)
+            detail = String(name[name.index(after: open)..<name.index(before: name.endIndex)])
+        }
+        let low = d.lowercased()
+        func has(_ k: String...) -> Bool { k.contains { low.contains($0) } }
+        let generic = ["CCFL", "RG Phosphor", "Wide Gamut CCFL", "PFS Phosphor", "RGB LED", "White LED", "Plasma", "Projector"].contains(model)
+        let brand = generic ? "Generic" : String(model.split(separator: " ").first ?? Substring(model))
+        let display: String
+        if has("projector", "hisense c2", "xgimi") { display = "Projectors" }
+        else if generic { display = "Generic families" }
+        else if has("macbook", "ipad", "surface", "thinkpad", "lenovo", "zbook", "laptop") { display = "Laptops & tablets" }
+        else if has("asus pa", "benq", "dell ultrasharp", "eizo", "fsi ", "hp dreamcolor", "nec ", "canon", "aeq kroma", "smallhd",
+                    "tvlogic", "sony bvm", "sony pvm", "boland", "lg 32ep950", "pro display xdr", "monitor") && !has("lg c8") {
+            display = "Monitors (pro / desktop)"
+        } else { display = "TVs" }
+        let tech: String
+        if display == "Projectors" {
+            tech = has("triple laser") || (has("rgb") && has("laser")) ? "RGB laser" : has("laser", "lazer") ? "Laser" : has("lamp") ? "Lamp" : "Projector (generic)"
+        } else if has("wrgb", "woled") { tech = "WOLED (WRGB OLED)" }
+        else if has("qd-oled") { tech = "QD-OLED" }
+        else if has("oled", "ipad pro 2024") { tech = "RGB OLED" }
+        else if has("mini") && has("rgb") { tech = "RGB Mini-LED" }
+        else if has("mini", "pa32ucg", "pa32ucx", "pro display xdr", "65xr90") { tech = "QD / Mini-LED" }
+        else if has("qd-led", "qd led", "ksf", "pfs") { tech = "QD / KSF-PFS LED" }
+        else if has("gb-r", "gb-led", "rgb led", "psr led") { tech = "GB-R / RGB LED" }
+        else if has("ccfl") { tech = "CCFL" }
+        else if has("plasma") { tech = "Plasma" }
+        else if has("phosphor") { tech = "Phosphor (CRT)" }
+        else { tech = "White LED LCD" }
+        return CCSSEntry(file: "", descriptor: d, display: display, technology: tech, brand: brand,
+                         model: model.hasPrefix("LG C8") ? "LG C8 / FSI XM" : model, detail: detail, instrument: instrument)
+    }
 
     /// Order of the first two levels of the tree.
     static let displayOrder = ["Projectors", "TVs", "Monitors (pro / desktop)", "Laptops & tablets", "Generic families"]
@@ -60,24 +103,40 @@ enum CCSSLibrary {
         }
     }
 
-    /// File → copied to the user's correction folder; the meter lists it after reconnecting.
+    /// Display → "Load display library from a folder…" / "Import CCSS / CCMX files…": copies the
+    /// files (a folder: every .ccss / .ccmx inside, subfolders included) to the user's correction
+    /// folder, which the meter reads when it connects.
     @MainActor
-    static func importFiles(session: Session) {
+    static func importFiles(session: Session, folder: Bool) {
         let panel = NSOpenPanel()
-        panel.title = tr("Import CCSS / CCMX files")
-        panel.allowsMultipleSelection = true
-        panel.allowedContentTypes = ["ccss", "ccmx"].compactMap { UTType(filenameExtension: $0) }
+        panel.title = tr(folder ? "Choose the folder of your CCSS files" : "Import CCSS / CCMX files")
+        panel.canChooseDirectories = folder
+        panel.canChooseFiles = !folder
+        panel.allowsMultipleSelection = !folder
+        if !folder { panel.allowedContentTypes = ["ccss", "ccmx"].compactMap { UTType(filenameExtension: $0) } }
         guard panel.runModal() == .OK else { return }
-        let dir = Session.userCorrectionsDir
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        var n = 0
+        var sources: [URL] = []
+        let fm = FileManager.default
         for url in panel.urls {
-            let dest = dir.appendingPathComponent(url.lastPathComponent)
-            try? FileManager.default.removeItem(at: dest)
-            if (try? FileManager.default.copyItem(at: url, to: dest)) != nil { n += 1 }
+            if folder, let e = fm.enumerator(at: url, includingPropertiesForKeys: nil) {
+                for case let f as URL in e where ["ccss", "ccmx"].contains(f.pathExtension.lowercased()) { sources.append(f) }
+            } else {
+                sources.append(url)
+            }
         }
-        session.status = "Imported \(n) correction files: connect the colorimeter again to see them in Display"
+        let dir = Session.userCorrectionsDir
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        var n = 0
+        for url in sources {
+            let dest = dir.appendingPathComponent(url.lastPathComponent)
+            try? fm.removeItem(at: dest)
+            if (try? fm.copyItem(at: url, to: dest)) != nil { n += 1 }
+        }
+        if folder { UserDefaults.standard.set(panel.urls.first?.path, forKey: "ccssLibraryFolder") }
+        session.status = "Loaded \(n) correction files. Reconnecting the colorimeter to list them in Display…"
+        if session.meter != nil, session.activity == .idle { session.connect() }
     }
+}
 }
 
 /// Display type of the colorimeter as a tree: built-in types, HCFR's families, the display library
@@ -89,13 +148,13 @@ struct CorrectionMenu: View {
         Menu {
             if let m = session.meter {
                 let builtIn = m.corrections.filter { !$0.isCCSS }
-                let lib = m.corrections.filter { $0.isCCSS && CCSSLibrary.byDescriptor[$0.name] != nil }
-                let other = m.corrections.filter { $0.isCCSS && CCSSLibrary.byDescriptor[$0.name] == nil }
+                let lib = m.corrections.filter { $0.isCCSS && CCSSLibrary.entry($0.name) != nil }
+                let other = m.corrections.filter { $0.isCCSS && CCSSLibrary.entry($0.name) == nil }
                 Section("Meter types") { ForEach(builtIn) { item($0) } }
                 if !other.isEmpty { Section("HCFR and your files") { ForEach(other) { item($0) } } }
                 if !lib.isEmpty {
                     Section(tr("Display library") + " (\(lib.count))") {
-                        let pairs = lib.compactMap { c in CCSSLibrary.byDescriptor[c.name].map { LibItem(c: c, e: $0) } }
+                        let pairs = lib.compactMap { c in CCSSLibrary.entry(c.name).map { LibItem(c: c, e: $0) } }
                         ForEach(CCSSLibrary.sorted(Set(pairs.map(\.e.display)), by: CCSSLibrary.displayOrder), id: \.self) { disp in
                             Menu(tr(disp)) {
                                 let inDisp = pairs.filter { $0.e.display == disp }
@@ -118,9 +177,10 @@ struct CorrectionMenu: View {
                 Divider()
                 Button("Search display…") { session.correctionSearch = ""; session.searchingCorrection = true }
             }
-            Button("Import CCSS / CCMX files…") { CCSSLibrary.importFiles(session: session) }
+            Button("Load display library from a folder…") { CCSSLibrary.importFiles(session: session, folder: true) }
+            Button("Import CCSS / CCMX files…") { CCSSLibrary.importFiles(session: session, folder: false) }
         } label: {
-            Text(session.correction.map { CCSSLibrary.byDescriptor[$0.name]?.title ?? $0.name }
+            Text(session.correction.map { CCSSLibrary.entry($0.name)?.title ?? $0.name }
                  ?? tr(session.meter == nil ? "Connect a colorimeter" : "Choose the display"))
                 .lineLimit(1)
         }
@@ -161,8 +221,8 @@ private struct CorrectionSearch: View {
                     dismiss()
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(CCSSLibrary.byDescriptor[c.name]?.title ?? c.name)
-                        if let e = CCSSLibrary.byDescriptor[c.name] {
+                        Text(CCSSLibrary.entry(c.name)?.title ?? c.name)
+                        if let e = CCSSLibrary.entry(c.name) {
                             Text(tr(e.display) + " · " + tr(e.technology)).font(.caption).foregroundStyle(.secondary)
                         }
                     }
@@ -185,7 +245,7 @@ private struct CorrectionSearch: View {
         let words = text.lowercased().split(separator: " ").map(String.init)
         guard !words.isEmpty else { return all }
         return all.filter { c in
-            let e = CCSSLibrary.byDescriptor[c.name]
+            let e = CCSSLibrary.entry(c.name)
             let hay = ([c.name] + [e?.display, e?.technology].compactMap { $0 }.map(tr)).joined(separator: " ").lowercased()
             return words.allSatisfy { hay.contains($0) }
         }
