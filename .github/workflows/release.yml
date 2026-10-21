@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   release:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -26,8 +26,20 @@ jobs:
           V="$(tr -d ' \n' < VERSION)"
           echo "version=$V" >> "$GITHUB_OUTPUT"
 
+      - name: Toolchain
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_16*.app | sort -V | tail -1)" || true
+          swift --version
+
       - name: Build app and DMG
-        run: bash make-dmg.sh
+        run: |
+          set -o pipefail
+          if ! bash make-dmg.sh 2>&1 | tee build.log; then
+            # The errors as annotations, readable in the run summary
+            grep -E "error:|FAIL|Error|fatal" build.log | sort -u | head -40 | sed 's/^/::error::/'
+            for f in .build/meter/*.err; do [ -s "$f" ] && grep -m3 "error:" "$f" | sed "s|^|::error::$(basename "$f"): |"; done
+            exit 1
+          fi
 
       - name: Release notes
         run: |
