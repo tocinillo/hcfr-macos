@@ -15,6 +15,7 @@ import AppKit
 /// hcfr://measure-grayscale?points=33&out=/path/name
 ///     → measures the gray scale (no confirmation) and writes name.GrayScaleSheet.csv (HCFR's
 ///       export layout) and name.result.json ({"ok": true/false, "message": …}) when finished.
+/// hcfr://stop?out=/path/name → stops the measures in progress.
 extension Session {
     func handleAutomation(_ url: URL) {
         let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
@@ -66,6 +67,11 @@ extension Session {
                     }
                 }
             }
+
+        case "stop":
+            // The other program cancelled: stop the measures it asked for
+            if activity != .idle { stop() }
+            finish(true, "Stopped")
 
         default:
             finish(false, "Unknown request: \(url.host ?? "")")
