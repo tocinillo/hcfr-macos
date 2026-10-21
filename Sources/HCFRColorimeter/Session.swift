@@ -242,6 +242,9 @@ final class Session: ObservableObject {
     @Published var patchOffsetY = 0.0 { didSet { defaults.set(patchOffsetY, forKey: "patchOffsetY"); syncPatternWindow() } }
     @Published var blankOtherScreens = false { didSet { defaults.set(blankOtherScreens, forKey: "blankOtherScreens"); syncPatternWindow() } }
     @Published var editingPatchPosition = false
+    /// Graph → Scale → Values…: the graph being edited and its min / max.
+    @Published var editingScaleKey: String?
+    @Published var scaleDraft: [Double] = [0, 100]
     /// Sensor matrix → "Reference values typed by hand…".
     let manualReference = ManualReference()
     @Published var editingManualReference = false

@@ -38,6 +38,9 @@ struct InformationPanel: View {
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: 6).fill(.background))
         .overlay(RoundedRectangle(cornerRadius: 6).stroke(.separator))
+        .sheet(isPresented: Binding(get: { session.editingScaleKey != nil }, set: { if !$0 { session.editingScaleKey = nil } })) {
+            GraphScaleValuesSheet(session: session)
+        }
     }
 
     private var shownGraph: InfoGraph { session.infoGraph == .auto ? autoGraph : session.infoGraph }
@@ -206,7 +209,7 @@ struct LuminanceChart: View {
                 }
             }
             .chartXScale(domain: 0...100)
-            .chartYScale(domain: bottom...top)
+            .chartYScale(domain: session.graphOptions.y("luminance", bottom...top))
             .chartYAxis { AxisMarks(position: .leading) { v in
                 AxisGridLine().foregroundStyle(.teal.opacity(0.4))
                 AxisValueLabel {
@@ -266,6 +269,10 @@ struct GammaChart: View {
                         PointMark(x: .value("Level", p.level), y: .value("Gamma", p.value))
                             .symbol(.square).foregroundStyle(ChartInk.ink).symbolSize(22)
                     }
+                    if session.graphOptions.showAverage, let avg = session.averageGamma {
+                        RuleMark(y: .value("Average", avg))
+                            .foregroundStyle(.yellow.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 1, dash: [6, 4]))
+                    }
                     ForEach(measured) { p in
                         LineMark(x: .value("Level", p.level), y: .value("Gamma", p.value), series: .value("S", p.series))
                             .foregroundStyle(ChartInk.accent).lineStyle(StrokeStyle(lineWidth: 2))
@@ -273,8 +280,8 @@ struct GammaChart: View {
                     }
                 }
                 .chartXScale(domain: 0...100)
-                .chartYScale(domain: lo...hi)
-                .chartYAxis { AxisMarks(position: .leading, values: Array(stride(from: (lo * 10).rounded() / 10, through: hi, by: geo.size.height < 300 ? 0.2 : 0.1))) { v in
+                .chartYScale(domain: session.graphOptions.y("gamma", lo...hi))
+                .chartYAxis { AxisMarks(position: .leading, values: Array(stride(from: (session.graphOptions.y("gamma", lo...hi).lowerBound * 10).rounded() / 10, through: session.graphOptions.y("gamma", lo...hi).upperBound, by: geo.size.height < 300 ? 0.2 : 0.1))) { v in
                     AxisGridLine().foregroundStyle(.teal.opacity(0.4))
                     AxisValueLabel { Text(String(format: "%.1f", v.as(Double.self) ?? 0)).font(.caption.monospaced()).foregroundStyle(ChartInk.ink) }
                 } }
@@ -321,7 +328,7 @@ struct ColorTempChart: View {
                 }
             }
             .chartXScale(domain: 0...100)
-            .chartYScale(domain: lo...hi)
+            .chartYScale(domain: session.graphOptions.y("temperature", lo...hi))
             .chartYAxis { AxisMarks(position: .leading) { v in
                 AxisGridLine().foregroundStyle(.teal.opacity(0.4))
                 AxisValueLabel { Text("\(Int(v.as(Double.self) ?? 0))").foregroundStyle(ChartInk.ink) }
@@ -508,7 +515,7 @@ struct SaturationChart: View {
                 }
             }
             .chartXScale(domain: 0...100)
-            .chartYScale(domain: -maxAbs...maxAbs)
+            .chartYScale(domain: session.graphOptions.y("saturation", -maxAbs...maxAbs))
             .chartXAxis { AxisMarks(values: [0, 25, 50, 75, 100]) { v in
                 AxisGridLine().foregroundStyle(.teal.opacity(0.4))
                 AxisValueLabel { Text("\(v.as(Int.self) ?? 0)% Sat").font(.caption2.monospaced()).foregroundStyle(ChartInk.ink) }
@@ -568,6 +575,17 @@ struct GraphOptionsMenu: View {
     @ObservedObject var session: Session
     let graph: InfoGraph
 
+    /// Graphs with HCFR's Scale menu (zoom, shift, values).
+    private var scaleKeys: [String] {
+        switch graph {
+        case .luminanceGamma: return ["luminance", "gamma"]
+        case .rgbLevels, .rgbGamma, .targetRGBGamma, .auto: return ["rgb"]
+        case .colorTemperature: return ["temperature"]
+        case .saturationShift: return ["saturation"]
+        default: return []
+        }
+    }
+
     var body: some View {
         let o = $session.graphOptions
         Menu {
@@ -594,6 +612,12 @@ struct GraphOptionsMenu: View {
                 Toggle("CIE u'v' mode", isOn: $session.cieUV)
             case .saturationShift, .nearBlackWhite, .freeHistogram, .summary, .spectrum:
                 Text("No options for this graph")
+            }
+            if graph == .luminanceGamma {
+                Toggle("Display average gamma", isOn: o.showAverage)
+            }
+            ForEach(scaleKeys, id: \.self) { key in
+                Menu(tr("Scale") + " — " + tr(GraphScaleMenu.titles[key] ?? key)) { GraphScaleMenu(session: session, key: key) }
             }
         } label: {
             Image(systemName: "slider.horizontal.3")
@@ -689,5 +713,68 @@ struct SpectrumChart: View {
                 legend(pts.isEmpty ? "No spectrum: measure with a spectrophotometer (colorimeters give no spectrum)" : nil)
             }
         }
+    }
+}
+
+
+/// HCFR's Scale submenu of a graph: Auto-adjust, Zoom +, Zoom −, Shift Up, Shift Down, Values…
+struct GraphScaleMenu: View {
+    @ObservedObject var session: Session
+    let key: String
+    static let titles = ["luminance": "Luminance", "gamma": "Gamma", "rgb": "RGB", "temperature": "Temperature", "saturation": "Saturation"]
+
+    var body: some View {
+        Button("Auto-adjust") { session.graphOptions.customY[key] = nil }
+        Button("Zoom +") { change { r in let c = (r.lowerBound + r.upperBound) / 2, h = (r.upperBound - r.lowerBound) / 4; return (c - h)...(c + h) } }
+        Button("Zoom −") { change { r in let c = (r.lowerBound + r.upperBound) / 2, h = r.upperBound - r.lowerBound; return (c - h)...(c + h) } }
+        Button("Shift Up") { change { r in let d = (r.upperBound - r.lowerBound) / 5; return (r.lowerBound + d)...(r.upperBound + d) } }
+        Button("Shift Down") { change { r in let d = (r.upperBound - r.lowerBound) / 5; return (r.lowerBound - d)...(r.upperBound - d) } }
+        Button("Values…") {
+            let r = current
+            session.scaleDraft = [r.lowerBound, r.upperBound]
+            session.editingScaleKey = key
+        }
+    }
+
+    private var current: ClosedRange<Double> {
+        if let r = session.graphOptions.customY[key], r.count == 2 { return r[0]...r[1] }
+        return GraphScale.last[key] ?? 0...100
+    }
+
+    private func change(_ f: (ClosedRange<Double>) -> ClosedRange<Double>) {
+        let r = f(current)
+        session.graphOptions.customY[key] = [r.lowerBound, r.upperBound]
+    }
+}
+
+/// Scale → Values…: minimum and maximum of a graph's Y axis.
+struct GraphScaleValuesSheet: View {
+    @ObservedObject var session: Session
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(tr("Scale") + " — " + tr(GraphScaleMenu.titles[session.editingScaleKey ?? ""] ?? "")).font(.title3.bold())
+            HStack {
+                Text("Minimum").frame(width: 80, alignment: .leading)
+                TextField("", value: $session.scaleDraft[0], format: .number).frame(width: 100)
+            }
+            HStack {
+                Text("Maximum").frame(width: 80, alignment: .leading)
+                TextField("", value: $session.scaleDraft[1], format: .number).frame(width: 100)
+            }
+            HStack {
+                Spacer()
+                Button("Cancel") { session.editingScaleKey = nil }
+                Button("OK") {
+                    if let k = session.editingScaleKey, session.scaleDraft[1] > session.scaleDraft[0] {
+                        session.graphOptions.customY[k] = session.scaleDraft
+                    }
+                    session.editingScaleKey = nil
+                }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 300)
     }
 }

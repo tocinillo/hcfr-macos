@@ -950,7 +950,7 @@ struct GrayScaleChart: View {
 
     var body: some View {
         let results = session.results.filter { $0.level > 0 }
-        let dom = session.graphOptions.rgbDomain
+        let dom = session.graphOptions.y("rgb", session.graphOptions.rgbDomain)
         let step = (dom.upperBound - dom.lowerBound) / 8
         let balance = results.flatMap { r -> [BalancePoint] in
             guard let b = r.balance else { return [] }

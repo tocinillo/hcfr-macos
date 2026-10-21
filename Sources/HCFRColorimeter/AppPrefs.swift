@@ -73,6 +73,23 @@ struct GraphOptions: Codable, Equatable {
     var cieWorst10 = false
 
     var rgbDomain: ClosedRange<Double> { [0.0...200, 60...140, 50...150, 80...120][min(max(rgbScale, 0), 3)] }
+    /// HCFR's Scale → Zoom + / Zoom − / Shift / Values…: a fixed Y range per graph (key), nil = automatic.
+    var customY: [String: [Double]] = [:]
+    /// Gamma graph: HCFR's "Display average" line.
+    var showAverage = true
+
+    /// The Y range of a graph: the user's (zoomed, shifted or typed) or the graph's own.
+    func y(_ key: String, _ automatic: ClosedRange<Double>) -> ClosedRange<Double> {
+        GraphScale.last[key] = automatic
+        if let r = customY[key], r.count == 2, r[1] > r[0] { return r[0]...r[1] }
+        return automatic
+    }
+
+}
+
+/// Last automatic Y range of each graph (the base for zooming and shifting).
+enum GraphScale {
+    static var last: [String: ClosedRange<Double>] = [:]
 }
 
 /// Options of HCFR's General and Advanced pages and of the sensor page. Saved with the settings.
