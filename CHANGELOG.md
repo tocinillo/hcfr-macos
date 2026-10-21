@@ -2,6 +2,16 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.3
+
+- **Chromecast as pattern generator** (HCFR for Windows' "ccast" mode, as ArgyllCMS's libccast):
+  Generator → Chromecast. Chromecasts and Google TVs are found on the network (or typed by IP).
+  It uses the pattern generator receiver when available (exact patch, fast) and otherwise
+  Google's default media receiver, with the patterns served by this Mac. Patch size, position
+  and video levels as for the other generators. Also in the calibration wizard.
+- **Interface in German, French and Italian** (Preferences → General → Language), besides
+  English and Spanish, with the status and error messages too.
+
 ## 1.3.2
 
 Everything still missing from HCFR for Windows:

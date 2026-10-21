@@ -15,7 +15,7 @@ CRT TVs) with a colorimeter and a calibration DVD / external pattern generator.
 
 - **Pattern generator**: patterns come from your DVD / external generator (the app asks for
   each one), from a movable **measurement window**, from a **Raspberry Pi running PGenerator** on
-  your network, from a **madVR Envy / madTPG** on your network, or full screen on a display
+  your network, from a **madVR Envy / madTPG** or a **Chromecast** on your network, or full screen on a display
   connected to the Mac — with PC 0–255 or video 16–235 levels, full field or window patch, and a
   settle time.
 - **Measurements**:
@@ -47,7 +47,7 @@ CRT TVs) with a colorimeter and a calibration DVD / external pattern generator.
 
 Built on Jorge Velázquez's 1.1 and merged with his 1.2 and 1.3:
 
-- **Interface in English and Spanish** (follows the system language, or choose it in Preferences).
+- **Interface in English, Spanish, German, French and Italian** (follows the system language, or choose it in Preferences).
 - **All of HCFR's measures and views**: near black / near white, saturations, Color Checker
   (GCD, Calman sets, user file), free measures, contrast (ANSI), extended and saturation measure
   menus, data reference (compare with another project), HCFR's graphs (Luminance, Gamma, RGB
@@ -59,6 +59,9 @@ Built on Jorge Velázquez's 1.1 and merged with his 1.2 and 1.3:
 - **Calibration wizard** (⌘⇧W), Calman-style: meter → generator → targets → measure → white
   balance and colors with live bars → final measure and before / after summary.
 - **madVR Envy / madTPG** as pattern generator (madVR's network protocol, see below).
+- **Chromecast / Google TV** as pattern generator (Generator → Chromecast…), as HCFR for Windows
+  with ArgyllCMS's libccast: the pattern generator receiver when available, otherwise Google's
+  default media receiver loading the patterns from a small web server in the app.
 - **PGenerator output from HCFR**: SDR or HDR10 (with HDR metadata), color format, bit depth and
   range are set on the Pi from the app; with automatic mode the Pi switches to HDR10 when the
   reference is ST.2084 and back to SDR otherwise. 10-bit patches in HDR10.

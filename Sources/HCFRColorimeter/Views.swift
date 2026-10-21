@@ -329,7 +329,7 @@ private struct GeneratorMenu: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
             .disabled(session.activity != .idle)
-            .help("Where the patterns come from: your DVD / external generator (the app asks for each one), a movable measurement window, a Raspberry Pi running PGenerator or a madVR Envy / madTPG on your network, or a display connected to this Mac (the app shows each pattern full screen)")
+            .help("Where the patterns come from: your DVD / external generator (the app asks for each one), a movable measurement window, a Raspberry Pi running PGenerator, a madVR Envy / madTPG or a Chromecast on your network, or a display connected to this Mac (the app shows each pattern full screen)")
         }
         .padding(.leading, 4)
         .alert("Custom patch size", isPresented: $session.editingPatchSize) {

@@ -26,7 +26,7 @@ cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 # HCFR's test pattern images (Patterns menu), from HCFR's res/patterns
 cp -R Resources/Patterns "$APP/Contents/Resources/Patterns"
 # Interface translations (English keys, Spanish)
-cp -R Resources/en.lproj Resources/es.lproj "$APP/Contents/Resources/"
+cp -R Resources/en.lproj Resources/es.lproj Resources/de.lproj Resources/fr.lproj Resources/it.lproj "$APP/Contents/Resources/"
 cp LICENSE "$APP/Contents/Resources/LICENSE.txt"
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -40,7 +40,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>NSHumanReadableCopyright</key><string>Copyright © 2026 Jorge Velázquez, Mazatlán, México. Mac version based on HCFR. GNU GPL v2.</string>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
-  <key>CFBundleLocalizations</key><array><string>en</string><string>es</string></array>
+  <key>CFBundleLocalizations</key><array><string>en</string><string>es</string><string>de</string><string>fr</string><string>it</string></array>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundleVersion</key><string>$BUILD</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>

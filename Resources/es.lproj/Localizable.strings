@@ -771,3 +771,29 @@
 "Generic families" = "Familias genéricas";
 "Projector (generic)" = "Proyector (genérico)";
 "Laser" = "Láser";
+
+/* 1.3.3: Chromecast */
+"Where the patterns come from: your DVD / external generator (the app asks for each one), a movable measurement window, a Raspberry Pi running PGenerator, a madVR Envy / madTPG or a Chromecast on your network, or a display connected to this Mac (the app shows each pattern full screen)" = "De dónde salen los patrones: tu DVD / generador externo (la app te pide cada uno), una ventana de medida movible, una Raspberry Pi con PGenerator, un madVR Envy / madTPG o un Chromecast en tu red, o una pantalla conectada a este Mac (la app muestra cada patrón a pantalla completa)";
+"Chromecast" = "Chromecast";
+"Chromecast…" = "Chromecast…";
+"Chromecast connected: %@" = "Chromecast conectado: %@";
+"Connect to the Chromecast now" = "Conectar con el Chromecast ahora";
+"The patterns are cast to a Chromecast (or Google TV) connected to the display, as in HCFR for Windows. The Chromecast scales the image and may not show exact video levels: a Raspberry Pi with PGenerator is more accurate." = "Los patrones se envían a un Chromecast (o Google TV) conectado a la pantalla, como en HCFR para Windows. El Chromecast escala la imagen y puede no dar los niveles de vídeo exactos: una Raspberry Pi con PGenerator es más precisa.";
+"Found on the network" = "Encontrados en la red";
+"Search again" = "Buscar otra vez";
+"None found yet." = "Aún no se ha encontrado ninguno.";
+"Use" = "Usar";
+"IP address (if it is not found)" = "Dirección IP (si no aparece)";
+"Chromecast or Google TV on your network" = "Chromecast o Google TV en tu red";
+"Choose the Chromecast…" = "Elegir el Chromecast…";
+"Chromecast: %@…" = "Chromecast: %@…";
+"default receiver" = "receptor por defecto";
+"Choose the Chromecast in Generator → Chromecast…" = "Elige el Chromecast en Generador → Chromecast…";
+"Looking for the Chromecast on the network…" = "Buscando el Chromecast en la red…";
+"Chromecast not connected" = "Chromecast no conectado";
+"No Chromecast was found on the network." = "No se encontró ningún Chromecast en la red.";
+"Check that the Chromecast (or Google TV) is on and on the same network as this Mac. If macOS asked for permission to find devices on the local network, allow it (System Settings → Privacy & Security → Local Network)." = "Comprueba que el Chromecast (o Google TV) está encendido y en la misma red que este Mac. Si macOS pidió permiso para buscar dispositivos en la red local, permítelo (Ajustes del Sistema → Privacidad y seguridad → Red local).";
+"Error communicating with the Chromecast" = "Error de comunicación con el Chromecast";
+"No answer from the Chromecast" = "El Chromecast no responde";
+"The connection was closed" = "Se cerró la conexión";
+"The Chromecast closed the session" = "El Chromecast cerró la sesión";
