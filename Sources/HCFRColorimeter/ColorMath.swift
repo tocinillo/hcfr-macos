@@ -460,7 +460,8 @@ enum Reference {
     /// gray measure array (the signal is quantized to 8-bit video codes by `grayProp`).
     static func levels(count: Int) -> [Double] {
         let n = max(count, 2)
-        return (0..<n).map { $0 == n - 1 ? 100 : Double($0) * 100 / Double(n - 1) }
+        let step: Double = 100 / Double(n - 1)
+        return (0..<n).map { (i: Int) -> Double in i == n - 1 ? 100.0 : Double(i) * step }
     }
 
     /// "10", "6.25", "33.3" for column headers and messages.
