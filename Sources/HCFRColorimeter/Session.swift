@@ -303,7 +303,6 @@ final class Session: ObservableObject {
     var connectedPortName: String?
 
     init() {
-        Session.openSessions.add(self)
         standard = defaults.string(forKey: "standard").flatMap(ColorStandard.init(rawValue:)) ?? .sdtv
         white = defaults.string(forKey: "white").flatMap(WhitePoint.init(rawValue:)) ?? .d65
         gamma = defaults.object(forKey: "gamma") as? Double ?? 2.3
@@ -358,6 +357,7 @@ final class Session: ObservableObject {
         applyStaticOptions()
         if !appPrefs.luxPort.isEmpty { applyLuxPort() }
         promptPanel = PromptPanelController(session: self)
+        Session.openSessions.add(self)
     }
 
     /// Options kept in static settings read by the formulas and tables.
