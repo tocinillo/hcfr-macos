@@ -342,9 +342,12 @@ private struct MeterStep: View {
                     }
                 }
                 if let m = session.meter {
-                    Picker("Display type", selection: Binding(get: { session.correction }, set: { if let c = $0 { session.setCorrection(c) } })) {
-                        ForEach(m.corrections) { c in Text(c.name).tag(MeterCorrection?.some(c)) }
+                    HStack {
+                        Text("Display type")
+                        CorrectionMenu(session: session)
                     }
+                    Text("\(m.corrections.count) display types: the meter's own, HCFR's families and the display library by kind of display, technology and brand, with a search.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
             Card {

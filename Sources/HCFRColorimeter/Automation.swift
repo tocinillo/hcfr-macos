@@ -15,6 +15,10 @@ import AppKit
 /// hcfr://measure-grayscale?points=33&out=/path/name
 ///     → measures the gray scale (no confirmation) and writes name.GrayScaleSheet.csv (HCFR's
 ///       export layout) and name.result.json ({"ok": true/false, "message": …}) when finished.
+/// hcfr://measure-level?level=50&out=/path/name
+///     → reads one gray level (0…100 % white) through the generator and writes name.result.json
+///       with X Y Z, x y, R G B (HCFR's RGB rows), the Y target, ΔE and gamma of that level, as the
+///       gray scale table would show them (the reading also goes into the table if the level is in it).
 /// hcfr://stop?out=/path/name → stops the measures in progress.
 extension Session {
     func handleAutomation(_ url: URL) {
@@ -39,6 +43,8 @@ extension Session {
                 "points": grayCount,
                 "busy": activity != .idle,
                 "overrideBlack": overrideBlack,
+                "reference": gammaDescription,
+                "whiteY": whiteY ?? 0,
             ])
 
         case "measure-grayscale":
@@ -65,6 +71,43 @@ extension Session {
                     } catch {
                         finish(false, error.localizedDescription)
                     }
+                }
+            }
+
+        case "measure-level":
+            guard let level = q("level").flatMap(Double.init), level >= 0, level <= 100 else {
+                finish(false, "Bad level"); return
+            }
+            guard meter != nil else { finish(false, "No colorimeter connected in HCFR"); return }
+            if activity == .continuous { stop() }
+            guard activity == .idle, prompt == nil else { finish(false, "HCFR is busy"); return }
+            view = .grayScale
+            run(.measuring) {
+                do {
+                    try await self.present(.gray(level))
+                    self.status = "Measuring \(Reference.label(level)) IRE…"
+                    let xyz = try await self.readWithCalibration(pattern: .gray(level))
+                    if self.allLevels.contains(level) {
+                        self.measurements[level] = xyz
+                        self.selectedLevel = level
+                        self.lastMeasure = Date()
+                        self.isDirty = true
+                    }
+                    let white = level == 100 ? xyz.Y : self.whiteY
+                    let r = StepResult(level: level, xyz: xyz, whiteY: white, baseY: white ?? baseWhiteY,
+                                       blackY: self.targetBlackY, ref: self.ref)
+                    let rgb = ColorMath.rgb(xyz, ref: self.ref)
+                    let xy = xyz.xy
+                    finish(true, "Measured \(Reference.label(level)) IRE", extra: [
+                        "level": level, "X": xyz.X, "Y": xyz.Y, "Z": xyz.Z, "x": xy.x, "y": xy.y,
+                        "R": rgb[0], "G": rgb[1], "B": rgb[2],
+                        "targetY": r.targetY ?? 0, "deltaE": r.deltaE ?? 0, "gamma": r.gamma ?? 0,
+                        "whiteY": white ?? 0,
+                    ])
+                    self.status = "Measured \(Reference.label(level)) IRE (requested by \(q("from") ?? "another program"))"
+                } catch {
+                    finish(false, (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+                    throw error
                 }
             }
 

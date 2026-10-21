@@ -531,15 +531,10 @@ private struct SensorPanel: View {
                 Spacer(minLength: 0)
             }
             // 3) Display
-            Picker("Display", selection: Binding(get: { session.correction }, set: { if let c = $0 { session.setCorrection(c) } })) {
-                if let m = session.meter {
-                    ForEach(m.corrections) { c in Text(c.name).tag(MeterCorrection?.some(c)) }
-                } else {
-                    Text("Connect a colorimeter").tag(MeterCorrection?.none)
-                }
+            HStack(spacing: 6) {
+                Text("Display")
+                CorrectionMenu(session: session)
             }
-            .disabled(session.meter == nil || session.activity != .idle)
-            .help("Display type of the colorimeter, same list and behavior as HCFR for Windows (Non-Refresh, Refresh, CRT, LCD/LED families, OLED, Projector…).")
         }
         .frame(width: 290)
     }
