@@ -163,3 +163,10 @@ implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See [LI
 The color formulas in `Sources/HCFRColorimeter/ColorMath.swift` and `Colors.swift` are ported from
 HCFR's C++ code (`libHCFR/Color.cpp`, `Views/MainView.cpp`, `datasetdoc.cpp`, `Export.cpp`,
 `Measure.cpp`).
+
+## Versions and releases
+
+The version is in the `VERSION` file (e.g. `1.3.1`, then `1.3.1.1`, `1.3.1.2`… for each change)
+and each one is described in [CHANGELOG.md](CHANGELOG.md). Pushing a tag `v<version>` makes
+GitHub build the app and its DMG on a Mac (`.github/workflows/release.yml`) and publish them in
+**Releases**.

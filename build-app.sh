@@ -12,6 +12,9 @@ swift build "${SWIFT_FLAGS[@]}"
 # Where the binary ends up depends on the Swift toolchain (.build/release, .build/apple/Products/Release, …)
 BIN_DIR="$(swift build "${SWIFT_FLAGS[@]}" --show-bin-path)"
 APP="$ROOT/HCFR Colorimeter.app"
+# Version: the VERSION file (e.g. 1.3.1.1); build number: number of commits (1 outside git)
+VERSION="$(tr -d ' \n' < "$ROOT/VERSION")"
+BUILD="$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null || echo 1)"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/HCFRColorimeter" "$APP/Contents/MacOS/HCFRColorimeter"
@@ -37,8 +40,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>NSHumanReadableCopyright</key><string>Copyright © 2026 Jorge Velázquez, Mazatlán, México. Mac version based on HCFR. GNU GPL v2.</string>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
   <key>CFBundleLocalizations</key><array><string>en</string><string>es</string></array>
-  <key>CFBundleShortVersionString</key><string>1.3.1</string>
-  <key>CFBundleVersion</key><string>5</string>
+  <key>CFBundleShortVersionString</key><string>$VERSION</string>
+  <key>CFBundleVersion</key><string>$BUILD</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSLocalNetworkUsageDescription</key><string>HCFR Colorimeter looks for and connects to a Raspberry Pi running PGenerator on your local network to show the test patterns.</string>

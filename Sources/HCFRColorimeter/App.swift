@@ -91,7 +91,8 @@ struct ColorimeterApp: App {
 }
 
 enum AboutPanel {
-    static let version = "1.3.1"
+    /// The app's version (Info.plist, from the VERSION file); the fallback is for `swift run`.
+    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.1"
     /// Public repository with this program's complete source code (GPL v2 requirement).
     static let sourceURL = "https://github.com/salondigital/hcfr-macos"
 
@@ -134,7 +135,7 @@ enum AboutPanel {
         NSApp.orderFrontStandardAboutPanel(options: [
             .applicationName: "HCFR Colorimeter",
             .applicationVersion: version,
-            .version: "5",
+            .version: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "",
             .credits: credits,
         ])
     }
