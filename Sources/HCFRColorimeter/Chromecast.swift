@@ -110,7 +110,7 @@ final class ChromecastClient: @unchecked Sendable {
                     found[name] = ChromecastDevice(name: name, model: model, endpoint: r.endpoint)
                 }
             }
-            browser.stateDidChangeUpdateHandler = { state in
+            browser.stateUpdateHandler = { state in
                 if case .failed = state { q.async { finish() } }
             }
             browser.start(queue: q)
