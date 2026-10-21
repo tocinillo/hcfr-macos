@@ -2018,9 +2018,6 @@ i1d3_take_XYZ_measurement(
 		/* Multiply by ambient calibration matrix */
 		icmMulBy3x3(XYZ, p->ambi_cal, XYZ);		/* Values in Lux */
 
-		/* HCFR Mac: the (optional) colorimeter correction matrix (.ccmx) applies too */
-		icmMulBy3x3(XYZ, p->ccmat, XYZ);
-
 	} else {
 
 		/* Check that the ambient filter is not in place */
@@ -2432,16 +2429,10 @@ i1d3_set_cal(i1d3 *p) {
 			a1logd(p->log, 1, "i1d3_set_cal: comp_calmat ccss failed with rv = 0x%x\n",ev);
 			return ev;
 		}
-		/* Ambient: Argyll uses MIbLSr (the CCSS is ignored). HCFR Mac: the CCSS spectra are
-		   also fitted with the ambient (diffuser) sensor curves, so the Display correction
-		   chosen applies to ambient readings too (e.g. a projector's light in lux). */
+		/* Use MIbLSr for ambient */
 		if ((ev = i1d3_comp_calmat(p, p->ambi_cal, p->obType, p->custObserver,
-			                       p->ambi, p->samples, p->nsamp)) != inst_ok) {
-			a1logd(p->log, 1, "i1d3_set_cal: ambient ccss failed, using MIbLSr\n");
-			if ((ev = i1d3_comp_calmat(p, p->ambi_cal, p->obType, p->custObserver,
-				                       p->ambi, p->ambi, 3)) != inst_ok)
-				return ev;
-		}
+			                       p->ambi, p->ambi, 3)) != inst_ok)
+			return ev;
 
 		icmSetUnity3x3(p->ccmat);		/* to be sure to be sure... */
 

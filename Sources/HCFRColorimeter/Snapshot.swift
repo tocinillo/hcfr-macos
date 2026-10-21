@@ -56,8 +56,8 @@ enum Snapshot {
         if let p = args.firstIndex(of: "--prefs"), p + 1 < args.count {
             // Development check: renders the Preferences pages
             let session = Session()
-            for (n, page) in [(0, "references"), (1, "advanced"), (2, "general"), (3, "sensor")] {
-                let view = PreferencesSnapshot(session: session, page: n).frame(width: 640, height: [1100, 400, 560, 640][n])
+            for (n, page) in [(0, "references"), (1, "advanced"), (2, "general"), (3, "sensor"), (4, "appearance")] {
+                let view = PreferencesSnapshot(session: session, page: n).frame(width: 640, height: [1100, 560, 860, 640, 220][n])
                 let renderer = ImageRenderer(content: view)
                 renderer.scale = 1
                 if let img = renderer.nsImage, let tiff = img.tiffRepresentation,

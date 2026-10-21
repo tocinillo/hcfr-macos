@@ -76,6 +76,7 @@ struct ColorimeterApp: App {
                     .keyboardShortcut("p")
                     .disabled(!session.hasMeasurements)
             }
+            HelpCommands()
         }
 
         Settings {

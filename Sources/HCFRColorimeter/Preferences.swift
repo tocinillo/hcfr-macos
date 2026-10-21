@@ -18,6 +18,7 @@ struct PreferencesView: View {
         TabView {
             GeneralPage(session: session).tabItem { Label("General", systemImage: "gearshape") }
             ReferencesPage(session: session).tabItem { Label("References", systemImage: "scope") }
+            AppearancePage(session: session).tabItem { Label("Appearance", systemImage: "paintpalette") }
             AdvancedPage(session: session).tabItem { Label("Advanced", systemImage: "gearshape.2") }
             SensorPage(session: session).tabItem { Label("Sensor", systemImage: "camera.metering.center.weighted") }
         }
@@ -183,6 +184,10 @@ struct AdvancedPage: View {
                     }
                 }
                 Toggle("Imperial units (Ft-cd)", isOn: $session.appPrefs.imperialUnits)
+                Picker("Luminance curves", selection: $session.appPrefs.luxCurves) {
+                    ForEach(LuxCurves.allCases) { Text(tr($0.title)).tag($0) }
+                }
+                .pickerStyle(.radioGroup)
                 Toggle("Compute contrast from luxmeter values", isOn: $session.appPrefs.preferLuxmeter)
                 Text(session.luxStatus ?? "The luxmeter is read on its serial port (USB adapter: /dev/cu.usbserial…) during every reading; a Lux row is added to the tables.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -218,6 +223,17 @@ struct GeneralPage: View {
 
     var body: some View {
         Form {
+            Section("Application") {
+                Toggle("Check for updates", isOn: $session.appPrefs.checkUpdates)
+                Text("When the app starts, looks for a newer version (Help → Updates → Check for new software).")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("User measures") {
+                Toggle("Continuous measuring", isOn: $session.appPrefs.continuousFreeMeasures)
+                Toggle("Detect gray/primary colors during user measures", isOn: $session.appPrefs.detectPrimaries)
+                Text("User measures are Measure → Free measure: with Continuous measuring they go on until Stop; with Detect, a reading close to a primary or secondary color is also stored in Primaries and secondaries.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Dynamic iris") {
                 HStack(spacing: 6) {
                     Text("Latency time")
@@ -227,6 +243,7 @@ struct GeneralPage: View {
                         .labelsHidden().frame(width: 70).multilineTextAlignment(.trailing)
                     Text("ms")
                 }
+                Toggle("RealTime display of measures", isOn: $session.appPrefs.realTimeDisplay)
                 Toggle("Bip at the beginning of measure (latency definition help)", isOn: $session.appPrefs.latencyBeep)
                 Toggle("Frame insertion", isOn: $session.appPrefs.ablEnabled)
                 HStack(spacing: 18) {
@@ -312,10 +329,6 @@ struct SensorPage: View {
                 }
                 if session.activeReadingType != .display && session.meter != nil {
                     Text("In use: \(session.activeReadingType.title)\(session.activeReadingType == .ambient ? " — values in lux" : "")")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                if session.appPrefs.readingType == .ambient {
-                    Text("Ambient with an i1 Display Pro / ColorMunki Display: the CCSS chosen in Display (and a loaded .ccmx) also correct the lux readings. Argyll and HCFR for Windows use only the meter's factory ambient calibration.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Picker("Observer", selection: $session.appPrefs.observer) {
@@ -422,6 +435,26 @@ struct SensorPage: View {
     }
 }
 
+/// HCFR's Appearance page: on the Mac the windows follow the system appearance; the chart options apply.
+struct AppearancePage: View {
+    @ObservedObject var session: Session
+    var plain = false
+
+    var body: some View {
+        Form {
+            Section("Charts") {
+                Toggle("Display charts with a white background", isOn: $session.appPrefs.whiteCharts)
+                Toggle("Save chart files with a white background", isOn: $session.appPrefs.saveChartsWhite)
+            }
+            Section("Visual style") {
+                Text("Windows and colors follow macOS (System Settings → Appearance: light, dark or automatic).")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .modifier(PrefsFormStyle(plain: plain))
+    }
+}
+
 private struct PrefsFormStyle: ViewModifier {
     let plain: Bool
     func body(content: Content) -> some View {
@@ -438,6 +471,7 @@ struct PreferencesSnapshot: View {
         case 0: ReferencesPage(session: session, plain: true)
         case 1: AdvancedPage(session: session, plain: true)
         case 2: GeneralPage(session: session, plain: true)
+        case 4: AppearancePage(session: session, plain: true)
         default: SensorPage(session: session, plain: true)
         }
     }

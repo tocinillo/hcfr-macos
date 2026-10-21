@@ -105,14 +105,26 @@ private struct DarkGraph<Content: View>: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Text(tr(title)).font(.callout.bold()).foregroundStyle(.yellow)
+            Text(tr(title)).font(.callout.bold()).foregroundStyle(ChartInk.accent)
                 .frame(maxWidth: .infinity).padding(.vertical, 4)
             content.frame(maxHeight: .infinity)
         }
         .padding(6)
-        .background(Color(white: 0.12))
+        .background(ChartInk.paper)
         .clipShape(RoundedRectangle(cornerRadius: 4))
     }
+}
+
+/// Colors of the graphs: HCFR's dark graphs, or white ones (Appearance → "Display charts with a
+/// white background"; "Save chart files with a white background" forces them while saving).
+enum ChartInk {
+    static var whiteDisplay = false
+    static var forced: Bool?
+    static var white: Bool { forced ?? whiteDisplay }
+    static var ink: Color { white ? Color(white: 0.1) : .white }
+    static var accent: Color { white ? Color(red: 0.85, green: 0.45, blue: 0) : .yellow }
+    static var paper: Color { white ? .white : Color(white: 0.12) }
+    static var plot: Color { white ? Color(white: 0.96) : Color(white: 0.2) }
 }
 
 let grayRamp = LinearGradient(colors: [Color(white: 0.12), Color(white: 0.95)], startPoint: .leading, endPoint: .trailing)
@@ -122,14 +134,14 @@ func whiteLevelAxis(width: CGFloat) -> some AxisContent {
     let step = width < 760 ? 20 : 10
     return AxisMarks(values: Array(stride(from: 10, through: 90, by: step))) { v in
         AxisGridLine().foregroundStyle(.teal.opacity(0.5))
-        AxisValueLabel { Text("\(v.as(Int.self) ?? 0)% White").font(.caption2.monospaced()).foregroundStyle(.white).fixedSize() }
+        AxisValueLabel { Text("\(v.as(Int.self) ?? 0)% White").font(.caption2.monospaced()).foregroundStyle(ChartInk.ink).fixedSize() }
     }
 }
 
 private func levelAxis(step: Int = 10) -> some AxisContent {
     AxisMarks(values: Array(stride(from: step, through: 100, by: step))) { v in
         AxisGridLine().foregroundStyle(.teal.opacity(0.5))
-        AxisValueLabel { Text("\(v.as(Int.self) ?? 0)%").font(.caption2.monospaced()).foregroundStyle(.white) }
+        AxisValueLabel { Text("\(v.as(Int.self) ?? 0)%").font(.caption2.monospaced()).foregroundStyle(ChartInk.ink) }
     }
 }
 
@@ -151,9 +163,20 @@ struct LuminanceChart: View {
         let white = session.whiteY
         let w = white ?? session.prefs.targetMaxL
         let shown = { (rel: Double) in Self.value(rel, mode: mode, white: w) }
+        let lux = Self.luxRelative(session)
+        let luxMode = session.appPrefs.luxCurves
         let measured: [LevelPoint] = white.map { w in
-            session.results.compactMap { r in r.xyz.map { LevelPoint(level: r.level, value: shown($0.Y / w), series: "Measured") } }
+            session.results.compactMap { r -> LevelPoint? in
+                // Advanced → Luxmeter: "Prefer luxmeter value when available"
+                if luxMode == .preferLuxmeter, let l = lux[r.level] {
+                    return LevelPoint(level: r.level, value: shown(l), series: "Measured")
+                }
+                return r.xyz.map { LevelPoint(level: r.level, value: shown($0.Y / w), series: "Measured") }
+            }
         } ?? []
+        // "Display two separate luminance curves": the luxmeter's as a second curve
+        let luxCurve: [LevelPoint] = luxMode == .both
+            ? lux.keys.sorted().map { LevelPoint(level: $0, value: shown(lux[$0]!), series: "Luxmeter") } : []
         let target = stride(from: 0.0, through: 100, by: 2.5).map {
             LevelPoint(level: $0, value: shown(session.targetRelative(level: $0)), series: "Reference")
         }
@@ -166,16 +189,20 @@ struct LuminanceChart: View {
             Chart {
                 ForEach(target) { p in
                     LineMark(x: .value("Level", p.level), y: .value("%", p.value), series: .value("S", p.series))
-                        .foregroundStyle(.white.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                        .foregroundStyle(ChartInk.ink.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
                 }
                 ForEach(compared) { p in
                     LineMark(x: .value("Level", p.level), y: .value("%", p.value), series: .value("S", p.series))
                         .foregroundStyle(.cyan.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
                 }
+                ForEach(luxCurve) { p in
+                    LineMark(x: .value("Level", p.level), y: .value("%", p.value), series: .value("S", p.series))
+                        .foregroundStyle(.orange).lineStyle(StrokeStyle(lineWidth: 2, dash: [6, 3]))
+                }
                 ForEach(measured) { p in
                     LineMark(x: .value("Level", p.level), y: .value("%", p.value), series: .value("S", p.series))
-                        .foregroundStyle(.yellow).lineStyle(StrokeStyle(lineWidth: 2))
-                    PointMark(x: .value("Level", p.level), y: .value("%", p.value)).foregroundStyle(.yellow).symbolSize(24)
+                        .foregroundStyle(ChartInk.accent).lineStyle(StrokeStyle(lineWidth: 2))
+                    PointMark(x: .value("Level", p.level), y: .value("%", p.value)).foregroundStyle(ChartInk.accent).symbolSize(24)
                 }
             }
             .chartXScale(domain: 0...100)
@@ -184,13 +211,21 @@ struct LuminanceChart: View {
                 AxisGridLine().foregroundStyle(.teal.opacity(0.4))
                 AxisValueLabel {
                     let d = v.as(Double.self) ?? 0
-                    Text(mode == .relative ? "\(Int(d))%" : mode == .log ? String(format: "%.1f", d) : "\(Int(d))").foregroundStyle(.white)
+                    Text(mode == .relative ? "\(Int(d))%" : mode == .log ? String(format: "%.1f", d) : "\(Int(d))").foregroundStyle(ChartInk.ink)
                 }
             } }
             .chartXAxis { levelAxis(step: 20) }
             .chartPlotStyle { $0.background(grayRamp) }
             .overlay(alignment: .topLeading) { legend(white == nil ? "Measure 100% white first" : nil) }
         }
+    }
+
+    /// Luxmeter readings of the gray scale relative to the one at 100% (empty without a luxmeter).
+    static func luxRelative(_ session: Session) -> [Double: Double] {
+        guard let top = session.lux(.gray(100)), top > 0 else { return [:] }
+        var d: [Double: Double] = [:]
+        for l in session.allLevels { if let v = session.lux(.gray(l)) { d[l] = v / top } }
+        return d
     }
 
     /// Value shown for a luminance relative to white (1 = white), in HCFR's graph modes.
@@ -227,21 +262,21 @@ struct GammaChart: View {
                 Chart {
                     ForEach(target) { p in
                         LineMark(x: .value("Level", p.level), y: .value("Gamma", p.value), series: .value("S", p.series))
-                            .foregroundStyle(.white.opacity(0.9)).lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 2]))
+                            .foregroundStyle(ChartInk.ink.opacity(0.9)).lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 2]))
                         PointMark(x: .value("Level", p.level), y: .value("Gamma", p.value))
-                            .symbol(.square).foregroundStyle(.white).symbolSize(22)
+                            .symbol(.square).foregroundStyle(ChartInk.ink).symbolSize(22)
                     }
                     ForEach(measured) { p in
                         LineMark(x: .value("Level", p.level), y: .value("Gamma", p.value), series: .value("S", p.series))
-                            .foregroundStyle(.yellow).lineStyle(StrokeStyle(lineWidth: 2))
-                        PointMark(x: .value("Level", p.level), y: .value("Gamma", p.value)).foregroundStyle(.yellow).symbolSize(24)
+                            .foregroundStyle(ChartInk.accent).lineStyle(StrokeStyle(lineWidth: 2))
+                        PointMark(x: .value("Level", p.level), y: .value("Gamma", p.value)).foregroundStyle(ChartInk.accent).symbolSize(24)
                     }
                 }
                 .chartXScale(domain: 0...100)
                 .chartYScale(domain: lo...hi)
                 .chartYAxis { AxisMarks(position: .leading, values: Array(stride(from: (lo * 10).rounded() / 10, through: hi, by: geo.size.height < 300 ? 0.2 : 0.1))) { v in
                     AxisGridLine().foregroundStyle(.teal.opacity(0.4))
-                    AxisValueLabel { Text(String(format: "%.1f", v.as(Double.self) ?? 0)).font(.caption.monospaced()).foregroundStyle(.white) }
+                    AxisValueLabel { Text(String(format: "%.1f", v.as(Double.self) ?? 0)).font(.caption.monospaced()).foregroundStyle(ChartInk.ink) }
                 } }
                 .chartXAxis { whiteLevelAxis(width: geo.size.width) }
                 .chartPlotStyle { $0.background(grayRamp) }
@@ -275,7 +310,7 @@ struct ColorTempChart: View {
         } ?? []
         DarkGraph(title: "Color temperature (K)") {
             Chart {
-                RuleMark(y: .value("Ref", refK)).foregroundStyle(.white.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                RuleMark(y: .value("Ref", refK)).foregroundStyle(ChartInk.ink.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
                 ForEach(compared) { p in
                     LineMark(x: .value("Level", p.level), y: .value("K", p.value), series: .value("S", p.series))
                         .foregroundStyle(.cyan.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
@@ -289,7 +324,7 @@ struct ColorTempChart: View {
             .chartYScale(domain: lo...hi)
             .chartYAxis { AxisMarks(position: .leading) { v in
                 AxisGridLine().foregroundStyle(.teal.opacity(0.4))
-                AxisValueLabel { Text("\(Int(v.as(Double.self) ?? 0))").foregroundStyle(.white) }
+                AxisValueLabel { Text("\(Int(v.as(Double.self) ?? 0))").foregroundStyle(ChartInk.ink) }
             } }
             .chartXAxis { levelAxis() }
             .chartPlotStyle { $0.background(grayRamp) }
@@ -383,7 +418,7 @@ struct SummaryView: View {
 @ViewBuilder
 private func legend(_ message: String?) -> some View {
     if let message {
-        Text(tr(message)).font(.caption).foregroundStyle(.white.opacity(0.8))
+        Text(tr(message)).font(.caption).foregroundStyle(ChartInk.ink.opacity(0.8))
             .padding(6).background(.black.opacity(0.4)).clipShape(RoundedRectangle(cornerRadius: 4)).padding(8)
     }
 }
@@ -405,24 +440,24 @@ struct NearScaleChart: View {
             Chart {
                 ForEach(target) { p in
                     LineMark(x: .value("Level", p.level), y: .value("Y", p.value), series: .value("S", p.series))
-                        .foregroundStyle(.white.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                        .foregroundStyle(ChartInk.ink.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
                     PointMark(x: .value("Level", p.level), y: .value("Y", p.value))
-                        .foregroundStyle(.white.opacity(0.8)).symbol(.square).symbolSize(20)
+                        .foregroundStyle(ChartInk.ink.opacity(0.8)).symbol(.square).symbolSize(20)
                 }
                 ForEach(measured) { p in
                     LineMark(x: .value("Level", p.level), y: .value("Y", p.value), series: .value("S", p.series))
-                        .foregroundStyle(.yellow).lineStyle(StrokeStyle(lineWidth: 2))
-                    PointMark(x: .value("Level", p.level), y: .value("Y", p.value)).foregroundStyle(.yellow).symbolSize(24)
+                        .foregroundStyle(ChartInk.accent).lineStyle(StrokeStyle(lineWidth: 2))
+                    PointMark(x: .value("Level", p.level), y: .value("Y", p.value)).foregroundStyle(ChartInk.accent).symbolSize(24)
                 }
             }
             .chartXScale(domain: lo...hi)
             .chartXAxis { AxisMarks(values: levels) { v in
                 AxisGridLine().foregroundStyle(.teal.opacity(0.4))
-                AxisValueLabel { Text("\(Reference.label(v.as(Double.self) ?? 0))%").font(.caption2.monospaced()).foregroundStyle(.white) }
+                AxisValueLabel { Text("\(Reference.label(v.as(Double.self) ?? 0))%").font(.caption2.monospaced()).foregroundStyle(ChartInk.ink) }
             } }
             .chartYAxis { AxisMarks(position: .leading) { v in
                 AxisGridLine().foregroundStyle(.teal.opacity(0.4))
-                AxisValueLabel { Text(String(format: "%.3g", v.as(Double.self) ?? 0)).foregroundStyle(.white) }
+                AxisValueLabel { Text(String(format: "%.3g", v.as(Double.self) ?? 0)).foregroundStyle(ChartInk.ink) }
             } }
             .chartPlotStyle { $0.background(grayRamp) }
             .overlay(alignment: .topLeading) { legend(measured.isEmpty ? "Measure → \(view == .nearBlack ? "Near black" : "Near white")" : nil) }
@@ -463,7 +498,7 @@ struct SaturationChart: View {
         let maxAbs = max(5, (points.map { abs($0.value) }.max() ?? 0) * 1.1)
         DarkGraph(title: shift ? "Saturation shift (%)" : "Saturation luminance (delta %)") {
             Chart {
-                RuleMark(y: .value("Ref", 0)).foregroundStyle(.white.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                RuleMark(y: .value("Ref", 0)).foregroundStyle(ChartInk.ink.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
                 ForEach(points) { p in
                     LineMark(x: .value("Sat", p.level), y: .value("%", p.value), series: .value("Color", p.series))
                         .foregroundStyle(CIEChart.markerColor(PatchColor(rawValue: p.series) ?? .white))
@@ -476,13 +511,13 @@ struct SaturationChart: View {
             .chartYScale(domain: -maxAbs...maxAbs)
             .chartXAxis { AxisMarks(values: [0, 25, 50, 75, 100]) { v in
                 AxisGridLine().foregroundStyle(.teal.opacity(0.4))
-                AxisValueLabel { Text("\(v.as(Int.self) ?? 0)% Sat").font(.caption2.monospaced()).foregroundStyle(.white) }
+                AxisValueLabel { Text("\(v.as(Int.self) ?? 0)% Sat").font(.caption2.monospaced()).foregroundStyle(ChartInk.ink) }
             } }
             .chartYAxis { AxisMarks(position: .leading) { v in
                 AxisGridLine().foregroundStyle(.teal.opacity(0.4))
-                AxisValueLabel { Text(String(format: "%.0f", v.as(Double.self) ?? 0)).foregroundStyle(.white) }
+                AxisValueLabel { Text(String(format: "%.0f", v.as(Double.self) ?? 0)).foregroundStyle(ChartInk.ink) }
             } }
-            .chartPlotStyle { $0.background(Color(white: 0.2)) }
+            .chartPlotStyle { $0.background(ChartInk.plot) }
             .overlay(alignment: .topLeading) { legend(points.isEmpty ? "Measure → saturations" : nil) }
         }
     }
@@ -514,13 +549,13 @@ struct FreeMeasuresChart: View {
             .chartYScale(domain: .automatic(includesZero: false))
             .chartXAxis { AxisMarks { v in
                 AxisGridLine().foregroundStyle(.teal.opacity(0.3))
-                AxisValueLabel { Text("\(v.as(Int.self) ?? 0)").font(.caption2).foregroundStyle(.white) }
+                AxisValueLabel { Text("\(v.as(Int.self) ?? 0)").font(.caption2).foregroundStyle(ChartInk.ink) }
             } }
             .chartYAxis { AxisMarks(position: .leading) { v in
                 AxisGridLine().foregroundStyle(.teal.opacity(0.3))
-                AxisValueLabel { Text(String(format: "%.4g", v.as(Double.self) ?? 0)).font(.caption2).foregroundStyle(.white) }
+                AxisValueLabel { Text(String(format: "%.4g", v.as(Double.self) ?? 0)).font(.caption2).foregroundStyle(ChartInk.ink) }
             } }
-            .chartPlotStyle { $0.background(Color(white: 0.2)) }
+            .chartPlotStyle { $0.background(ChartInk.plot) }
             .overlay(alignment: .topLeading) { legend(values.isEmpty ? "Measure → Free measure" : nil) }
         }
     }
@@ -572,7 +607,10 @@ struct GraphOptionsMenu: View {
 @MainActor
 enum GraphExport {
     static func save<V: View>(_ view: V, name: String, session: Session) {
-        let content = view.frame(width: 1400, height: 800).padding(8).background(Color(white: 0.12))
+        // Appearance → "Save chart files with a white background"
+        ChartInk.forced = session.appPrefs.saveChartsWhite
+        defer { ChartInk.forced = nil }
+        let content = view.frame(width: 1400, height: 800).padding(8).background(ChartInk.paper)
         let renderer = ImageRenderer(content: content)
         renderer.scale = 2
         guard let img = renderer.nsImage, let tiff = img.tiffRepresentation,
@@ -633,20 +671,20 @@ struct SpectrumChart: View {
                 }
                 ForEach(Array(pts.enumerated()), id: \.offset) { _, p in
                     LineMark(x: .value("nm", p.0), y: .value("Relative", p.1 / peak), series: .value("S", "Spectrum"))
-                        .foregroundStyle(.white).lineStyle(StrokeStyle(lineWidth: 1.5))
+                        .foregroundStyle(ChartInk.ink).lineStyle(StrokeStyle(lineWidth: 1.5))
                 }
             }
             .chartXScale(domain: 380...780)
             .chartYScale(domain: 0...1.05)
             .chartXAxis { AxisMarks(values: Array(stride(from: 400, through: 780, by: 50))) { v in
                 AxisGridLine().foregroundStyle(.teal.opacity(0.3))
-                AxisValueLabel { Text("\(v.as(Int.self) ?? 0) nm").font(.caption2).foregroundStyle(.white) }
+                AxisValueLabel { Text("\(v.as(Int.self) ?? 0) nm").font(.caption2).foregroundStyle(ChartInk.ink) }
             } }
             .chartYAxis { AxisMarks(position: .leading) { v in
                 AxisGridLine().foregroundStyle(.teal.opacity(0.3))
-                AxisValueLabel { Text(String(format: "%.1f", v.as(Double.self) ?? 0)).foregroundStyle(.white) }
+                AxisValueLabel { Text(String(format: "%.1f", v.as(Double.self) ?? 0)).foregroundStyle(ChartInk.ink) }
             } }
-            .chartPlotStyle { $0.background(Color(white: 0.15)) }
+            .chartPlotStyle { $0.background(ChartInk.plot) }
             .overlay(alignment: .topLeading) {
                 legend(pts.isEmpty ? "No spectrum: measure with a spectrophotometer (colorimeters give no spectrum)" : nil)
             }

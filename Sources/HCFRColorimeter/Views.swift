@@ -127,7 +127,10 @@ struct ContentView: View {
             Text(trMessage(session.errorMessage ?? ""))
         }
         .onAppear {
-            if autoConnect { session.startScanning() }
+            if autoConnect {
+                session.startScanning()
+                if session.appPrefs.checkUpdates { UpdateCheck.run(quiet: true) }
+            }
             // Don't start with the cursor in the Power Law Gamma field (first text field of the window)
             DispatchQueue.main.async { NSApp.keyWindow?.makeFirstResponder(nil) }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { NSApp.keyWindow?.makeFirstResponder(nil) }
@@ -331,19 +334,40 @@ private enum MeasureMenu {
     }
     private static let target = Target()
 
+    /// HCFR's three measure toolbars: Measures (main menu), Extended measures and Saturation
+    /// measures (submenus), plus the rest of HCFR's Measures menu.
     static func show(for session: Session) {
         let menu = NSMenu()
         target.actions = []
-        for (g, group) in MeasureKind.menu.enumerated() {
-            if g > 0 { menu.addItem(.separator()) }
-            for kind in group {
-                let item = NSMenuItem(title: tr(kind.title), action: #selector(Target.run(_:)), keyEquivalent: "")
-                item.target = target
-                item.tag = target.actions.count
-                target.actions.append { session.measure(kind) }
-                menu.addItem(item)
-            }
+        func item(_ title: String, _ action: @escaping () -> Void) -> NSMenuItem {
+            let it = NSMenuItem(title: tr(title), action: #selector(Target.run(_:)), keyEquivalent: "")
+            it.target = target
+            it.tag = target.actions.count
+            target.actions.append(action)
+            return it
         }
+        func kind(_ k: MeasureKind) -> NSMenuItem { item(k.title) { session.measure(k) } }
+        func submenu(_ title: String, _ items: [NSMenuItem?]) -> NSMenuItem {
+            let sub = NSMenu(title: tr(title))
+            for i in items { sub.addItem(i ?? .separator()) }
+            let it = NSMenuItem(title: tr(title), action: nil, keyEquivalent: "")
+            it.submenu = sub
+            return it
+        }
+        // Measures toolbar
+        for k in [MeasureKind.grayScale, .primaries, .primariesSecondaries, .grayScaleAndColors] { menu.addItem(kind(k)) }
+        menu.addItem(.separator())
+        menu.addItem(kind(.freeMeasure))
+        menu.addItem(item("Continuous measurement") { session.start() })
+        menu.addItem(.separator())
+        // Extended measures toolbar
+        menu.addItem(submenu("Extended measures", [kind(.nearBlack), kind(.nearWhite), nil,
+                                                   kind(.allSaturations), kind(.allColors), nil, kind(.fullTiltBoogie)]))
+        // Saturation measures toolbar
+        menu.addItem(submenu("Saturation measures", MeasureView.saturations.map { kind(.saturation($0)) }
+                                                    + [kind(.colorChecker), nil, kind(.primarySaturations)]))
+        menu.addItem(.separator())
+        menu.addItem(kind(.contrast))
         menu.popUp(positioning: menu.item(at: 0), at: NSEvent.mouseLocation, in: nil)
     }
 }

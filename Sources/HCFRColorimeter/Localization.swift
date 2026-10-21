@@ -149,6 +149,7 @@ enum MessageRules {
          "No se encontraron patrones en $1. Cada línea debe ser R,G,B,nombre con niveles de vídeo (16-235), como el usercolors.csv de HCFR."),
         ("The pattern image (.+) was not found\\. Rebuild the app with build-app.sh\\.", "No se encontró la imagen de patrón $1. Recompile la aplicación con build-app.sh."),
         ("(.+); (.+)", "$1; $2"),
+        ("Free measure stored as (.+) too", "Medida libre guardada también como $1"),
         ("(.+), (.+)", "$1, $2"),
     ]
 }

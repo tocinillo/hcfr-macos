@@ -296,7 +296,7 @@ extension Session {
             for i in first..<seriesCount(v) {
                 try Task.checkCancellation()
                 guard let pattern = seriesPattern(v, i) else { continue }
-                selectedIndex = i
+                if appPrefs.realTimeDisplay { selectedIndex = i }
                 try await present(pattern)
                 status = "Measuring \(v.rawValue.lowercased()): \(seriesPatches(v)[i].name) (\(i + 1) of \(seriesCount(v)))…"
                 let xyz = try await readWithCalibration(pattern: pattern)
@@ -389,15 +389,34 @@ extension Session {
     /// Free measure: one reading of whatever is on screen, added to the Free measures view.
     func measureFree() {
         view = .freeMeasures
+        // General → "Continuous measuring": readings go on until Stop, as Start
+        if appPrefs.continuousFreeMeasures { start(); return }
         run(.measuring) {
             self.closePattern()
             self.status = "Free measure: reading the screen as it is…"
-            self.freeMeasurements.append(try await self.readWithCalibration(pattern: nil))
+            let xyz = try await self.readWithCalibration(pattern: nil)
+            self.freeMeasurements.append(xyz)
             self.attach(.free(self.freeMeasurements.count - 1))
+            self.detectPrimary(xyz)
             self.selectedIndex = self.freeMeasurements.count - 1
             self.lastMeasure = Date()
             self.isDirty = true
             self.status = "Free measure \(self.freeMeasurements.count) added"
+        }
+    }
+
+    /// General → "Detect gray/primary colors during user measures" (HCFR's FreeMeasurementAppended):
+    /// a free measure within Δxy 0.03 of a primary or secondary reference is stored as that color.
+    func detectPrimary(_ c: XYZ) {
+        guard appPrefs.detectPrimaries, c.sum > 0 else { return }
+        for p in [PatchColor.red, .green, .blue, .yellow, .cyan, .magenta] {
+            let r = ref.rgbToXYZ.apply(p.rgb)
+            let target = XYZ(X: r[0], Y: r[1], Z: r[2])
+            if hypot(c.x - target.x, c.y - target.y) < 0.03 {
+                colorMeasurements[p] = c
+                status = "Free measure stored as \(p.rawValue) too"
+                return
+            }
         }
     }
 
@@ -410,6 +429,7 @@ extension Session {
             if view == .freeMeasures {
                 freeMeasurements.append(xyz)
                 attach(.free(freeMeasurements.count - 1))
+                detectPrimary(xyz)
                 selectedIndex = freeMeasurements.count - 1
                 lastMeasure = Date(); isDirty = true
             }

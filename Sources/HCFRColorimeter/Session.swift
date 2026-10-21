@@ -283,6 +283,7 @@ final class Session: ObservableObject {
         Reference.use10bit = appPrefs.use10bit && !appPrefs.roundDown
         DeltaEStyle.highlight = appPrefs.highlight
         DeltaEStyle.cie76uv = prefs.deltaEFormula == DeltaEFormula.cie76uv.rawValue
+        ChartInk.whiteDisplay = appPrefs.whiteCharts
     }
 
     /// "Measure launch: Confirmation message" (Advanced preferences).
@@ -675,7 +676,7 @@ final class Session: ObservableObject {
     func measureGrayLevels() async throws {
         for level in levels {
             try Task.checkCancellation()
-            selectedLevel = level
+            if appPrefs.realTimeDisplay { selectedLevel = level }
             try await present(.gray(level))
             status = "Measuring \(Reference.label(level)) IRE…"
             store(try await readWithCalibration(pattern: .gray(level)), level: level)
@@ -687,7 +688,7 @@ final class Session: ObservableObject {
     func measurePatches(_ patches: [PatchColor]) async throws {
         for patch in patches {
             try Task.checkCancellation()
-            selectedPatch = patch
+            if appPrefs.realTimeDisplay { selectedPatch = patch }
             try await present(.color(patch))
             status = "Measuring \(patch.rawValue)…"
             colorMeasurements[patch] = try await readWithCalibration(pattern: .color(patch))

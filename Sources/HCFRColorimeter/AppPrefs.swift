@@ -18,6 +18,16 @@ enum ColorsToAdd: Int, CaseIterable, Identifiable, Codable {
 }
 
 /// HCFR's Argyll meter reading types.
+/// Advanced → Luxmeter LX-1108: which luminance the curves show.
+enum LuxCurves: Int, CaseIterable, Identifiable, Codable {
+    case colorimeter = 0, preferLuxmeter = 1, both = 2
+    var id: Int { rawValue }
+    var title: String {
+        ["Display curves with colorimeter luminance", "Prefer luxmeter value when available",
+         "Display two separate luminance curves"][rawValue]
+    }
+}
+
 enum ReadingType: Int, CaseIterable, Identifiable, Codable {
     case display = 0, telephoto = 1, ambient = 2
     var id: Int { rawValue }
@@ -105,6 +115,23 @@ struct AppPrefs: Codable, Equatable {
     var preferLuxmeter = false
     /// Advanced → "Do not use white in matrix calculus (R1.x)".
     var matrixOnlyPrimaries = false
+    /// Advanced → Luxmeter: luminance curves with the colorimeter, the luxmeter when available, or both.
+    var luxCurves = LuxCurves.colorimeter
+
+    // General → Application / User measures (HCFR's General preferences)
+    /// "Check for updates" when the app starts.
+    var checkUpdates = false
+    /// "Continuous measuring": Measure → Free measure keeps reading (as Start) instead of one reading.
+    var continuousFreeMeasures = false
+    /// "Detect gray/primary colors during user measures": a free measure close (Δxy < 0.03) to a
+    /// primary or secondary reference is also stored as that color.
+    var detectPrimaries = false
+    /// "RealTime display of measures": the selected column follows each step while measuring.
+    var realTimeDisplay = true
+
+    // Appearance → Charts
+    var whiteCharts = false
+    var saveChartsWhite = false
 
     var hasSensorMatrix: Bool { sensorMatrix != [1, 0, 0, 0, 1, 0, 0, 0, 1] && sensorMatrix.count == 9 }
 
