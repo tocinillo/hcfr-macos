@@ -77,6 +77,9 @@ struct GraphOptions: Codable, Equatable {
     var customY: [String: [Double]] = [:]
     /// Gamma graph: HCFR's "Display average" line.
     var showAverage = true
+    /// RGB graph: HCFR's "Delta E curve" and "Display reference measure".
+    var showDeltaECurve = true
+    var showRefMeasure = true
 
     /// The Y range of a graph: the user's (zoomed, shifted or typed) or the graph's own.
     func y(_ key: String, _ automatic: ClosedRange<Double>) -> ClosedRange<Double> {

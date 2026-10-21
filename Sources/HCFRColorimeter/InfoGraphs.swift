@@ -595,6 +595,12 @@ struct GraphOptionsMenu: View {
                     ForEach(LuminanceMode.allCases) { Text(tr($0.rawValue)).tag($0) }
                 }
             case .rgbLevels, .rgbGamma, .targetRGBGamma, .auto:
+                Toggle("w/Gamma", isOn: Binding(
+                    get: { session.prefs.grayDeltaE == GrayDeltaEMode.absoluteYWithGamma.rawValue },
+                    set: { session.prefs.grayDeltaE = ($0 ? GrayDeltaEMode.absoluteYWithGamma : .absoluteYWithoutGamma).rawValue }))
+                    .help("As HCFR's RGB graph \"w/Gamma\": the channels against the target luminance (shows the gamma error too) instead of the measured luminance. It is the same as Preferences → References → dE gray: Absolute Y w/gamma.")
+                Toggle("Delta E curve", isOn: o.showDeltaECurve)
+                Toggle("Display reference measure", isOn: o.showRefMeasure)
                 Picker("RGB scale", selection: o.rgbScale) {
                     Text("0-200%").tag(0); Text("60-140%").tag(1); Text("50-150%").tag(2); Text("80-120%").tag(3)
                 }

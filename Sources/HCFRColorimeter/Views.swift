@@ -136,6 +136,7 @@ struct ContentView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { NSApp.keyWindow?.makeFirstResponder(nil) }
         }
         .navigationTitle("HCFR Colorimeter — \(session.projectName)\(session.isDirty ? " (edited)" : "")")
+        .focusedSceneValue(\.activeSession, session)
     }
 }
 
@@ -957,7 +958,8 @@ struct GrayScaleChart: View {
             return (0..<3).map { BalancePoint(level: r.level, channel: $0, value: min(max(b[$0], dom.lowerBound), dom.upperBound)) }
         }
         // Compared project (HCFR's "Display reference measure"), dashed
-        let refBalance: [BalancePoint] = session.refData.map { d in
+        let withGamma = session.prefs.grayDeltaE == GrayDeltaEMode.absoluteYWithGamma.rawValue
+        let refBalance: [BalancePoint] = (session.graphOptions.showRefMeasure ? session.refData : nil).map { d in
             d.gray.filter { $0.key > 0 }.flatMap { level, xyz -> [BalancePoint] in
                 guard let b = ColorMath.rgbBalance(xyz, ref: session.ref) else { return [] }
                 return (0..<3).map { BalancePoint(level: level, channel: $0 + 3, value: min(max(b[$0], dom.lowerBound), dom.upperBound)) }
@@ -968,7 +970,7 @@ struct GrayScaleChart: View {
 
         GeometryReader { geo in
         VStack(spacing: 0) {
-            Text("Gray Scale Balance w/o gamma").font(.callout.bold()).foregroundStyle(.yellow)
+            Text(withGamma ? "Gray Scale Balance w/gamma" : "Gray Scale Balance w/o gamma").font(.callout.bold()).foregroundStyle(.yellow)
                 .frame(maxWidth: .infinity).padding(.vertical, 4)
             Chart {
                 RuleMark(y: .value("Ref", 100)).foregroundStyle(.white.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
@@ -1011,7 +1013,8 @@ struct GrayScaleChart: View {
             } }
             .chartXAxis { whiteLevelAxis(width: geo.size.width) }
             .chartPlotStyle { $0.background(grayRamp) }
-            .frame(height: 90)
+            .frame(height: session.graphOptions.showDeltaECurve ? 90 : 0)
+            .opacity(session.graphOptions.showDeltaECurve ? 1 : 0)
         }
         .padding(6)
         .background(Color(white: 0.12))

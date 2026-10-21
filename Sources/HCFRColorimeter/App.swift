@@ -12,6 +12,9 @@ import SwiftUI
 struct ColorimeterApp: App {
     @NSApplicationDelegateAdaptor private var delegate: AppDelegate
     @StateObject private var session = Session()
+    /// The project of the window in front (the menus act on it); the main window's otherwise.
+    @FocusedValue(\.activeSession) private var focusedSession
+    private var s: Session { focusedSession ?? session }
 
     init() { Snapshot.runIfRequested() }
 
@@ -28,74 +31,80 @@ struct ColorimeterApp: App {
                 Button("About HCFR Colorimeter") { AboutPanel.show() }
             }
             CommandGroup(before: .newItem) {
-                Button("Calibration Wizard…") { session.openWizard() }
+                Button("Calibration Wizard…") { s.openWizard() }
                     .keyboardShortcut("w", modifiers: [.command, .shift])
                 Divider()
             }
             CommandGroup(replacing: .newItem) {
-                Button("New Project") { session.confirmNewProject = true }
+                Button("New Project") { s.confirmNewProject = true }
                     .keyboardShortcut("n")
-                Button("Open Project…") { session.openProjectDialog() }
+                Button("Open Project…") { s.openProjectDialog() }
                     .keyboardShortcut("o")
             }
             CommandGroup(replacing: .saveItem) {
-                Button("Save Project") { session.saveProject() }
+                Button("Save Project") { s.saveProject() }
                     .keyboardShortcut("s")
-                Button("Save Project As…") { session.saveProject(as: true) }
+                Button("Save Project As…") { s.saveProject(as: true) }
                     .keyboardShortcut("s", modifiers: [.command, .shift])
                 Divider()
-                Button("Compare with Project…") { session.chooseReferenceProject() }
-                Button("Stop Comparing") { session.refData = nil }
-                    .disabled(session.refData == nil)
+                Button("Compare with Project…") { s.chooseReferenceProject() }
+                Button("Stop Comparing") { s.refData = nil }
+                    .disabled(s.refData == nil)
                 Divider()
-                Button("Export Measurements (CSV)…") { session.exportCSV() }
+                Button("Export Measurements (CSV)…") { s.exportCSV() }
                     .keyboardShortcut("e", modifiers: [.command, .shift])
-                    .disabled(!session.hasMeasurements)
-                Button("Export HCFR sheets (CSV)…") { session.exportHCFRSheets() }
-                    .disabled(!session.hasMeasurements)
-                Button("Export to Excel (.xlsx)…") { session.exportExcel() }
-                    .disabled(!session.hasMeasurements)
-                Button("Create PDF Report…") { session.exportPDFReport() }
-                    .disabled(!session.hasMeasurements)
+                    .disabled(!s.hasMeasurements)
+                Button("Export HCFR sheets (CSV)…") { s.exportHCFRSheets() }
+                    .disabled(!s.hasMeasurements)
+                Button("Export to Excel (.xlsx)…") { s.exportExcel() }
+                    .disabled(!s.hasMeasurements)
+                Button("Create PDF Report…") { s.exportPDFReport() }
+                    .disabled(!s.hasMeasurements)
             }
             CommandMenu("Patterns") {
-                Button("Black +1% & +2% moving bars") { session.showMovingBars(white: false) }
-                Button("White −1% & −2% moving bars") { session.showMovingBars(white: true) }
+                Button("Black +1% & +2% moving bars") { s.showMovingBars(white: false) }
+                Button("White −1% & −2% moving bars") { s.showMovingBars(white: true) }
                 ForEach(TestImages.groups, id: \.0) { group in
                     Menu(tr(group.0)) {
-                        ForEach(group.1) { t in Button(tr(t.title)) { session.showTestImage(t) } }
+                        ForEach(group.1) { t in Button(tr(t.title)) { s.showTestImage(t) } }
                     }
                 }
                 Menu("User Defined") {
                     ForEach(1...6, id: \.self) { n in
-                        Button("User\(n)" + (session.userPatternPath(n).map { ": " + URL(fileURLWithPath: $0).lastPathComponent } ?? " — " + tr("choose an image…"))) {
-                            session.showUserPattern(n)
+                        Button("User\(n)" + (s.userPatternPath(n).map { ": " + URL(fileURLWithPath: $0).lastPathComponent } ?? " — " + tr("choose an image…"))) {
+                            s.showUserPattern(n)
                         }
                     }
                     Divider()
                     Menu("Change image") {
-                        ForEach(1...6, id: \.self) { n in Button("User\(n)…") { session.chooseUserPattern(n) } }
+                        ForEach(1...6, id: \.self) { n in Button("User\(n)…") { s.chooseUserPattern(n) } }
                     }
                 }
                 Divider()
-                Button("Show color…") { session.editingTestColor = true }
-                Button("Hide pattern") { session.hideTestPattern() }
+                Button("Show color…") { s.editingTestColor = true }
+                Button("Hide pattern") { s.hideTestPattern() }
                     .keyboardShortcut(".", modifiers: .command)
-                    .disabled(session.testPatternShown == nil)
+                    .disabled(s.testPatternShown == nil)
             }
             CommandGroup(after: .pasteboard) {
                 Divider()
-                Button("Copy Table") { session.copyTable() }
+                Button("Copy Table") { s.copyTable() }
                     .keyboardShortcut("c", modifiers: [.command, .shift])
-                    .disabled(!session.hasMeasurements)
+                    .disabled(!s.hasMeasurements)
             }
             CommandGroup(replacing: .printItem) {
-                Button("Print…") { Report.printReport(session) }
+                Button("Print…") { Report.printReport(s) }
                     .keyboardShortcut("p")
-                    .disabled(!session.hasMeasurements)
+                    .disabled(!s.hasMeasurements)
             }
             HelpCommands()
+            DocumentCommands(main: session)
         }
+
+        WindowGroup("HCFR Colorimeter", id: "document", for: DocumentRequest.self) { $request in
+            DocumentWindow(request: request)
+        }
+        .defaultSize(width: 1400, height: 860)
 
         Settings {
             PreferencesView(session: session)

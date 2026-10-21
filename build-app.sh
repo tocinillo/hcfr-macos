@@ -22,7 +22,6 @@ cp .build/meter/hcfr-meter "$APP/Contents/MacOS/hcfr-meter"
 # HCFR CCSS display corrections (third_party/hcfr/Install/color); the helper finds them via XDG_DATA_DIRS
 cp -R Resources/ArgyllCMS "$APP/Contents/Resources/ArgyllCMS"
 # Display library: kind of display, technology and brand of each CCSS (the Display tree)
-cp Resources/ccss-library.json "$APP/Contents/Resources/ccss-library.json"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 # HCFR's test pattern images (Patterns menu), from HCFR's res/patterns
 cp -R Resources/Patterns "$APP/Contents/Resources/Patterns"

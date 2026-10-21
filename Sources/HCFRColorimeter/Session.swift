@@ -48,7 +48,13 @@ struct StepResult: Identifiable, ColorReading {
             deltaxy = nil; lab = nil; lch = nil; measureRGB = nil
             return
         }
-        balance = ColorMath.rgbBalance(xyz, ref: ref)
+        // HCFR's RGB graph "w/Gamma" (dE gray = Absolute Y w/gamma): the channels against the target
+        // luminance, so the curves show the gamma error too; otherwise against the measured one
+        if ref.grayDeltaE == .absoluteYWithGamma, let t = targetY, t > 1e-9 {
+            balance = ColorMath.rgb(xyz, ref: ref).map { $0 / t * 100 }
+        } else {
+            balance = ColorMath.rgbBalance(xyz, ref: ref)
+        }
         rgb = ColorMath.rgb(xyz, ref: ref)
         cct = ColorMath.cct(xyz)
         deltaxy = ColorMath.deltaxy(xyz, ref: ref)
