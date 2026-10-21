@@ -793,3 +793,12 @@
 "The connection was closed" = "La connessione è stata chiusa";
 "The Chromecast closed the session" = "Il Chromecast ha chiuso la sessione";
 "Deutsch" = "Deutsch";
+
+/* 1.3.4 */
+"Measure Selected Column" = "Misura la colonna selezionata";
+"Stop Continuous Reading" = "Ferma la lettura continua";
+"Read Selected Column Continuously" = "Leggi di continuo la colonna selezionata";
+"Once" = "Una volta";
+"One reading of the selected column (⌘R)" = "Una lettura della colonna selezionata (⌘R)";
+"New Tab" = "Nuova scheda";
+"Open Project in New Tab…" = "Apri progetto in una nuova scheda…";

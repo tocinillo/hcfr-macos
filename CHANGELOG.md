@@ -2,6 +2,14 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.4
+
+- **Measure the selected column once**: Measure → Measure Selected Column (⌘R) or the "Once"
+  button: one reading of the selected gray level, color, saturation, near black / white, Color
+  Checker or contrast patch (Start keeps reading it continuously, ⌘⇧R).
+- **Projects in tabs**: File → New Tab (⌘T) and Open Project in New Tab…; Window → Merge All
+  Windows puts the open project windows in tabs of one window.
+
 ## 1.3.3
 
 - **Chromecast as pattern generator** (HCFR for Windows' "ccast" mode, as ArgyllCMS's libccast):

@@ -38,6 +38,7 @@ struct DocumentWindow: View {
     var body: some View {
         ContentView(session: session, autoConnect: false)
             .frame(minWidth: 1180, minHeight: 680)
+            .background(WindowTabber())
             .onAppear {
                 guard let r = request, let p = r.path else { return }
                 let url = URL(fileURLWithPath: p)
@@ -52,6 +53,37 @@ struct DocumentWindow: View {
     }
 }
 
+/// Projects as tabs of one window (as HCFR for Windows' document tabs): File → New Tab opens a
+/// project window as a tab of the window in front; Window → Merge All Windows joins them.
+enum ProjectTabs {
+    static let identifier = "HCFRProject"
+    /// The window the next project window goes into as a tab (File → New Tab).
+    @MainActor static weak var pendingParent: NSWindow?
+
+    @MainActor static func prepare(_ w: NSWindow) {
+        w.tabbingIdentifier = identifier
+        if w.tabbingMode == .disallowed { w.tabbingMode = .automatic }
+    }
+}
+
+/// Makes the window of a project tab-capable and, after File → New Tab, puts it in the parent's tabs.
+struct WindowTabber: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let v = NSView()
+        DispatchQueue.main.async { [weak v] in
+            guard let w = v?.window else { return }
+            ProjectTabs.prepare(w)
+            if let parent = ProjectTabs.pendingParent, parent !== w {
+                ProjectTabs.pendingParent = nil
+                parent.addTabbedWindow(w, ordered: .above)
+                w.makeKeyAndOrderFront(nil)
+            }
+        }
+        return v
+    }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
 /// File menu items for several windows.
 struct DocumentCommands: Commands {
     let main: Session
@@ -62,6 +94,19 @@ struct DocumentCommands: Commands {
         CommandGroup(after: .newItem) {
             Button("New Window") { openWindow(id: "document", value: DocumentRequest()) }
                 .keyboardShortcut("n", modifiers: [.command, .option])
+            Button("New Tab") {
+                if let w = NSApp.keyWindow { ProjectTabs.prepare(w); ProjectTabs.pendingParent = w }
+                openWindow(id: "document", value: DocumentRequest())
+            }
+            .keyboardShortcut("t")
+            Button("Open Project in New Tab…") {
+                let panel = NSOpenPanel()
+                panel.allowedContentTypes = [.hcfrProject, .json]
+                let parent = NSApp.keyWindow
+                guard panel.runModal() == .OK, let url = panel.url else { return }
+                if let parent { ProjectTabs.prepare(parent); ProjectTabs.pendingParent = parent }
+                openWindow(id: "document", value: DocumentRequest(path: url.path))
+            }
             Button("Open Project in New Window…") {
                 let panel = NSOpenPanel()
                 panel.allowedContentTypes = [.hcfrProject, .json]

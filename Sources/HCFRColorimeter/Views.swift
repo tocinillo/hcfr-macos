@@ -215,6 +215,9 @@ private struct ActionsPanel: View {
                     ActionButton(title: "Start", symbol: "play.fill", tint: .green) { session.start() }
                         .disabled(session.busy || session.meter == nil)
                         .help("Continuous reading of the selected column (gray level or color). Click another column to measure it.")
+                    ActionButton(title: "Once", symbol: "smallcircle.filled.circle", tint: .green) { session.measureSelected() }
+                        .disabled(session.busy || session.meter == nil)
+                        .help("One reading of the selected column (⌘R)")
                 }
 
                 if session.activity == .measuring {

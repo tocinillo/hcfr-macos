@@ -61,6 +61,16 @@ struct ColorimeterApp: App {
                 Button("Create PDF Report…") { s.exportPDFReport() }
                     .disabled(!s.hasMeasurements)
             }
+            CommandMenu("Measure") {
+                Button("Measure Selected Column") { s.measureSelected() }
+                    .keyboardShortcut("r")
+                    .disabled(s.meter == nil || s.activity == .measuring)
+                Button(s.activity == .continuous ? "Stop Continuous Reading" : "Read Selected Column Continuously") {
+                    s.activity == .continuous ? s.stop() : s.start()
+                }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .disabled(s.meter == nil || s.activity == .measuring)
+            }
             CommandMenu("Patterns") {
                 Button("Black +1% & +2% moving bars") { s.showMovingBars(white: false) }
                 Button("White −1% & −2% moving bars") { s.showMovingBars(white: true) }
@@ -114,7 +124,7 @@ struct ColorimeterApp: App {
 
 enum AboutPanel {
     /// The app's version (Info.plist, from the VERSION file); the fallback is for `swift run`.
-    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.3"
+    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.4"
     /// Public repository with this program's complete source code (GPL v2 requirement).
     static let sourceURL = "https://github.com/tocinillo/hcfr-macos"
 
@@ -187,6 +197,7 @@ private struct WindowCloseGuard: NSViewRepresentable {
         private weak var session: Session?
 
         @MainActor func install(on window: NSWindow, session: Session) {
+            ProjectTabs.prepare(window)
             guard !(window.delegate is Coordinator) else { return }
             self.session = session
             original = window.delegate

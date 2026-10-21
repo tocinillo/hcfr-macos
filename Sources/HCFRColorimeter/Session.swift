@@ -826,6 +826,54 @@ final class Session: ObservableObject {
         }
     }
 
+    /// Measure → "Measure Selected Column" (⌘R): one reading of the selected column (gray level,
+    /// color, saturation, near black/white, Color Checker or contrast patch), as HCFR's single
+    /// measure of a column. With the manual generator the app asks for the pattern first.
+    func measureSelected() {
+        if activity == .continuous { stop() }
+        guard activity == .idle else { return }
+        if view == .freeMeasures { measureFree(); return }
+        if view == .grayScale && !levels.contains(selectedLevel) { selectedLevel = 100 }
+        run(.measuring) {
+            let v = self.view
+            let pattern: TestPattern?
+            let name: String
+            switch v {
+            case .grayScale:
+                pattern = .gray(self.selectedLevel); name = Reference.label(self.selectedLevel) + " IRE"
+            case .primariesSecondaries:
+                pattern = .color(self.selectedPatch); name = self.selectedPatch.rawValue
+            case .contrast:
+                let item = ContrastPatch.allCases[min(self.selectedIndex, 3)]
+                pattern = self.contrastPattern(item); name = item.rawValue
+            default:
+                pattern = self.seriesPattern(v, self.selectedIndex)
+                name = self.seriesPatches(v)[safe: self.selectedIndex]?.name ?? ""
+            }
+            guard let pattern else { return }
+            let i = self.selectedIndex, level = self.selectedLevel, patch = self.selectedPatch
+            try await self.present(pattern)
+            self.status = "Measuring \(name)…"
+            let xyz = try await self.readWithCalibration(pattern: pattern)
+            switch v {
+            case .grayScale:
+                self.store(xyz, level: level)
+            case .primariesSecondaries:
+                self.colorMeasurements[patch] = xyz
+                self.attach(.patch(patch))
+            case .contrast:
+                self.contrastMeasurements[ContrastPatch.allCases[min(i, 3)]] = xyz
+                self.attach(.contrast(i))
+            default:
+                self.seriesMeasurements[v, default: [:]][i] = xyz
+                self.attach(.series(v, i))
+            }
+            self.lastMeasure = Date()
+            self.isDirty = true
+            self.status = "\(name) measurement finished"
+        }
+    }
+
     func select(patch: PatchColor) {
         guard activity != .measuring else { return }
         selectedPatch = patch
