@@ -93,7 +93,7 @@ final class MadVRClient: @unchecked Sendable {
 
     /// Text on madTPG's on-screen display.
     func osd(_ text: String) async throws {
-        try await run { try self.command("SetOsdText", text: text) }
+        _ = try await run { try self.command("SetOsdText", text: text) }
     }
 
     /// Ends the test pattern mode and says goodbye. Does not wait.
