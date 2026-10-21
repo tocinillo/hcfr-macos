@@ -14,6 +14,7 @@ import SwiftUI
 /// Choices and results of the wizard (kept while the app is open).
 @MainActor
 final class WizardModel: ObservableObject {
+    @Published var choosingChromecast = false
     enum Step: Int, CaseIterable {
         case welcome, meter, generator, targets, prepare, before, whiteBalance, colors, after, finish
         var title: String {
@@ -373,6 +374,8 @@ private struct GeneratorStep: View {
                            selected: isDisplay) { useFirstDisplay() }
                 ChoiceTile(title: "madVR", detail: "madVR Envy or madTPG on your network", symbol: "sparkles.tv",
                            selected: session.patternSource == .madVR) { session.patternSource = .madVR }
+                ChoiceTile(title: "Chromecast", detail: "Chromecast or Google TV on your network", symbol: "tv.and.mediabox",
+                           selected: session.patternSource == .chromecast) { session.patternSource = .chromecast }
                 ChoiceTile(title: "Manual", detail: "A calibration disc: the app asks for each pattern", symbol: "opticaldisc",
                            selected: session.patternSource == .manual) { session.patternSource = .manual }
             }
@@ -395,6 +398,17 @@ private struct GeneratorStep: View {
                         if let s = session.madVRStatus { Label(s, systemImage: "checkmark.circle.fill").foregroundStyle(.green) }
                     }
                 }
+            }
+            if session.patternSource == .chromecast {
+                Card {
+                    HStack {
+                        Button(session.chromecastName.isEmpty ? "Choose the Chromecast…" : "Chromecast: \(session.chromecastName)…") {
+                            w.choosingChromecast = true
+                        }
+                        if let s = session.chromecastStatus { Label(s, systemImage: "checkmark.circle.fill").foregroundStyle(.green) }
+                    }
+                }
+                .sheet(isPresented: $w.choosingChromecast) { ChromecastSheet(session: session) }
             }
             if isDisplay {
                 Card {

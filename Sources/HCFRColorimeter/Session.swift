@@ -261,6 +261,16 @@ final class Session: ObservableObject {
     @Published var madVROSD = false { didSet { defaults.set(madVROSD, forKey: "madVROSD"); madVRApply() } }
     @Published var editingMadVRAddress = false
     @Published var madVRAddressDraft = ""
+    /// Chromecast generator (Chromecast.swift): the chosen device (name, or IP address), its
+    /// connection and the devices found on the network.
+    @Published var chromecastName = ""
+    @Published var chromecastStatus: String?
+    @Published var chromecastDevices: [ChromecastDevice] = []
+    @Published var choosingChromecast = false
+    @Published var searchingChromecast = false
+    @Published var chromecastAddressDraft = ""
+    var chromecast: ChromecastClient?
+    var chromecastConnecting: Task<ChromecastClient, Error>?
     var madVR: MadVRClient?
     var madVRConnecting: Task<MadVRClient, Error>?
     private var piConnecting: Task<PGeneratorClient, Error>?
@@ -301,6 +311,7 @@ final class Session: ObservableObject {
         settleSeconds = defaults.object(forKey: "settleSeconds") as? Double ?? 1.0
         piAddress = defaults.string(forKey: "piAddress") ?? ""
         madVRAddress = defaults.string(forKey: "madVRAddress") ?? ""
+        chromecastName = defaults.string(forKey: "chromecastName") ?? ""
         patchOffsetX = defaults.double(forKey: "patchOffsetX")
         patchOffsetY = defaults.double(forKey: "patchOffsetY")
         blankOtherScreens = defaults.bool(forKey: "blankOtherScreens")
@@ -334,6 +345,8 @@ final class Session: ObservableObject {
             patternSource = .raspberryPi
         } else if defaults.bool(forKey: "patternMadVR") {
             patternSource = .madVR
+        } else if defaults.bool(forKey: "patternChromecast") {
+            patternSource = .chromecast
         }
         patternWindow.onEscape = { [weak self] in self?.stop() }
         applyStaticOptions()
@@ -914,6 +927,21 @@ final class Session: ObservableObject {
     /// Shows the pattern on the generator display (if one is selected) and waits `settleSeconds`
     /// when it changed.
     func showIfGenerator(_ pattern: TestPattern, force: Bool = false) async throws {
+        if patternSource == .chromecast {
+            guard force || pattern != shownPattern else { return }
+            try Task.checkCancellation()
+            // No ANSI checkerboard on the Chromecast: full field of the bright part
+            let ansi = pattern.ansiInverted != nil
+            let levels = ansi ? [1.0, 1, 1] : pattern.rgb
+            let rgb = levels.map { Double(videoLevels.code($0)) / 255 }
+            let black = Double(videoLevels.code(0)) / 255
+            let area = ansi ? 100 : patternArea
+            let offset = CGPoint(x: patchOffsetX / 100, y: patchOffsetY / 100)
+            try await chromecastSend { try await $0.show(rgb: rgb, background: black, areaPercent: area, offset: offset) }
+            shownPattern = pattern
+            try await latencyWait()
+            return
+        }
         if patternSource == .madVR {
             guard force || pattern != shownPattern else { return }
             try Task.checkCancellation()
@@ -999,7 +1027,7 @@ final class Session: ObservableObject {
 
     /// True when the app shows the patterns itself (a display of this Mac or the Raspberry Pi),
     /// false for the manual DVD / external generator.
-    var automaticGenerator: Bool { patternScreen != nil || patternSource == .window || patternSource == .raspberryPi || patternSource == .madVR }
+    var automaticGenerator: Bool { patternScreen != nil || patternSource == .window || patternSource == .raspberryPi || patternSource == .madVR || patternSource == .chromecast }
 
     // MARK: - Raspberry Pi (PGenerator)
 
@@ -1157,6 +1185,13 @@ final class Session: ObservableObject {
         defaults.set(patternSource == .raspberryPi, forKey: "patternRaspberryPi")
         defaults.set(patternSource == .window, forKey: "patternWindow")
         defaults.set(patternSource == .madVR, forKey: "patternMadVR")
+        defaults.set(patternSource == .chromecast, forKey: "patternChromecast")
+        if patternSource == .chromecast {
+            shownPattern = nil
+            connectChromecast()
+        } else {
+            dropChromecast()
+        }
         if patternSource != .window { patternWindow.close() }
         if patternSource == .manual { closePattern() }
         if patternSource == .raspberryPi {

@@ -32,6 +32,7 @@ extension Session {
         case .display: return patternScreen.map { screenName($0) } ?? "Display"
         case .window: return "Measurement window"
         case .madVR: return "madVR" + (madVRStatus.map { " \($0)" } ?? "")
+        case .chromecast: return "Chromecast" + (chromecastStatus.map { " \($0)" } ?? "")
         }
     }
 

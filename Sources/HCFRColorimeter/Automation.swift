@@ -127,6 +127,7 @@ extension Session {
         case .display: return "display"
         case .window: return "window"
         case .madVR: return "madVR"
+        case .chromecast: return "Chromecast"
         }
     }
 }

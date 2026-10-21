@@ -251,6 +251,7 @@ private struct GeneratorMenu: View {
                     Text("Measurement window (movable)").tag(PatternSource.window)
                     Text("Raspberry Pi (PGenerator)").tag(PatternSource.raspberryPi)
                     Text("madVR Envy / madTPG").tag(PatternSource.madVR)
+                    Text("Chromecast").tag(PatternSource.chromecast)
                     ForEach(session.generatorScreens, id: \.self) { screen in
                         if let id = screen.displayID {
                             Text(session.screenName(screen) + tr(" — full screen")).tag(PatternSource.display(id))
@@ -287,6 +288,17 @@ private struct GeneratorMenu: View {
                         Toggle("Disable madVR's calibration (gamma ramp)", isOn: $session.madVRDisableCalibration)
                         Toggle("HDR mode", isOn: $session.madVRHDR)
                         Toggle("Show madTPG's on-screen display", isOn: $session.madVROSD)
+                    }
+                }
+                Divider()
+                Button(session.chromecastName.isEmpty ? tr("Chromecast…") : tr("Chromecast") + ": " + session.chromecastName + "…") {
+                    session.choosingChromecast = true
+                }
+                if session.patternSource == .chromecast {
+                    if let s = session.chromecastStatus {
+                        Text("Chromecast connected: \(s)")
+                    } else {
+                        Button("Connect to the Chromecast now") { session.connectChromecast() }
                     }
                 }
                 Divider()
@@ -336,6 +348,7 @@ private struct GeneratorMenu: View {
         }
         .sheet(isPresented: $session.editingPiOutput) { PiOutputSheet(session: session) }
         .sheet(isPresented: $session.editingPatchPosition) { PatchPositionSheet(session: session) }
+        .sheet(isPresented: $session.choosingChromecast) { ChromecastSheet(session: session) }
         .alert("Raspberry Pi address", isPresented: $session.editingPiAddress) {
             TextField("Automatic", text: $session.piAddressDraft)
             Button("OK") { session.setPiAddress(session.piAddressDraft) }
@@ -1508,6 +1521,54 @@ struct PiOutputSheet: View {
 
 /// Generator → Patch position…: HCFR's offset X/Y of the patch (displays of this Mac and the
 /// measurement window), in % of the screen from the center.
+/// Generator → Chromecast…: the Chromecasts found on the network, or an IP address.
+struct ChromecastSheet: View {
+    @ObservedObject var session: Session
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Chromecast").font(.title3.bold())
+            Text("The patterns are cast to a Chromecast (or Google TV) connected to the display, as in HCFR for Windows. The Chromecast scales the image and may not show exact video levels: a Raspberry Pi with PGenerator is more accurate.")
+                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Text("Found on the network").font(.headline)
+                Spacer()
+                if session.searchingChromecast { ProgressView().controlSize(.small) }
+                Button("Search again") { session.searchChromecasts() }.disabled(session.searchingChromecast)
+            }
+            if session.chromecastDevices.isEmpty && !session.searchingChromecast {
+                Text("None found yet.").foregroundStyle(.secondary)
+            }
+            ForEach(session.chromecastDevices) { d in
+                HStack {
+                    Image(systemName: "tv")
+                    VStack(alignment: .leading) {
+                        Text(d.name)
+                        if !d.model.isEmpty { Text(d.model).font(.caption).foregroundStyle(.secondary) }
+                    }
+                    Spacer()
+                    if d.name == session.chromecastName { Image(systemName: "checkmark").foregroundStyle(.green) }
+                    Button("Use") { session.chooseChromecast(d.name) }
+                }
+            }
+            Divider()
+            HStack {
+                TextField("IP address (if it is not found)", text: $session.chromecastAddressDraft).frame(width: 220)
+                Button("Use") { session.chooseChromecast(session.chromecastAddressDraft) }
+                    .disabled(!PGeneratorClient.isValidIPv4(session.chromecastAddressDraft.trimmingCharacters(in: .whitespaces)))
+            }
+            HStack {
+                Spacer()
+                Button("Close") { dismiss() }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 480)
+        .onAppear { if session.chromecastDevices.isEmpty { session.searchChromecasts() } }
+    }
+}
+
 struct PatchPositionSheet: View {
     @ObservedObject var session: Session
     @Environment(\.dismiss) private var dismiss

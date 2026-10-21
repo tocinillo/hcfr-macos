@@ -57,6 +57,7 @@ enum PatternSource: Hashable {
     case window
     case raspberryPi
     case madVR
+    case chromecast
 }
 
 /// Output levels of the built-in generator (as HCFR's GDI generator option).

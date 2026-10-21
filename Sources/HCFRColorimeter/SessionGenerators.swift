@@ -163,6 +163,92 @@ extension Session {
         c.close()
     }
 
+    // MARK: - Chromecast
+
+    /// Sends to the Chromecast; if the connection was lost, reconnects once.
+    func chromecastSend(_ body: (ChromecastClient) async throws -> Void) async throws {
+        do {
+            try await body(try await chromecastClient())
+        } catch is ChromecastError {
+            dropChromecast()
+            try await body(try await chromecastClient())
+        }
+    }
+
+    /// The connected Chromecast, connecting first if needed (the chosen one, or the only one found).
+    func chromecastClient() async throws -> ChromecastClient {
+        if let chromecast { return chromecast }
+        if let chromecastConnecting { return try await chromecastConnecting.value }
+        let wanted = chromecastName
+        let t = Task { @MainActor () throws -> ChromecastClient in
+            var device: ChromecastDevice?
+            if PGeneratorClient.isValidIPv4(wanted) {
+                device = .address(wanted)
+            } else {
+                self.status = "Looking for the Chromecast on the network…"
+                let found = await ChromecastClient.discover(timeout: 3)
+                self.chromecastDevices = found
+                device = found.first(where: { $0.name == wanted }) ?? (wanted.isEmpty && found.count == 1 ? found[0] : nil)
+                if device == nil {
+                    self.choosingChromecast = true
+                    throw found.isEmpty ? ChromecastError.notFound
+                        : ChromecastError.communication(tr("Choose the Chromecast in Generator → Chromecast…"))
+                }
+            }
+            guard let device else { throw ChromecastError.notFound }
+            self.status = "Connecting to the Chromecast \(device.name)…"
+            let c = ChromecastClient(device: device)
+            try await c.connect()
+            return c
+        }
+        chromecastConnecting = t
+        defer { chromecastConnecting = nil }
+        do {
+            let c = try await t.value
+            chromecast = c
+            chromecastStatus = c.device.name + (c.usesPatternReceiver ? "" : " · " + tr("default receiver"))
+            status = "Chromecast connected: \(c.device.name)"
+            return c
+        } catch {
+            chromecastStatus = nil
+            status = "Chromecast not connected"
+            throw error
+        }
+    }
+
+    func connectChromecast() {
+        Task {
+            do { _ = try await chromecastClient() } catch { errorMessage = error.localizedDescription }
+        }
+    }
+
+    func dropChromecast() {
+        guard let c = chromecast else { return }
+        chromecast = nil
+        chromecastStatus = nil
+        c.close()
+    }
+
+    /// Generator → Chromecast…: looks for the Chromecasts on the network.
+    func searchChromecasts() {
+        searchingChromecast = true
+        Task {
+            chromecastDevices = await ChromecastClient.discover(timeout: 3)
+            searchingChromecast = false
+        }
+    }
+
+    /// Uses this Chromecast (its name, or an IP address) as generator.
+    func chooseChromecast(_ name: String) {
+        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !n.isEmpty else { return }
+        chromecastName = n
+        defaults.set(n, forKey: "chromecastName")
+        choosingChromecast = false
+        dropChromecast()
+        if patternSource == .chromecast { connectChromecast() } else { patternSource = .chromecast }
+    }
+
     /// Generator → madVR address: the IPv4 address of the Envy or of the PC with madTPG.
     func setMadVRAddress(_ text: String) {
         let a = text.trimmingCharacters(in: .whitespacesAndNewlines)
