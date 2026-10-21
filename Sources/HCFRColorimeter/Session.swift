@@ -229,6 +229,9 @@ final class Session: ObservableObject {
     /// Set the Pi to SDR or HDR10 automatically from the reference (Preferences → References).
     @Published var piAutoMode = true { didSet { defaults.set(piAutoMode, forKey: "piAutoMode") } }
     @Published var editingPiOutput = false
+    /// Display → "Search display…" window and its text.
+    @Published var searchingCorrection = false
+    @Published var correctionSearch = ""
     @Published var piApplying = false
     /// madVR Envy / madTPG (MadVR.swift): its IP address, the connection and its description.
     @Published var madVRAddress = ""

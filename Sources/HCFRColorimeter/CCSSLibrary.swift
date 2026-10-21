@@ -84,7 +84,6 @@ enum CCSSLibrary {
 /// (kind of display → technology → brand) and the user's own files, plus a search window.
 struct CorrectionMenu: View {
     @ObservedObject var session: Session
-    @State private var searching = false
 
     var body: some View {
         Menu {
@@ -117,7 +116,7 @@ struct CorrectionMenu: View {
                     }
                 }
                 Divider()
-                Button("Search display…") { searching = true }
+                Button("Search display…") { session.correctionSearch = ""; session.searchingCorrection = true }
             }
             Button("Import CCSS / CCMX files…") { CCSSLibrary.importFiles(session: session) }
         } label: {
@@ -127,7 +126,7 @@ struct CorrectionMenu: View {
         }
         .disabled(session.meter == nil || session.activity != .idle)
         .help("Display type of the colorimeter: the meter's own types, HCFR's families and the display library (by kind of display, technology and brand). Search finds any of them by name.")
-        .sheet(isPresented: $searching) { CorrectionSearch(session: session) }
+        .sheet(isPresented: $session.searchingCorrection) { CorrectionSearch(session: session) }
     }
 
     @ViewBuilder private func item(_ c: MeterCorrection, title: String? = nil) -> some View {
@@ -149,12 +148,12 @@ private struct LibItem: Identifiable {
 private struct CorrectionSearch: View {
     @ObservedObject var session: Session
     @Environment(\.dismiss) private var dismiss
-    @State private var text = ""
+    private var text: String { session.correctionSearch }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Search display").font(.title3.bold())
-            TextField("Brand, model or technology (e.g. LG C3, QD-OLED, NZ9)", text: $text)
+            TextField("Brand, model or technology (e.g. LG C3, QD-OLED, NZ9)", text: $session.correctionSearch)
                 .textFieldStyle(.roundedBorder)
             List(results, id: \.id) { c in
                 Button {
