@@ -167,6 +167,11 @@ enum Snapshot {
                 let v = Reference.grayProp(level)
                 session.measurements[level] = XYZ.fromxyY(x: 0.3127 - 0.01 * (1 - v), y: 0.3290 - 0.008 * (1 - v), Y: 120 * pow(v, 2.3))
             }
+            if args.contains("--black") {
+                // A projector-like black (contrast 4000:1), for screenshots
+                session.overrideBlack = false
+                session.measurements[0] = XYZ.fromxyY(x: 0.3050, y: 0.3150, Y: 0.03)
+            }
         } else {
             for s in sample where s.0 <= maxLevel { session.measurements[s.0] = XYZ.fromxyY(x: s.1, y: s.2, Y: s.3) }
         }
