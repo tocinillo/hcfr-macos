@@ -252,7 +252,7 @@ private struct GeneratorMenu: View {
                     Text("madVR Envy / madTPG").tag(PatternSource.madVR)
                     ForEach(session.generatorScreens, id: \.self) { screen in
                         if let id = screen.displayID {
-                            Text(session.screenName(screen) + " — full screen").tag(PatternSource.display(id))
+                            Text(session.screenName(screen) + tr(" — full screen")).tag(PatternSource.display(id))
                         }
                     }
                 }
@@ -267,6 +267,19 @@ private struct GeneratorMenu: View {
                         Text("Raspberry Pi connected: \(s)")
                     } else {
                         Button("Connect to Raspberry Pi now") { session.connectPi() }
+                    }
+                    Button("PGenerator output (SDR / HDR10, color)…") { session.editingPiOutput = true }
+                }
+                Divider()
+                Button(madVRAddressTitle) {
+                    session.madVRAddressDraft = session.madVRAddress
+                    session.editingMadVRAddress = true
+                }
+                if session.patternSource == .madVR {
+                    if let s = session.madVRStatus {
+                        Text("madVR connected: \(s)")
+                    } else {
+                        Button("Connect to madVR now") { session.connectMadVR() }
                     }
                 }
                 Divider()
@@ -305,6 +318,14 @@ private struct GeneratorMenu: View {
         } message: {
             Text("Share of the screen area covered by the patch, from 1 to 100% (100 = full field). Used by the Raspberry Pi and by the displays of this Mac.")
         }
+        .alert("madVR address", isPresented: $session.editingMadVRAddress) {
+            TextField("192.168.1.60", text: $session.madVRAddressDraft)
+            Button("OK") { session.setMadVRAddress(session.madVRAddressDraft) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("IP address of the madVR Envy, or of the Windows PC running madTPG with network access enabled (madTPG → \"enable network access\"). The patterns are shown by madVR with its own output levels.")
+        }
+        .sheet(isPresented: $session.editingPiOutput) { PiOutputSheet(session: session) }
         .alert("Raspberry Pi address", isPresented: $session.editingPiAddress) {
             TextField("Automatic", text: $session.piAddressDraft)
             Button("OK") { session.setPiAddress(session.piAddressDraft) }
@@ -318,6 +339,10 @@ private struct GeneratorMenu: View {
     static let patchSizes: [Double] = [75, 50, 25, 18, 10, 5, 2]
 
     static func windowTitle(_ v: Double) -> String { tr("Window") + " " + Reference.label(v) + "%" }
+
+    private var madVRAddressTitle: String {
+        tr("madVR address: ") + (session.madVRAddress.isEmpty ? tr("not set") : session.madVRAddress) + "…"
+    }
 
     private var piAddressTitle: String {
         tr("Raspberry Pi address: ") + (session.piAddress.isEmpty ? tr("automatic") : session.piAddress) + "…"
@@ -1386,4 +1411,89 @@ private final class EditDraft: ObservableObject {
     @Published var x = 0.3127
     @Published var y = 0.3290
     @Published var Y = 0.0
+}
+
+
+/// Generator → PGenerator output…: PGenerator's HDMI output, set from here (SDR or HDR10 with its
+/// metadata, color format, bit depth and range), as PGenerator's own web page or DeviceControl do.
+struct PiOutputSheet: View {
+    @ObservedObject var session: Session
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("PGenerator output").font(.title3.bold())
+            if let now = session.piCurrentOutput {
+                Text(tr("Now: ") + now.summary).font(.callout).foregroundStyle(.secondary)
+            }
+            Toggle("Choose SDR or HDR10 automatically from the reference (Preferences → References)", isOn: $session.piAutoMode)
+            Form {
+                Picker("Mode", selection: $session.piOutput.hdr) {
+                    Text("SDR").tag(false)
+                    Text("HDR10 (PQ)").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .disabled(session.piAutoMode)
+                Picker("Color format", selection: $session.piOutput.colorFormat) {
+                    ForEach(0..<3, id: \.self) { Text(PiOutput.formatNames[$0]).tag($0) }
+                }
+                Picker("Bit depth", selection: $session.piOutput.bitDepth) {
+                    Text("8 bits").tag(8)
+                    Text("10 bits").tag(10)
+                }
+                .pickerStyle(.segmented)
+                Picker("Range", selection: $session.piOutput.limited) {
+                    Text("Limited (16–235)").tag(true)
+                    Text("Full (0–255)").tag(false)
+                }
+                .pickerStyle(.segmented)
+                Picker("Colorimetry", selection: $session.piOutput.colorimetry) {
+                    Text("Automatic").tag(-1)
+                    Text("Default").tag(0)
+                    Text("BT.709").tag(2)
+                    Text("BT.2020").tag(9)
+                }
+                Section("HDR10 metadata") {
+                    Picker("Mastering primaries", selection: $session.piOutput.primaries) {
+                        ForEach(0..<PiOutput.primariesNames.count, id: \.self) { Text(PiOutput.primariesNames[$0]).tag($0) }
+                    }
+                    HStack {
+                        number("Max. mastering luminance", $session.piOutput.maxLuma, "cd/m²")
+                        number("Min. (0.0001 cd/m²)", $session.piOutput.minLuma, "")
+                    }
+                    HStack {
+                        number("MaxCLL", $session.piOutput.maxCLL, "cd/m²")
+                        number("MaxFALL", $session.piOutput.maxFALL, "cd/m²")
+                    }
+                }
+            }
+            .formStyle(.grouped)
+            Text("Video levels in the Generator menu must match the range: Limited with Video (16–235), Full with PC (0–255). In HDR10 the patterns are sent in 10 bits. Applying restarts PGenerator (a few seconds).")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Button("Read from the Pi") { session.readPiOutput() }
+                Spacer()
+                if session.piApplying { ProgressView().controlSize(.small) }
+                Button("Close") { dismiss() }
+                Button("Apply to the Pi") {
+                    var o = session.piOutput
+                    if session.piAutoMode { o = session.piWantedOutput }
+                    Task {
+                        do { try await session.applyPiOutput(o) } catch { session.errorMessage = error.localizedDescription }
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(session.piApplying || session.activity != .idle)
+            }
+        }
+        .padding(20)
+        .frame(width: 520)
+    }
+
+    private func number(_ title: String, _ value: Binding<Int>, _ unit: String) -> some View {
+        HStack(spacing: 4) {
+            TextField(tr(title), value: value, format: .number).frame(width: 70)
+            if !unit.isEmpty { Text(unit).foregroundStyle(.secondary) }
+        }
+    }
 }

@@ -331,3 +331,103 @@ final class PGeneratorClient: @unchecked Sendable {
 private extension Array where Element == UInt8 {
     func ends(with suffix: [UInt8]) -> Bool { count >= suffix.count && Array(self[(count - suffix.count)...]) == suffix }
 }
+
+/// PGenerator's HDMI output (its PGenerator.conf), set from this app as pgen_client / DeviceControl
+/// do: "CMD:SET_PGENERATOR_CONF_<KEY>:<value>" for each setting, then "RESTARTPGENERATOR:" so it
+/// takes effect; read with "CMD:MULTIPLE:GET_PGENERATOR_CONF_<KEY>:…".
+struct PiOutput: Codable, Equatable {
+    /// HDR10 (PQ, with HDR metadata) instead of SDR.
+    var hdr = false
+    /// 0 RGB, 1 YCbCr 4:4:4, 2 YCbCr 4:2:2.
+    var colorFormat = 0
+    /// 8 or 10 bits per channel.
+    var bitDepth = 8
+    /// RGB quantization range: limited (16–235) or full (0–255).
+    var limited = true
+    /// HDMI colorimetry: 0 default, 2 BT.709, 9 BT.2020 (−1 = automatic from SDR / HDR).
+    var colorimetry = -1
+    /// HDR metadata: mastering display primaries (0 Rec.709, 1 Rec.2020, 2 P3 D65, 3 DCI-P3, 4 P3 D60),
+    /// luminances in cd/m² (min in 0.0001 cd/m²), MaxCLL and MaxFALL.
+    var primaries = 2
+    var maxLuma = 1000
+    var minLuma = 50
+    var maxCLL = 1000
+    var maxFALL = 400
+
+    static let formatNames = ["RGB", "YCbCr 4:4:4", "YCbCr 4:2:2"]
+    static let primariesNames = ["Rec.709", "Rec.2020 / D65", "P3 / D65", "DCI-P3 (Theater)", "P3 D60 (ACES Cinema)"]
+
+    var effectiveColorimetry: Int { colorimetry >= 0 ? colorimetry : (hdr ? 9 : 2) }
+
+    /// Short description, e.g. "HDR10 · RGB · 10-bit · Full".
+    var summary: String {
+        [hdr ? "HDR10" : "SDR", Self.formatNames[min(max(colorFormat, 0), 2)], "\(bitDepth)-bit",
+         limited ? "Limited" : "Full"].joined(separator: " · ")
+    }
+
+    /// The SET commands for this output (no Dolby Vision, no HLG: SDR or HDR10 only).
+    var setCommands: [String] {
+        var c: [(String, Int)] = [
+            ("IS_SDR", hdr ? 0 : 1), ("IS_HDR", hdr ? 1 : 0), ("IS_LL_DOVI", 0), ("IS_STD_DOVI", 0),
+            ("DV_STATUS", 0), ("DV_INTERFACE", 0),
+            ("COLOR_FORMAT", colorFormat), ("MAX_BPC", bitDepth), ("RGB_QUANT_RANGE", limited ? 1 : 2),
+            ("COLORIMETRY", effectiveColorimetry),
+        ]
+        if hdr {
+            c += [("EOTF", 2), ("PRIMARIES", primaries), ("MAX_LUMA", maxLuma), ("MIN_LUMA", minLuma),
+                  ("MAX_CLL", maxCLL), ("MAX_FALL", maxFALL)]
+        } else {
+            c += [("EOTF", 0)]
+        }
+        return c.map { "CMD:SET_PGENERATOR_CONF_\($0.0):\($0.1)" }
+    }
+
+    static let readKeys = ["IS_HDR", "COLOR_FORMAT", "MAX_BPC", "RGB_QUANT_RANGE", "COLORIMETRY", "EOTF", "PRIMARIES",
+                           "MAX_LUMA", "MIN_LUMA", "MAX_CLL", "MAX_FALL"]
+    static var readCommand: String { "CMD:MULTIPLE:" + readKeys.map { "GET_PGENERATOR_CONF_\($0)" }.joined(separator: ":") }
+
+    /// Parses the answer to `readCommand` ("OK:" then one "GET_PGENERATOR_CONF_<KEY>:<value>" per line).
+    static func parse(_ answer: String) -> PiOutput? {
+        var v: [String: Int] = [:]
+        for line in answer.split(whereSeparator: \.isNewline) {
+            for key in readKeys {
+                let tag = "GET_PGENERATOR_CONF_\(key):"
+                if let r = line.range(of: tag) { v[key] = Int(line[r.upperBound...].trimmingCharacters(in: .whitespaces)) }
+            }
+        }
+        guard !v.isEmpty else { return nil }
+        var o = PiOutput()
+        o.hdr = (v["IS_HDR"] ?? 0) == 1 && (v["EOTF"] ?? 2) == 2
+        o.colorFormat = v["COLOR_FORMAT"] ?? 0
+        o.bitDepth = v["MAX_BPC"] == 10 ? 10 : 8
+        o.limited = (v["RGB_QUANT_RANGE"] ?? 1) != 2
+        o.colorimetry = v["COLORIMETRY"] ?? -1
+        if o.colorimetry == o.effectiveColorimetryAuto { o.colorimetry = -1 }
+        o.primaries = v["PRIMARIES"] ?? 2
+        o.maxLuma = v["MAX_LUMA"] ?? 1000
+        o.minLuma = v["MIN_LUMA"] ?? 50
+        o.maxCLL = v["MAX_CLL"] ?? 1000
+        o.maxFALL = v["MAX_FALL"] ?? 400
+        return o
+    }
+
+    private var effectiveColorimetryAuto: Int { hdr ? 9 : 2 }
+
+    /// Same output on the HDMI link (HDR metadata only counts in HDR10).
+    func matches(_ o: PiOutput) -> Bool {
+        guard hdr == o.hdr, colorFormat == o.colorFormat, bitDepth == o.bitDepth, limited == o.limited,
+              effectiveColorimetry == o.effectiveColorimetry else { return false }
+        return !hdr || (primaries == o.primaries && maxLuma == o.maxLuma && minLuma == o.minLuma
+                        && maxCLL == o.maxCLL && maxFALL == o.maxFALL)
+    }
+}
+
+extension PGeneratorClient {
+    /// 10-bit patch (PGenerator's RECTANGLE10bit), codes 0…1023.
+    func rectangleMessage10(rgb: [Int], background: [Int], areaPercent: Double) -> String {
+        let k = sqrt(min(max(areaPercent, 1), 100) / 100)
+        let w = Int(k * Double(width)), h = Int(k * Double(height))
+        let c = rgb.map { min(max($0, 0), 1023) }, b = background.map { min(max($0, 0), 1023) }
+        return "RGB=RECTANGLE10bit;\(w),\(h);100;\(c[0]),\(c[1]),\(c[2]);\(b[0]),\(b[1]),\(b[2]);-1,-1,0,0"
+    }
+}

@@ -26,7 +26,7 @@ final class WizardModel: ObservableObject {
         }
     }
     enum DisplayKind: Int, CaseIterable { case tv, projector }
-    enum Content: Int, CaseIterable { case sdr, hdr10, hlg }
+    enum Content: Int, CaseIterable { case sdr, hdr10 }
 
     @Published var step = Step.welcome
     @Published var display = DisplayKind.tv
@@ -87,9 +87,6 @@ extension Session {
         case .hdr10:
             if standard == .hdtv || standard == .sdtv || standard == .sRGB { standard = .uhdtvP3in2020 }
             prefs.gammaMode = GammaMode.st2084.rawValue
-        case .hlg:
-            if standard == .hdtv || standard == .sdtv || standard == .sRGB { standard = .uhdtvP3in2020 }
-            prefs.gammaMode = GammaMode.hlg.rawValue
         }
     }
 
@@ -320,7 +317,6 @@ private struct WelcomeStep: View {
             HStack(spacing: 12) {
                 ChoiceTile(title: "SDR", detail: "Blu-ray, TV, streaming in standard range", symbol: "sun.min", selected: w.content == .sdr) { w.content = .sdr }
                 ChoiceTile(title: "HDR10", detail: "UHD Blu-ray, streaming HDR (PQ / ST.2084)", symbol: "sun.max", selected: w.content == .hdr10) { w.content = .hdr10 }
-                ChoiceTile(title: "HLG", detail: "HDR broadcast (Hybrid Log-Gamma)", symbol: "antenna.radiowaves.left.and.right", selected: w.content == .hlg) { w.content = .hlg }
             }
         }
     }
@@ -372,6 +368,8 @@ private struct GeneratorStep: View {
                            selected: session.patternSource == .raspberryPi) { session.patternSource = .raspberryPi }
                 ChoiceTile(title: "This Mac", detail: "A display connected to this Mac", symbol: "display",
                            selected: isDisplay) { useFirstDisplay() }
+                ChoiceTile(title: "madVR", detail: "madVR Envy or madTPG on your network", symbol: "sparkles.tv",
+                           selected: session.patternSource == .madVR) { session.patternSource = .madVR }
                 ChoiceTile(title: "Manual", detail: "A calibration disc: the app asks for each pattern", symbol: "opticaldisc",
                            selected: session.patternSource == .manual) { session.patternSource = .manual }
             }
@@ -382,6 +380,16 @@ private struct GeneratorStep: View {
                             .onAppear { w.piAddressDraft = session.piAddress }
                         Button("Connect") { session.usePi(at: w.piAddressDraft) }
                         if let s = session.piStatus { Label(s, systemImage: "checkmark.circle.fill").foregroundStyle(.green) }
+                    }
+                }
+            }
+            if session.patternSource == .madVR {
+                Card {
+                    HStack {
+                        TextField("IP address of the Envy or of the PC with madTPG", text: $session.madVRAddressDraft).frame(width: 260)
+                            .onAppear { session.madVRAddressDraft = session.madVRAddress }
+                        Button("Connect") { session.setMadVRAddress(session.madVRAddressDraft) }
+                        if let s = session.madVRStatus { Label(s, systemImage: "checkmark.circle.fill").foregroundStyle(.green) }
                     }
                 }
             }
@@ -456,8 +464,8 @@ private struct TargetsStep: View {
                 }
             } else {
                 Card {
-                    Text(w.content == .hdr10 ? "HDR10: ST.2084 (PQ) curve." : "HLG: Hybrid Log-Gamma curve.").font(.headline)
-                    Text("Set the pattern generator to HDR output (PGenerator: HDR10 / HLG mode) so the display enters its HDR mode. The peak luminance and roll-off are in Preferences → References.")
+                    Text("HDR10: ST.2084 (PQ) curve.").font(.headline)
+                    Text("The generator must send HDR10 so the display enters its HDR mode: with a Raspberry Pi, HCFR puts PGenerator in HDR10 by itself (Generator → PGenerator output); with madVR, set its HDR output. The peak luminance and roll-off are in Preferences → References.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }

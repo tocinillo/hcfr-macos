@@ -220,7 +220,23 @@ final class Session: ObservableObject {
     @Published var editingPatchSize = false
     @Published var patchSizeDraft = ""
     @Published var piAddressDraft = ""
-    private var pi: PGeneratorClient?
+    var pi: PGeneratorClient?
+    /// PGenerator's HDMI output wanted (Generator → PGenerator output…) and the one it has now.
+    @Published var piOutput = PiOutput() {
+        didSet { if let d = try? JSONEncoder().encode(piOutput) { defaults.set(d, forKey: "piOutput") } }
+    }
+    @Published var piCurrentOutput: PiOutput?
+    /// Set the Pi to SDR or HDR10 automatically from the reference (Preferences → References).
+    @Published var piAutoMode = true { didSet { defaults.set(piAutoMode, forKey: "piAutoMode") } }
+    @Published var editingPiOutput = false
+    @Published var piApplying = false
+    /// madVR Envy / madTPG (MadVR.swift): its IP address, the connection and its description.
+    @Published var madVRAddress = ""
+    @Published var madVRStatus: String?
+    @Published var editingMadVRAddress = false
+    @Published var madVRAddressDraft = ""
+    var madVR: MadVRClient?
+    var madVRConnecting: Task<MadVRClient, Error>?
     private var piConnecting: Task<PGeneratorClient, Error>?
     private var promptPanel: PromptPanelController?
     @Published var lastMeasure: Date?
@@ -258,6 +274,9 @@ final class Session: ObservableObject {
         patternArea = defaults.object(forKey: "patternArea") as? Double ?? 100
         settleSeconds = defaults.object(forKey: "settleSeconds") as? Double ?? 1.0
         piAddress = defaults.string(forKey: "piAddress") ?? ""
+        madVRAddress = defaults.string(forKey: "madVRAddress") ?? ""
+        if let d = defaults.data(forKey: "piOutput"), let o = try? JSONDecoder().decode(PiOutput.self, from: d) { piOutput = o }
+        piAutoMode = defaults.object(forKey: "piAutoMode") as? Bool ?? true
         if let n = defaults.object(forKey: "grayCount") as? Int, n >= 3, n <= 101 { grayCount = n }
         if let n = defaults.object(forKey: "nearBlackCount") as? Int, n >= 2, n <= 101 { nearBlackCount = n }
         if let n = defaults.object(forKey: "nearWhiteCount") as? Int, n >= 2, n <= 101 { nearWhiteCount = n }
@@ -279,6 +298,8 @@ final class Session: ObservableObject {
             patternSource = .display(id)
         } else if defaults.bool(forKey: "patternRaspberryPi") {
             patternSource = .raspberryPi
+        } else if defaults.bool(forKey: "patternMadVR") {
+            patternSource = .madVR
         }
         patternWindow.onEscape = { [weak self] in self?.stop() }
         applyStaticOptions()
@@ -859,15 +880,27 @@ final class Session: ObservableObject {
     /// Shows the pattern on the generator display (if one is selected) and waits `settleSeconds`
     /// when it changed.
     func showIfGenerator(_ pattern: TestPattern, force: Bool = false) async throws {
+        if patternSource == .madVR {
+            guard force || pattern != shownPattern else { return }
+            try Task.checkCancellation()
+            // madTPG has no ANSI checkerboard: full field of the bright part
+            let ansi = pattern.ansiInverted != nil
+            let rgb = ansi ? [1.0, 1, 1] : pattern.rgb
+            let area = ansi ? 100 : patternArea
+            try await madVRSend { try await $0.show(rgb: rgb, background: 0, areaPercent: area) }
+            shownPattern = pattern
+            try await latencyWait()
+            return
+        }
         if patternSource == .raspberryPi {
             guard force || pattern != shownPattern else { return }
             try Task.checkCancellation()
+            if shownPattern == nil { try await ensurePiMode() }
             try await insertFrameIfDue()
-            let black = videoLevels.code(0)
             if let inverted = pattern.ansiInverted {
                 try await piSend { $0.ansiMessage(inverted: inverted) }
             } else {
-                try await piShow(rgb: pattern.rgb.map { videoLevels.code($0) }, background: [black, black, black])
+                try await piShow(levels: pattern.rgb)
             }
             shownPattern = pattern
             try await latencyWait()
@@ -937,9 +970,22 @@ final class Session: ObservableObject {
     // MARK: - Raspberry Pi (PGenerator)
 
     /// Sends a patch to the Raspberry Pi; if the connection was lost (Pi restarted…), reconnects once.
-    private func piShow(rgb: [Int], background: [Int]) async throws {
+    private func piShow(levels: [Double]) async throws {
         let area = patternArea
-        try await piSend { $0.rectangleMessage(rgb: rgb, background: background, areaPercent: area) }
+        if (piCurrentOutput ?? piOutput).bitDepth == 10 {
+            // 10-bit codes (video 64–940 or full 0–1023); PGenerator takes 10-bit backgrounds only in RGB
+            func code10(_ v: Double) -> Int {
+                videoLevels == .video ? Int((64 + v * 876).rounded()) : Int((v * 1023).rounded())
+            }
+            let rgb = levels.map(code10)
+            let rgbFormat = (piCurrentOutput ?? piOutput).colorFormat == 0
+            let bg = rgbFormat ? code10(0) : videoLevels.code(0)
+            try await piSend { $0.rectangleMessage10(rgb: rgb, background: [bg, bg, bg], areaPercent: area) }
+        } else {
+            let black = videoLevels.code(0)
+            let rgb = levels.map { videoLevels.code($0) }
+            try await piSend { $0.rectangleMessage(rgb: rgb, background: [black, black, black], areaPercent: area) }
+        }
     }
 
     /// Sends a message built for the connected Pi; reconnects once if the connection was lost.
@@ -955,7 +1001,7 @@ final class Session: ObservableObject {
     }
 
     /// The connected Raspberry Pi, connecting first if needed (only one connection attempt at a time).
-    private func piClient() async throws -> PGeneratorClient {
+    func piClient() async throws -> PGeneratorClient {
         if let pi { return pi }
         if let piConnecting { return try await piConnecting.value }
         let address = piAddress
@@ -982,6 +1028,10 @@ final class Session: ObservableObject {
             let c = try await t.value
             pi = c
             piStatus = "\(c.host) · \(c.width)×\(c.height)"
+            if let a = try? await c.get(PiOutput.readCommand), let o = PiOutput.parse(a) {
+                piCurrentOutput = o
+                piStatus = "\(c.host) · \(c.width)×\(c.height) · \(o.summary)"
+            }
             status = "Raspberry Pi connected at \(c.host) (\(c.width)×\(c.height))"
             return c
         } catch {
@@ -999,7 +1049,7 @@ final class Session: ObservableObject {
     }
 
     /// Closes the connection, leaving the Pi on black.
-    private func dropPi(goodbye: Bool = false) {
+    func dropPi(goodbye: Bool = false) {
         guard let c = pi else { return }
         pi = nil
         piStatus = nil
@@ -1081,6 +1131,12 @@ final class Session: ObservableObject {
             connectPi()
         } else {
             dropPi(goodbye: true)
+        }
+        if patternSource == .madVR {
+            shownPattern = nil
+            connectMadVR()
+        } else {
+            dropMadVR()
         }
     }
 
