@@ -64,6 +64,17 @@ struct ColorimeterApp: App {
                         ForEach(group.1) { t in Button(tr(t.title)) { session.showTestImage(t) } }
                     }
                 }
+                Menu("User Defined") {
+                    ForEach(1...6, id: \.self) { n in
+                        Button("User\(n)" + (session.userPatternPath(n).map { ": " + URL(fileURLWithPath: $0).lastPathComponent } ?? " — " + tr("choose an image…"))) {
+                            session.showUserPattern(n)
+                        }
+                    }
+                    Divider()
+                    Menu("Change image") {
+                        ForEach(1...6, id: \.self) { n in Button("User\(n)…") { session.chooseUserPattern(n) } }
+                    }
+                }
                 Divider()
                 Button("Show color…") { session.editingTestColor = true }
                 Button("Hide pattern") { session.hideTestPattern() }

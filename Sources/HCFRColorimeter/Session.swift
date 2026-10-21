@@ -236,6 +236,20 @@ final class Session: ObservableObject {
     /// madVR Envy / madTPG (MadVR.swift): its IP address, the connection and its description.
     @Published var madVRAddress = ""
     @Published var madVRStatus: String?
+    /// Generator → Patch position: offset of the patch center in % of the screen (HCFR's offset X/Y),
+    /// and black on the other displays while a full-screen pattern is shown.
+    @Published var patchOffsetX = 0.0 { didSet { defaults.set(patchOffsetX, forKey: "patchOffsetX"); syncPatternWindow() } }
+    @Published var patchOffsetY = 0.0 { didSet { defaults.set(patchOffsetY, forKey: "patchOffsetY"); syncPatternWindow() } }
+    @Published var blankOtherScreens = false { didSet { defaults.set(blankOtherScreens, forKey: "blankOtherScreens"); syncPatternWindow() } }
+    @Published var editingPatchPosition = false
+    /// Sensor matrix → "Reference values typed by hand…".
+    let manualReference = ManualReference()
+    @Published var editingManualReference = false
+    /// madTPG options (HCFR's generator page): measure without madVR's 3D LUT and calibration, HDR, OSD.
+    @Published var madVRDisable3DLUT = true { didSet { defaults.set(madVRDisable3DLUT, forKey: "madVRDisable3DLUT"); madVRApply() } }
+    @Published var madVRDisableCalibration = true { didSet { defaults.set(madVRDisableCalibration, forKey: "madVRDisableCalibration"); madVRApply() } }
+    @Published var madVRHDR = false { didSet { defaults.set(madVRHDR, forKey: "madVRHDR"); madVRApply() } }
+    @Published var madVROSD = false { didSet { defaults.set(madVROSD, forKey: "madVROSD"); madVRApply() } }
     @Published var editingMadVRAddress = false
     @Published var madVRAddressDraft = ""
     var madVR: MadVRClient?
@@ -278,6 +292,14 @@ final class Session: ObservableObject {
         settleSeconds = defaults.object(forKey: "settleSeconds") as? Double ?? 1.0
         piAddress = defaults.string(forKey: "piAddress") ?? ""
         madVRAddress = defaults.string(forKey: "madVRAddress") ?? ""
+        patchOffsetX = defaults.double(forKey: "patchOffsetX")
+        patchOffsetY = defaults.double(forKey: "patchOffsetY")
+        blankOtherScreens = defaults.bool(forKey: "blankOtherScreens")
+        syncPatternWindow()
+        madVRDisable3DLUT = defaults.object(forKey: "madVRDisable3DLUT") as? Bool ?? true
+        madVRDisableCalibration = defaults.object(forKey: "madVRDisableCalibration") as? Bool ?? true
+        madVRHDR = defaults.bool(forKey: "madVRHDR")
+        madVROSD = defaults.bool(forKey: "madVROSD")
         if let d = defaults.data(forKey: "piOutput"), let o = try? JSONDecoder().decode(PiOutput.self, from: d) { piOutput = o }
         piAutoMode = defaults.object(forKey: "piAutoMode") as? Bool ?? true
         if let n = defaults.object(forKey: "grayCount") as? Int, n >= 3, n <= 101 { grayCount = n }

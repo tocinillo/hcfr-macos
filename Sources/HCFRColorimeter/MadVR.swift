@@ -91,6 +91,21 @@ final class MadVRClient: @unchecked Sendable {
         }
     }
 
+    /// madTPG options of HCFR for Windows' generator page: measure without madVR's own calibration
+    /// (3D LUT and gamma ramp), madTPG's HDR button and its on-screen display.
+    func applyOptions(disable3DLUT: Bool, disableCalibration: Bool, hdr: Bool, osd: Bool) async {
+        _ = try? await run {
+            if disableCalibration {
+                var ramp: [UInt8] = []
+                for _ in 0..<3 { for i in 0..<256 { ramp += Self.le(UInt16(i * 257)) } }
+                _ = try? self.command("SetDeviceGammaRamp", binary: ramp)
+            }
+            if disable3DLUT { _ = try? self.command("Disable3dlut") }
+            _ = try? self.command("SetDisableOsdButton", text: osd ? "-" : "+")
+            _ = try? self.command("SetHdrButton", text: hdr ? "+" : "-")
+        }
+    }
+
     /// Text on madTPG's on-screen display.
     func osd(_ text: String) async throws {
         _ = try await run { try self.command("SetOsdText", text: text) }
@@ -200,8 +215,8 @@ final class MadVRClient: @unchecked Sendable {
 
     /// Sends a command to madTPG and waits for its reply; returns the reply's parameters.
     @discardableResult
-    private func command(_ name: String, text: String? = nil, timeout: TimeInterval = 4) throws -> [UInt8] {
-        let no = try sendPacket(command: name, params: text.map(Self.utf16) ?? [], component: "madTPG")
+    private func command(_ name: String, text: String? = nil, binary: [UInt8]? = nil, timeout: TimeInterval = 4) throws -> [UInt8] {
+        let no = try sendPacket(command: name, params: binary ?? text.map(Self.utf16) ?? [], component: "madTPG")
         let deadline = Date().addingTimeInterval(timeout)
         while true {
             guard let p = try readPacket(until: deadline) else { try fail("No answer from madVR to \"\(name)\".") }

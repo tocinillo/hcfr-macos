@@ -118,6 +118,8 @@ extension Session {
             let c = MadVRClient(host: host)
             try await c.connect()
             try? await c.osd("HCFR Colorimeter for macOS")
+            await c.applyOptions(disable3DLUT: self.madVRDisable3DLUT, disableCalibration: self.madVRDisableCalibration,
+                                 hdr: self.madVRHDR, osd: self.madVROSD)
             return c
         }
         madVRConnecting = t
@@ -133,6 +135,19 @@ extension Session {
             status = "madVR not connected"
             throw error
         }
+    }
+
+    /// Patch position and screen blanking → the pattern window.
+    func syncPatternWindow() {
+        patternWindow.offset = CGPoint(x: patchOffsetX / 100, y: patchOffsetY / 100)
+        patternWindow.blankOthers = blankOtherScreens
+    }
+
+    /// The madTPG options changed: send them to the connected madVR.
+    func madVRApply() {
+        guard let c = madVR else { return }
+        let o = (madVRDisable3DLUT, madVRDisableCalibration, madVRHDR, madVROSD)
+        Task { await c.applyOptions(disable3DLUT: o.0, disableCalibration: o.1, hdr: o.2, osd: o.3) }
     }
 
     func connectMadVR() {

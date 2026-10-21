@@ -179,6 +179,38 @@ extension Session {
     }
 }
 
+/// HCFR's "Build manually using reference colorimeter": the x, y, Y that a reference meter read on
+/// red, green, blue and white, typed by hand.
+final class ManualReference: ObservableObject {
+    @Published var values: [[Double]] = [[0.640, 0.330, 25.5], [0.300, 0.600, 85.9], [0.150, 0.060, 8.7], [0.3127, 0.3290, 120]]
+}
+
+extension Session {
+    /// Matrix from this meter's red, green, blue and white (Measure → Primary colors) and the
+    /// reference values typed in `manualReference`.
+    func computeSensorMatrixFromManual() {
+        let rgb: [PatchColor] = [.red, .green, .blue]
+        let mine = rgb.compactMap { colorMeasurements[$0] }
+        guard mine.count == 3 else {
+            errorMessage = "Measure red, green and blue with this meter first (Measure → Primary colors), on the same patches the reference meter read."
+            return
+        }
+        let v = manualReference.values
+        let theirs = (0..<3).map { XYZ.fromxyY(x: v[$0][0], y: v[$0][1], Y: v[$0][2]) }
+        let wr = v[3][2] > 0 ? XYZ.fromxyY(x: v[3][0], y: v[3][1], Y: v[3][2]) : nil
+        let wm = colorMeasurements[.white] ?? measurements[100]
+        guard let t = SensorMatrix.compute(measures: mine, references: theirs, whiteMeasure: wm, whiteReference: wr,
+                                           onlyPrimaries: appPrefs.matrixOnlyPrimaries || wr == nil) else {
+            errorMessage = "The matrix could not be computed (the values are not independent)."
+            return
+        }
+        let old = appPrefs.sensorMatrix.count == 9 ? Mat3(m: [Array(appPrefs.sensorMatrix[0..<3]), Array(appPrefs.sensorMatrix[3..<6]), Array(appPrefs.sensorMatrix[6..<9])])
+                                                   : Mat3.diagonal([1, 1, 1])
+        appPrefs.sensorMatrix = (t * old).m.flatMap { $0 }
+        status = "Sensor matrix computed from the reference values typed by hand. It applies to the next readings: measure again."
+    }
+}
+
 // MARK: - Meter correction files (HCFR: Advanced → Meter Correction file)
 
 enum MeterCorrectionFile {

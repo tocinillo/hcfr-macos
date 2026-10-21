@@ -410,6 +410,11 @@ struct SensorPage: View {
                     Button("Compute from compared project") { session.computeSensorMatrixFromReference() }
                         .disabled(session.refData == nil)
                         .help("Measure red, green, blue and white with this meter; open (File → Compare with Project…) a project where the same patches were measured with a reference meter (a spectro). The matrix makes this meter read like the reference.")
+                    Button("Reference values by hand…") { session.editingManualReference = true }
+                        .sheet(isPresented: $session.editingManualReference) {
+                            ManualReferenceSheet(session: session, r: session.manualReference)
+                        }
+                        .help("HCFR's \"Build manually using reference colorimeter\": type the x, y, Y a reference meter read on red, green, blue and white")
                     Button("Reset") { session.appPrefs.sensorMatrix = [1, 0, 0, 0, 1, 0, 0, 0, 1] }
                 }
                 HStack {
@@ -488,5 +493,41 @@ struct PreferencesSnapshot: View {
         case 4: AppearancePage(session: session, plain: true)
         default: SensorPage(session: session, plain: true)
         }
+    }
+}
+
+
+/// Sensor matrix → Reference values by hand: x, y, Y of red, green, blue and white read by a
+/// reference meter on the same patches this meter measured.
+struct ManualReferenceSheet: View {
+    @ObservedObject var session: Session
+    @ObservedObject var r: ManualReference
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Reference meter values").font(.title3.bold())
+            Text("Measure red, green, blue and white with this meter (Measure → Primary colors), then type what the reference meter read on the same patches. White is optional (Y = 0 to leave it out).")
+                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Grid(horizontalSpacing: 10, verticalSpacing: 6) {
+                GridRow { Text(""); Text("x").bold(); Text("y").bold(); Text("Y (cd/m²)").bold() }
+                ForEach(0..<4, id: \.self) { i in
+                    GridRow {
+                        Text(tr(["Red", "Green", "Blue", "White"][i])).frame(width: 60, alignment: .leading)
+                        ForEach(0..<3, id: \.self) { k in
+                            TextField("", value: $r.values[i][k], format: .number.precision(.fractionLength(0...4)))
+                                .labelsHidden().frame(width: 90).multilineTextAlignment(.trailing)
+                        }
+                    }
+                }
+            }
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                Button("Compute matrix") { session.computeSensorMatrixFromManual(); dismiss() }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 460)
     }
 }

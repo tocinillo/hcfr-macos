@@ -9,6 +9,7 @@
 // the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See LICENSE.
 
 import AppKit
+import UniformTypeIdentifiers
 
 /// A pattern image of HCFR (file in Resources/Patterns; PGenerator keeps the same files in images-HCFR).
 struct TestImage: Identifiable, Hashable {
@@ -123,6 +124,38 @@ extension Session {
         }
         testPatternShown = t.title
         status = "Pattern: \(t.title) — ESC or Patterns → Hide pattern to close"
+    }
+
+    /// HCFR's Patterns → Evaluation Images → User Defined (User1…User6): images of the user's own.
+    func userPatternPath(_ n: Int) -> String? {
+        let p = defaults.string(forKey: "userPattern\(n)")
+        return p.flatMap { FileManager.default.fileExists(atPath: $0) ? $0 : nil }
+    }
+
+    func chooseUserPattern(_ n: Int) {
+        let panel = NSOpenPanel()
+        panel.title = tr("Image for User") + " \(n)"
+        panel.allowedContentTypes = [.image]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        defaults.set(url.path, forKey: "userPattern\(n)")
+        objectWillChange.send()
+        showUserPattern(n)
+    }
+
+    func showUserPattern(_ n: Int) {
+        guard activity == .idle else { return }
+        guard let path = userPatternPath(n) else { chooseUserPattern(n); return }
+        guard let screen = patternScreen else {
+            errorMessage = "User images are shown on a display of this Mac: choose it in Generator."
+            return
+        }
+        let url = URL(fileURLWithPath: path)
+        guard patternWindow.showImage(url, videoLevels: videoLevels == .video, on: screen) else {
+            errorMessage = "The image \(url.lastPathComponent) could not be opened."
+            return
+        }
+        testPatternShown = "User\(n)"
+        status = "Pattern: User\(n) (\(url.lastPathComponent)) — ESC or Patterns → Hide pattern to close"
     }
 
     /// HCFR's "Black +1% & +2% moving bars" / "White −1% & −2% moving bars".

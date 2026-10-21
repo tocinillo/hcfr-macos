@@ -98,6 +98,8 @@ final class PatternWindowController {
         var background: [Int] = [0, 0, 0] { didSet { needsDisplay = true } }
         /// Share of the screen area covered by the patch (100 = full field), on black.
         var areaPercent: Double = 100 { didSet { needsDisplay = true } }
+        /// Patch position: offset of its center, as a share of the screen (−0.5…0.5), HCFR's offset X/Y.
+        var offset: CGPoint = .zero { didSet { needsDisplay = true } }
         /// ANSI checkerboard instead of a patch: `rgb` squares on `background` (nil = patch).
         var ansiInverted: Bool? { didSet { needsDisplay = true } }
         /// Test image (HCFR's Patterns menu), already in the display's color space, fitted on black.
@@ -147,7 +149,9 @@ final class PatternWindowController {
             let k = sqrt(min(max(areaPercent, 1), 100) / 100)
             let w = bounds.width * k, h = bounds.height * k
             color(rgb).setFill()
-            NSRect(x: bounds.midX - w / 2, y: bounds.midY - h / 2, width: w, height: h).fill()
+            let cx = min(max(bounds.midX + offset.x * bounds.width, w / 2), bounds.width - w / 2)
+            let cy = min(max(bounds.midY - offset.y * bounds.height, h / 2), bounds.height - h / 2)
+            NSRect(x: cx - w / 2, y: cy - h / 2, width: w, height: h).fill()
         }
     }
 
@@ -177,6 +181,10 @@ final class PatternWindowController {
     private var view: PatternView?
     private var windowed = false
     private var observers: [NSObjectProtocol] = []
+    /// Patch offset (share of the screen) and HCFR's "screen blanking": black on the other displays.
+    var offset: CGPoint = .zero
+    var blankOthers = false
+    private var blanks: [NSWindow] = []
     var onEscape: (() -> Void)?
 
     var isShowing: Bool { window != nil }
@@ -195,6 +203,18 @@ final class PatternWindowController {
             // On the app's own screen the pattern covers the app: make it key so ESC stops
             if screen == NSApp.mainWindow?.screen { w.makeKeyAndOrderFront(nil) } else { w.orderFrontRegardless() }
             windowed = false
+            if blankOthers {
+                for other in NSScreen.screens where other != screen {
+                    let b = NSWindow(contentRect: other.frame, styleMask: .borderless, backing: .buffered, defer: false, screen: other)
+                    b.level = .screenSaver
+                    b.backgroundColor = .black
+                    b.isReleasedWhenClosed = false
+                    b.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+                    b.setFrame(other.frame, display: true)
+                    b.orderFrontRegardless()
+                    blanks.append(b)
+                }
+            }
         }
         update(rgb: rgb, background: background, areaPercent: areaPercent, ansiInverted: ansiInverted)
     }
@@ -258,6 +278,7 @@ final class PatternWindowController {
         stopAnimation()
         view?.image = nil
         view?.bars = nil
+        view?.offset = offset
         view?.areaPercent = areaPercent
         view?.ansiInverted = ansiInverted
         view?.background = background
@@ -312,6 +333,8 @@ final class PatternWindowController {
         stopAnimation()
         observers.forEach(NotificationCenter.default.removeObserver)
         observers.removeAll()
+        blanks.forEach { $0.orderOut(nil) }
+        blanks.removeAll()
         window = nil
         view = nil
     }

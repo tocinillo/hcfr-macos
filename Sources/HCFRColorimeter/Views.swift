@@ -281,6 +281,12 @@ private struct GeneratorMenu: View {
                     } else {
                         Button("Connect to madVR now") { session.connectMadVR() }
                     }
+                    Menu("madTPG options") {
+                        Toggle("Disable madVR's 3D LUT while measuring", isOn: $session.madVRDisable3DLUT)
+                        Toggle("Disable madVR's calibration (gamma ramp)", isOn: $session.madVRDisableCalibration)
+                        Toggle("HDR mode", isOn: $session.madVRHDR)
+                        Toggle("Show madTPG's on-screen display", isOn: $session.madVROSD)
+                    }
                 }
                 Divider()
                 Picker("Levels", selection: $session.videoLevels) {
@@ -299,6 +305,8 @@ private struct GeneratorMenu: View {
                     session.patchSizeDraft = Reference.label(session.patternArea)
                     session.editingPatchSize = true
                 }
+                Button("Patch position…") { session.editingPatchPosition = true }
+                Toggle("Black on the other displays (screen blanking)", isOn: $session.blankOtherScreens)
                 Picker("Wait before reading", selection: $session.settleSeconds) {
                     ForEach([0.5, 1.0, 1.5, 2.0, 3.0], id: \.self) { Text(String(format: "%.1f s", $0)).tag($0) }
                 }
@@ -326,6 +334,7 @@ private struct GeneratorMenu: View {
             Text("IP address of the madVR Envy, or of the Windows PC running madTPG with network access enabled (madTPG → \"enable network access\"). The patterns are shown by madVR with its own output levels.")
         }
         .sheet(isPresented: $session.editingPiOutput) { PiOutputSheet(session: session) }
+        .sheet(isPresented: $session.editingPatchPosition) { PatchPositionSheet(session: session) }
         .alert("Raspberry Pi address", isPresented: $session.editingPiAddress) {
             TextField("Automatic", text: $session.piAddressDraft)
             Button("OK") { session.setPiAddress(session.piAddressDraft) }
@@ -1490,5 +1499,38 @@ struct PiOutputSheet: View {
             TextField(tr(title), value: value, format: .number).frame(width: 70)
             if !unit.isEmpty { Text(unit).foregroundStyle(.secondary) }
         }
+    }
+}
+
+
+/// Generator → Patch position…: HCFR's offset X/Y of the patch (displays of this Mac and the
+/// measurement window), in % of the screen from the center.
+struct PatchPositionSheet: View {
+    @ObservedObject var session: Session
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Patch position").font(.title3.bold())
+            Text("Moves the patch away from the center, for example to measure where the meter is, or another zone of the screen. 0 = centered.")
+                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Text("Horizontal").frame(width: 90, alignment: .leading)
+                Slider(value: $session.patchOffsetX, in: -45...45, step: 1)
+                Text(String(format: "%+.0f %%", session.patchOffsetX)).monospacedDigit().frame(width: 52)
+            }
+            HStack {
+                Text("Vertical").frame(width: 90, alignment: .leading)
+                Slider(value: $session.patchOffsetY, in: -45...45, step: 1)
+                Text(String(format: "%+.0f %%", session.patchOffsetY)).monospacedDigit().frame(width: 52)
+            }
+            HStack {
+                Button("Center") { session.patchOffsetX = 0; session.patchOffsetY = 0 }
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 440)
     }
 }
