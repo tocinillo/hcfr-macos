@@ -12,6 +12,35 @@ import SwiftUI
 /// (a real measurement made with HCFR) and quits, to check the layout without a colorimeter.
 /// Also `--report out.pdf`, `--project-roundtrip file.hcfrex` and `--levels-test`.
 enum Snapshot {
+    /// `--appkit`: draws through a real (off-screen) window, so native controls appear (for
+    /// screenshots); without it ImageRenderer is used, which leaves native controls out.
+    @MainActor
+    static func save<V: View>(_ view: V, size: NSSize, to path: String) {
+        if CommandLine.arguments.contains("--appkit") {
+            if CommandLine.arguments.contains("--dark") { NSApp.appearance = NSAppearance(named: .darkAqua) }
+            else { NSApp.appearance = NSAppearance(named: .aqua) }
+            let host = NSHostingView(rootView: view)
+            host.frame = NSRect(origin: .zero, size: size)
+            let win = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+            win.contentView = host
+            win.setFrameOrigin(NSPoint(x: -20000, y: -20000))
+            win.orderFrontRegardless()
+            host.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(1.5))
+            guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return }
+            host.cacheDisplay(in: host.bounds, to: rep)
+            if let png = rep.representation(using: .png, properties: [:]) { try? png.write(to: URL(fileURLWithPath: path)) }
+            win.orderOut(nil)
+            return
+        }
+        let renderer = ImageRenderer(content: view.frame(width: size.width, height: size.height))
+        renderer.scale = 1
+        if let img = renderer.nsImage, let tiff = img.tiffRepresentation,
+           let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
+            try? png.write(to: URL(fileURLWithPath: path))
+        }
+    }
+
     @MainActor
     static func runIfRequested() {
         let args = CommandLine.arguments
@@ -62,13 +91,8 @@ enum Snapshot {
             // Development check: renders the Preferences pages
             let session = Session()
             for (n, page) in [(0, "references"), (1, "advanced"), (2, "general"), (3, "sensor"), (4, "appearance")] {
-                let view = PreferencesSnapshot(session: session, page: n).frame(width: 640, height: [1100, 560, 860, 640, 220][n])
-                let renderer = ImageRenderer(content: view)
-                renderer.scale = 1
-                if let img = renderer.nsImage, let tiff = img.tiffRepresentation,
-                   let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
-                    try? png.write(to: URL(fileURLWithPath: args[p + 1] + "-\(page).png"))
-                }
+                save(PreferencesSnapshot(session: session, page: n), size: NSSize(width: 640, height: [1100, 560, 860, 640, 220][n]),
+                     to: args[p + 1] + "-\(page).png")
             }
             exit(0)
         }
@@ -197,24 +221,20 @@ enum Snapshot {
             w.step = step
             w.before = WizardSummary(session)
             w.after = WizardSummary(session)
-            let view = WizardView(session: session, w: w, scrolls: false).frame(width: 1040, height: 720)
-            let renderer = ImageRenderer(content: view)
-            renderer.scale = 1
-            if let img = renderer.nsImage, let tiff = img.tiffRepresentation,
-               let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
-                try? png.write(to: URL(fileURLWithPath: args[i + 1]))
-            }
+            let appkit = args.contains("--appkit")
+            save(WizardView(session: session, w: w, scrolls: !appkit), size: appkit ? NSSize(width: 1440, height: 810) : NSSize(width: 1040, height: 720),
+                 to: args[i + 1])
             exit(0)
         }
         session.status = "Ready — Display: CRT (Hitachi CM2112MET, Diamond View 1772ie)"
         session.lastMeasure = Date()
-        let view = ContentView(session: session, autoConnect: false).frame(width: args.contains("--small") ? 1180 : 1400, height: args.contains("--small") ? 680 : 900)
-        let renderer = ImageRenderer(content: view)
-        renderer.scale = 1
-        if let img = renderer.nsImage, let tiff = img.tiffRepresentation,
-           let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
-            try? png.write(to: URL(fileURLWithPath: args[i + 1]))
+        let size = args.contains("--appkit") ? NSSize(width: 1440, height: 810)
+            : args.contains("--small") ? NSSize(width: 1180, height: 680) : NSSize(width: 1400, height: 900)
+        if args.contains("--pi-output") {
+            save(PiOutputSheet(session: session), size: NSSize(width: 520, height: 700), to: args[i + 1])
+            exit(0)
         }
+        save(ContentView(session: session, autoConnect: false), size: size, to: args[i + 1])
         exit(0)
     }
 }
