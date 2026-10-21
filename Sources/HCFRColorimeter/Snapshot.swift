@@ -17,8 +17,9 @@ enum Snapshot {
     @MainActor
     static func save<V: View>(_ view: V, size: NSSize, to path: String) {
         if CommandLine.arguments.contains("--appkit") {
-            if CommandLine.arguments.contains("--dark") { NSApp.appearance = NSAppearance(named: .darkAqua) }
-            else { NSApp.appearance = NSAppearance(named: .aqua) }
+            let app = NSApplication.shared
+            if CommandLine.arguments.contains("--dark") { app.appearance = NSAppearance(named: .darkAqua) }
+            else { app.appearance = NSAppearance(named: .aqua) }
             let host = NSHostingView(rootView: view)
             host.frame = NSRect(origin: .zero, size: size)
             let win = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
