@@ -193,6 +193,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func application(_ application: NSApplication, open urls: [URL]) {
         Task { @MainActor in
             guard let url = urls.first else { return }
+            // hcfr:// links from other programs (PCG's autocalibration): Automation.swift
+            if url.scheme == "hcfr" {
+                var tries = 0
+                while AppDelegate.session == nil && tries < 30 { try? await Task.sleep(for: .milliseconds(200)); tries += 1 }
+                AppDelegate.session?.handleAutomation(url)
+                return
+            }
             if let session = AppDelegate.session {
                 if session.confirmDiscardChanges() { session.openProject(url) }
             } else {

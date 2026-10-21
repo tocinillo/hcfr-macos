@@ -53,6 +53,11 @@ enum Snapshot {
             }
             exit(0)
         }
+        if let u = args.firstIndex(of: "--url"), u + 1 < args.count, let url = URL(string: args[u + 1]) {
+            // Development check of hcfr:// automation (without a meter: status / errors only)
+            Session().handleAutomation(url)
+            exit(0)
+        }
         if let p = args.firstIndex(of: "--prefs"), p + 1 < args.count {
             // Development check: renders the Preferences pages
             let session = Session()

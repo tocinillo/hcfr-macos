@@ -52,6 +52,10 @@ cat > "$APP/Contents/Info.plist" <<PLIST
       <key>public.filename-extension</key><array><string>hcfrex</string></array>
     </dict>
   </dict></array>
+  <key>CFBundleURLTypes</key><array><dict>
+    <key>CFBundleURLName</key><string>org.hcfr.colorimeterexpress.automation</string>
+    <key>CFBundleURLSchemes</key><array><string>hcfr</string></array>
+  </dict></array>
   <key>CFBundleDocumentTypes</key><array><dict>
     <key>CFBundleTypeName</key><string>HCFR Colorimeter Project</string>
     <key>CFBundleTypeRole</key><string>Editor</string>
