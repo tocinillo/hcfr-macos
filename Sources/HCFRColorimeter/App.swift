@@ -93,7 +93,7 @@ struct ColorimeterApp: App {
 enum AboutPanel {
     static let version = "1.3.1"
     /// Public repository with this program's complete source code (GPL v2 requirement).
-    static let sourceURL = "https://github.com/diablonet/HCFR-Colorimeter-macOS"
+    static let sourceURL = "https://github.com/salondigital/hcfr-macos"
 
     static func show() {
         let body = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
@@ -116,6 +116,8 @@ enum AboutPanel {
             + "colorimeter drivers and CCSS corrections are the ones included in HCFR.\n\n")
         add("Source code: ")
         add(sourceURL.replacingOccurrences(of: "https://", with: ""), link: sourceURL)
+        add("\nmacOS version by Jorge Velázquez: ")
+        add("github.com/diablonet/HCFR-Colorimeter-macOS", link: "https://github.com/diablonet/HCFR-Colorimeter-macOS")
         add("\nHCFR project: ")
         add("github.com/arthur-liberman/hcfr-code", link: "https://github.com/arthur-liberman/hcfr-code")
         add("\nOriginal project: ")
