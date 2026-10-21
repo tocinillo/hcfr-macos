@@ -48,12 +48,15 @@ enum TestPattern: Equatable {
     }
 }
 
-/// Where patterns come from: the user's DVD / external generator, a display of this Mac, or a
-/// Raspberry Pi running PGenerator on the network (as HCFR for Windows' "rPI" display mode).
+/// Where patterns come from: the user's DVD / external generator, a display of this Mac (full
+/// screen), a movable measurement window, a Raspberry Pi running PGenerator on the network (as
+/// HCFR for Windows' "rPI" display mode) or a madVR Envy / madTPG on the network.
 enum PatternSource: Hashable {
     case manual
     case display(CGDirectDisplayID)
+    case window
     case raspberryPi
+    case madVR
 }
 
 /// Output levels of the built-in generator (as HCFR's GDI generator option).
@@ -172,31 +175,86 @@ final class PatternWindowController {
 
     private var window: PatternWindow?
     private var view: PatternView?
+    private var windowed = false
+    private var observers: [NSObjectProtocol] = []
     var onEscape: (() -> Void)?
 
     var isShowing: Bool { window != nil }
     var screen: NSScreen? { window?.screen }
 
+    /// Full-screen pattern on `screen`.
     func show(rgb: [Int], background: [Int] = [0, 0, 0], areaPercent: Double, ansiInverted: Bool? = nil, on screen: NSScreen) {
-        if window == nil || window?.screen != screen {
+        if window == nil || windowed || window?.screen != screen {
             close()
             let w = PatternWindow(contentRect: screen.frame, styleMask: .borderless, backing: .buffered,
                                   defer: false, screen: screen)
             w.level = .screenSaver
             w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
-            w.isReleasedWhenClosed = false
-            w.colorSpace = screen.colorSpace
-            w.backgroundColor = NSColor(colorSpace: screen.colorSpace ?? .deviceRGB,
-                                        components: background.map { CGFloat($0) / 255 } + [1], count: 4)
-            w.onEscape = { [weak self] in self?.onEscape?() }
-            let v = PatternView(frame: NSRect(origin: .zero, size: screen.frame.size))
-            w.contentView = v
+            install(w, screen: screen, background: background)
             w.setFrame(screen.frame, display: true)
             // On the app's own screen the pattern covers the app: make it key so ESC stops
             if screen == NSApp.mainWindow?.screen { w.makeKeyAndOrderFront(nil) } else { w.orderFrontRegardless() }
-            window = w
-            view = v
+            windowed = false
         }
+        update(rgb: rgb, background: background, areaPercent: areaPercent, ansiInverted: ansiInverted)
+    }
+
+    /// Pattern in a normal, movable and resizable "measurement window" (as HCFR's test window),
+    /// so the app stays visible. It remembers its place; closing it stops the measurement.
+    func showWindowed(rgb: [Int], background: [Int] = [0, 0, 0], areaPercent: Double, ansiInverted: Bool? = nil) {
+        if window == nil || !windowed {
+            close()
+            let screen = NSApp.mainWindow?.screen ?? NSScreen.main ?? NSScreen.screens[0]
+            let size = NSSize(width: 480, height: 360)
+            let frame = NSRect(x: screen.visibleFrame.midX - size.width / 2, y: screen.visibleFrame.midY - size.height / 2,
+                               width: size.width, height: size.height)
+            let w = PatternWindow(contentRect: frame, styleMask: [.titled, .closable, .resizable, .miniaturizable],
+                                  backing: .buffered, defer: false)
+            w.title = tr("HCFR Colorimeter — Measurement window (place the meter here)")
+            w.level = .floating
+            w.minSize = NSSize(width: 160, height: 120)
+            install(w, screen: screen, background: background)
+            w.setFrameAutosaveName("HCFRMeasurementWindow")
+            w.orderFrontRegardless()
+            windowed = true
+            // Moved to another display: draw in that display's color space
+            observers.append(NotificationCenter.default.addObserver(
+                forName: NSWindow.didChangeScreenNotification, object: w, queue: .main) { [weak w] _ in
+                    MainActor.assumeIsolated {
+                        guard let w else { return }
+                        w.colorSpace = w.screen?.colorSpace
+                        w.contentView?.needsDisplay = true
+                    }
+                })
+            // Closing the window (red button) stops the measurement
+            observers.append(NotificationCenter.default.addObserver(
+                forName: NSWindow.willCloseNotification, object: w, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated {
+                        guard let self, self.window != nil else { return }
+                        self.forget()
+                        self.onEscape?()
+                    }
+                })
+        }
+        update(rgb: rgb, background: background, areaPercent: areaPercent, ansiInverted: ansiInverted)
+    }
+
+    var isWindowed: Bool { window != nil && windowed }
+
+    private func install(_ w: PatternWindow, screen: NSScreen, background: [Int]) {
+        w.isReleasedWhenClosed = false
+        w.colorSpace = screen.colorSpace
+        w.backgroundColor = NSColor(colorSpace: screen.colorSpace ?? .deviceRGB,
+                                    components: background.map { CGFloat($0) / 255 } + [1], count: 4)
+        w.onEscape = { [weak self] in self?.onEscape?() }
+        let v = PatternView(frame: NSRect(origin: .zero, size: w.contentLayoutRect.size))
+        v.autoresizingMask = [.width, .height]
+        w.contentView = v
+        window = w
+        view = v
+    }
+
+    private func update(rgb: [Int], background: [Int], areaPercent: Double, ansiInverted: Bool?) {
         stopAnimation()
         view?.image = nil
         view?.bars = nil
@@ -249,10 +307,18 @@ final class PatternWindowController {
         }
     }
 
-    func close() {
+    /// Drops the window without stopping anything (it is already closing).
+    private func forget() {
         stopAnimation()
-        window?.orderOut(nil)
+        observers.forEach(NotificationCenter.default.removeObserver)
+        observers.removeAll()
         window = nil
         view = nil
+    }
+
+    func close() {
+        let w = window
+        forget()
+        w?.orderOut(nil)
     }
 }

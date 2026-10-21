@@ -222,6 +222,7 @@ final class Session: ObservableObject {
     @Published var piAddressDraft = ""
     private var pi: PGeneratorClient?
     private var piConnecting: Task<PGeneratorClient, Error>?
+    private var promptPanel: PromptPanelController?
     @Published var lastMeasure: Date?
     @Published var prompt: UserPrompt?
     /// Prompt waiting for an answer (also while its sheet is being re-presented).
@@ -271,8 +272,10 @@ final class Session: ObservableObject {
         cieShowGrays = defaults.object(forKey: "cieShowGrays") as? Bool ?? true
         graphOptions = GraphOptions.decodeMerging(defaults.data(forKey: "graphOptions"), over: GraphOptions())
         valueMode = defaults.string(forKey: "valueMode").flatMap(ValueMode.init(rawValue:)) ?? .xyY
-        if let id = defaults.object(forKey: "patternDisplay") as? UInt32,
-           NSScreen.screens.contains(where: { $0.displayID == id }) {
+        if defaults.bool(forKey: "patternWindow") {
+            patternSource = .window
+        } else if let id = defaults.object(forKey: "patternDisplay") as? UInt32,
+                  NSScreen.screens.contains(where: { $0.displayID == id }) {
             patternSource = .display(id)
         } else if defaults.bool(forKey: "patternRaspberryPi") {
             patternSource = .raspberryPi
@@ -280,6 +283,7 @@ final class Session: ObservableObject {
         patternWindow.onEscape = { [weak self] in self?.stop() }
         applyStaticOptions()
         if !appPrefs.luxPort.isEmpty { applyLuxPort() }
+        promptPanel = PromptPanelController(session: self)
     }
 
     /// Options kept in static settings read by the formulas and tables.
@@ -541,6 +545,25 @@ final class Session: ObservableObject {
                 if !quiet { errorMessage = error.localizedDescription }
             }
         }
+    }
+
+    /// High resolution (3.3 nm) of spectrometers: the same setting as Preferences → Sensor → Hi-Res
+    /// (applied to the meter when it changes).
+    var highRes: Bool { appPrefs.hiRes }
+
+    func setHighRes(_ on: Bool) {
+        guard activity == .idle else { return }
+        appPrefs.hiRes = on
+        status = on ? "High resolution (3.3 nm) on — the meter may ask for a new calibration"
+                    : "Standard resolution (10 nm)"
+    }
+
+    /// The user picked a colorimeter in the list: use it right away (choosing it without pressing
+    /// Connect used to keep measuring with the previous meter).
+    func choosePort(_ port: MeterPort?) {
+        guard let port, port != selectedPort || meter == nil else { return }
+        selectedPort = port
+        if activity == .idle && !connecting { connect() }
     }
 
     func connect() {
@@ -850,14 +873,28 @@ final class Session: ObservableObject {
             try await latencyWait()
             return
         }
-        guard let screen = patternScreen else { return }
+        guard patternScreen != nil || patternSource == .window else { return }
+        let screen = patternScreen
         if force || pattern != shownPattern || !patternWindow.isShowing {
             try await insertFrameIfDue(screen: screen)
             let black = videoLevels.code(0)
             let ansi = pattern.ansiInverted
-            let rgb = ansi != nil ? [1.0, 1, 1] : pattern.rgb
-            patternWindow.show(rgb: rgb.map { videoLevels.code($0) }, background: [black, black, black],
-                               areaPercent: ansi != nil ? 100 : patternArea, ansiInverted: ansi, on: screen)
+            let rgb = (ansi != nil ? [1.0, 1, 1] : pattern.rgb).map { videoLevels.code($0) }
+            let area = ansi != nil ? 100 : patternArea
+            if let screen {
+                patternWindow.show(rgb: rgb, background: [black, black, black], areaPercent: area, ansiInverted: ansi, on: screen)
+            } else {
+                let opening = !patternWindow.isShowing
+                patternWindow.showWindowed(rgb: rgb, background: [black, black, black], areaPercent: area, ansiInverted: ansi)
+                // A newly opened measurement window must first be placed under the meter
+                if opening {
+                    Chime.request()
+                    try await ask("Measurement window",
+                                  "Move the measurement window to the screen you are measuring (and resize it if you want), "
+                                  + "place the meter on it, then press Continue to start measuring.",
+                                  style: .continueCancel)
+                }
+            }
             shownPattern = pattern
             try await latencyWait()
         }
@@ -895,7 +932,7 @@ final class Session: ObservableObject {
 
     /// True when the app shows the patterns itself (a display of this Mac or the Raspberry Pi),
     /// false for the manual DVD / external generator.
-    var automaticGenerator: Bool { patternScreen != nil || patternSource == .raspberryPi }
+    var automaticGenerator: Bool { patternScreen != nil || patternSource == .window || patternSource == .raspberryPi || patternSource == .madVR }
 
     // MARK: - Raspberry Pi (PGenerator)
 
@@ -1012,6 +1049,7 @@ final class Session: ObservableObject {
     }
 
     /// Display used as pattern generator, nil for the manual (DVD) generator or if it was disconnected.
+
     var patternScreen: NSScreen? {
         guard case .display(let id) = patternSource else { return nil }
         return NSScreen.screens.first { $0.displayID == id }
@@ -1033,6 +1071,9 @@ final class Session: ObservableObject {
         if case .display(let id) = patternSource { defaults.set(id, forKey: "patternDisplay") }
         else { defaults.removeObject(forKey: "patternDisplay") }
         defaults.set(patternSource == .raspberryPi, forKey: "patternRaspberryPi")
+        defaults.set(patternSource == .window, forKey: "patternWindow")
+        defaults.set(patternSource == .madVR, forKey: "patternMadVR")
+        if patternSource != .window { patternWindow.close() }
         if patternSource == .manual { closePattern() }
         if patternSource == .raspberryPi {
             patternWindow.close()
@@ -1102,6 +1143,14 @@ final class Session: ObservableObject {
             try await ask("Colorimeter calibration", text, style: .continueCancel)
             do {
                 try await meter.calibrate()
+                // As HCFR: after a calibration that needed the meter somewhere else (e.g. an i1Pro
+                // on its white tile, or a cap on the sensor), ask to put it back on the screen.
+                let needsPlacement = cond & 0xFF00 != 0x100 && cond & 0xFF00 != 0x200
+                if needsPlacement {
+                    try await ask("Calibration complete",
+                                  "The device is now calibrated. If the device requires it, return it to the measurement position on the screen and press Continue.",
+                                  style: .continueCancel)
+                }
                 return
             } catch MeterError.needsCalibration(let c, let m) {
                 cond = c; msg = m
@@ -1111,7 +1160,8 @@ final class Session: ObservableObject {
 
     func ask(_ title: String, _ message: String, style: UserPrompt.Style) async throws {
         // A pattern covering the app's screen would hide the message
-        if patternWindow.isShowing, let main = NSApp.mainWindow?.screen, patternWindow.screen == main {
+        if patternSource != .window, patternWindow.isShowing, let main = NSApp.mainWindow?.screen,
+           patternWindow.screen == main {
             closePattern()
         }
         // SwiftUI drops a sheet presented while the previous one is still closing (e.g. "Use 100%

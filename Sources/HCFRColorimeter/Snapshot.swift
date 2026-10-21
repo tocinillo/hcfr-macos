@@ -140,6 +140,7 @@ enum Snapshot {
            let graph = InfoGraph.allCases.first(where: { "\($0)" == args[g + 1] }) { session.infoGraph = graph }
         session.cieUV = args.contains("--uv")
         session.selectedLevel = args.contains("--level10") ? 10 : max(maxLevel, 10)
+        if args.contains("--cie") { session.infoGraph = .cie; session.cieUV = args.contains("--uv") }
         if args.contains("--project-roundtrip") {
             // Save, clear, reopen and compare (development check of .hcfrex files)
             let url = URL(fileURLWithPath: args[i + 1])

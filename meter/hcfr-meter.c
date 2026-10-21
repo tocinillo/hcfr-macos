@@ -17,13 +17,14 @@
  *
  *   list          -> "@PORT <n> <name>" for each port, then "@OK"
  *   open <n> [default|crt|lcd|oled|proj]
- *                 -> "@OPENED <instrument>\t<correction>\t<1 exact | 0 approximate>\t<serial>" or "@ERR <msg>"
+ *                 -> "@OPENED <instrument>\t<correction>\t<1 exact | 0 approximate>\t<serial>\t<1 if high res. available>" or "@ERR <msg>"
  *   read          -> spectral meters first send "@SPEC <nm short> <nm long> <n> <v1> … <vn>" (mW/m2/sr/nm), then
  *                    "@XYZ <X> <Y> <Z>" (cd/m2), "@CAL <cond hex> <msg>", "@POS wrong <msg>" or "@ERR <msg>"
  *   cal           -> "@OK", "@CAL <cond hex> <msg>" or "@ERR <msg>"
  *   settype <i>   -> selects display type/correction <i> from "types"; "@OK" or "@ERR <msg>"
  *   ident <n>     -> "@IDENT <n> <serial number>" (opens and closes the port) or "@ERR <msg>"
  *   pos           -> "@POS ok" or "@POS wrong <instruction>" (e.g. i1d3 diffuser in place)
+ *   highres <0|1>   -> spectrometer resolution: 0 = standard 10 nm (default), 1 = high 3.3 nm; "@OK" or "@ERR <msg>"
  *   diffcheck <0|1> -> turns the i1d3 diffuser-position check off/on (on by default); "@OK"
  *   types         -> "@TYPE <i>\t<description>\t<disptech>\t<ccss|builtin>\trefresh=<0|1>", then "@OK"
  *   caps          -> "@CAPS tele=<0|1> ambient=<0|1> hires=<0|1> observer=<0|1> itime=<0|1>"
@@ -64,6 +65,15 @@
 
 static icompaths *g_paths = NULL;
 static inst *g_it = NULL;
+
+/* Calibration in progress. As in Argyll's inst_handle_calibrate(), when the instrument asks
+   for a set-up (e.g. i1Pro on its white tile) the next calibrate() call must pass back the
+   type and condition it returned, meaning "the user did it". Passing inst_calc_none again made
+   the i1Pro2 ask for the white tile forever. */
+static int g_cal_pending = 0;
+static inst_cal_type g_calt = inst_calt_needed;
+static inst_cal_cond g_calc = inst_calc_none;
+
 
 static void log_to_stderr(void *cntx, a1log *p, char *fmt, va_list args) {
 	vfprintf(stderr, fmt, args);
@@ -183,6 +193,16 @@ static const char *position_message(void) {
 		return "Meter is in incorrect position: the ambient diffuser is covering the sensor. "
 		       "Swing the diffuser away from the lens so the sensor can measure the display, then press OK.";
 	return "Meter is in incorrect position. Set it to the display measurement position, then press OK.";
+}
+
+/* Spectral resolution of spectrometers that support it (i1Pro, i1Pro2, i1Pro3, ColorMunki):
+   standard (10 nm, Argyll default) or high (3.3 nm), as HCFR's "HiRes" option */
+static void cmd_highres(int on) {
+	inst_code rv;
+	if (g_it == NULL) { reply("ERR No instrument open"); return; }
+	rv = g_it->get_set_opt(g_it, on ? inst_opt_highres : inst_opt_stdres);
+	if (rv != inst_ok) { reply("ERR High resolution mode not available: %s", inst_err(rv)); return; }
+	reply("OK");
 }
 
 /* Diffuser-position check of the i1d3 driver: off for meter models the app has not tested */
@@ -359,6 +379,7 @@ static void cmd_open(int port, const char *type) {
 	const char *dtype = "(fixed)";
 	int exact = 1;
 
+	g_cal_pending = 0;
 	if (g_it != NULL) {
 		g_it->del(g_it);
 		g_it = NULL;
@@ -409,22 +430,29 @@ static void cmd_open(int port, const char *type) {
 	}
 	g_it->get_set_opt(g_it, inst_opt_trig_prog);
 
-	reply("OPENED %s\t%s\t%d\t%s", inst_name(g_it->get_itype(g_it)), dtype, exact, serial_of(g_it));
+	reply("OPENED %s\t%s\t%d\t%s\t%d", inst_name(g_it->get_itype(g_it)), dtype, exact, serial_of(g_it),
+	      IMODETST(cap, inst_mode_highres) ? 1 : 0);
 }
 
 /* Tries to calibrate; returns 1 if ready, 0 if it replied with @CAL/@ERR */
-static int do_calibrate(int report_ok) {
-	inst_cal_type calt = inst_calt_needed;
-	inst_cal_cond calc = inst_calc_none;
+/* Starts (resume = 0) or continues (resume = 1) a calibration; returns 1 if ready, 0 if it
+   replied with @CAL/@ERR */
+static int do_calibrate(int report_ok, int resume) {
 	inst_calc_id_type idtype = inst_calc_id_none;
 	char id[CALIDLEN] = "";
 	inst_code rv;
 
-	rv = g_it->calibrate(g_it, &calt, &calc, &idtype, id);
+	if (!resume || !g_cal_pending) {
+		g_calt = inst_calt_needed;
+		g_calc = inst_calc_none;
+	}
+	rv = g_it->calibrate(g_it, &g_calt, &g_calc, &idtype, id);
 	if ((rv & inst_mask) == inst_cal_setup) {
-		reply("CAL %x %s", (unsigned)calc, cal_message(calc, id));
+		g_cal_pending = 1;
+		reply("CAL %x %s", (unsigned)g_calc, cal_message(g_calc, id));
 		return 0;
 	}
+	g_cal_pending = 0;
 	if (rv != inst_ok && (rv & inst_mask) != inst_unsupported) {
 		reply("ERR Calibration failed: %s", inst_err(rv));
 		return 0;
@@ -436,7 +464,7 @@ static int do_calibrate(int report_ok) {
 
 static void cmd_cal(void) {
 	if (g_it == NULL) { reply("ERR No instrument open"); return; }
-	do_calibrate(1);
+	do_calibrate(1, 1);
 }
 
 static void cmd_read(void) {
@@ -448,7 +476,7 @@ static void cmd_read(void) {
 	memset(&val, 0, sizeof(val));
 	rv = g_it->read_sample(g_it, "SPOT", &val, instNoClamp);
 	if ((rv & inst_mask) == inst_needs_cal) {
-		if (!do_calibrate(0))
+		if (!do_calibrate(0, 0))
 			return;
 		rv = g_it->read_sample(g_it, "SPOT", &val, instNoClamp);
 	}
@@ -512,6 +540,7 @@ int main(int argc, char *argv[]) {
 		else if (strcmp(cmd, "ident") == 0) cmd_ident(arg1);
 		else if (strcmp(cmd, "pos") == 0)   cmd_pos();
 		else if (strcmp(cmd, "diffcheck") == 0) cmd_diffcheck(arg1);
+		else if (strcmp(cmd, "highres") == 0) cmd_highres(arg1);
 		else if (strcmp(cmd, "settype") == 0) {
 			if (g_it != NULL && g_it->set_disptype(g_it, arg1) == inst_ok) reply("OK");
 			else reply("ERR Could not set correction %d", arg1);

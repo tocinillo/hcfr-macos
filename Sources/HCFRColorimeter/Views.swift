@@ -121,9 +121,6 @@ struct ContentView: View {
         }
         .sheet(isPresented: $session.editingTestColor) { TestColorSheet(session: session) }
         .sheet(item: $session.editingMeasure) { t in EditMeasureSheet(session: session, target: t) }
-        .sheet(item: $session.prompt) { p in
-            PromptSheet(prompt: p, session: session).onAppear { session.promptDidAppear(p.id) }
-        }
         .alert("Error", isPresented: Binding(get: { session.errorMessage != nil }, set: { if !$0 { session.errorMessage = nil } })) {
             Button("OK") {}
         } message: {
@@ -142,7 +139,7 @@ struct ContentView: View {
     }
 }
 
-private struct PromptSheet: View {
+struct PromptSheet: View {
     let prompt: UserPrompt
     @ObservedObject var session: Session
 
@@ -250,10 +247,12 @@ private struct GeneratorMenu: View {
             Menu {
                 Picker("Generator", selection: $session.patternSource) {
                     Text("DVD / external generator (manual)").tag(PatternSource.manual)
+                    Text("Measurement window (movable)").tag(PatternSource.window)
                     Text("Raspberry Pi (PGenerator)").tag(PatternSource.raspberryPi)
+                    Text("madVR Envy / madTPG").tag(PatternSource.madVR)
                     ForEach(session.generatorScreens, id: \.self) { screen in
                         if let id = screen.displayID {
-                            Text(session.screenName(screen)).tag(PatternSource.display(id))
+                            Text(session.screenName(screen) + " — full screen").tag(PatternSource.display(id))
                         }
                     }
                 }
@@ -296,7 +295,7 @@ private struct GeneratorMenu: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
             .disabled(session.activity != .idle)
-            .help("Where the patterns come from: your DVD / external generator (the app asks for each one), a Raspberry Pi running PGenerator on your network, or a display connected to this Mac (the app shows each pattern full screen)")
+            .help("Where the patterns come from: your DVD / external generator (the app asks for each one), a movable measurement window, a Raspberry Pi running PGenerator or a madVR Envy / madTPG on your network, or a display connected to this Mac (the app shows each pattern full screen)")
         }
         .padding(.leading, 4)
         .alert("Custom patch size", isPresented: $session.editingPatchSize) {
@@ -326,6 +325,8 @@ private struct GeneratorMenu: View {
 
     private var label: String {
         if session.patternSource == .raspberryPi { return "Raspberry Pi" }
+        if session.patternSource == .window { return "Window" }
+        if session.patternSource == .madVR { return "madVR" }
         guard let screen = session.patternScreen else { return "DVD (manual)" }
         let n = (NSScreen.screens.firstIndex(of: screen) ?? 0) + 1
         return "Display \(n)"
@@ -477,7 +478,7 @@ private struct SensorPanel: View {
             HStack(spacing: 6) {
                 Circle().fill(session.meter != nil ? .green : .red).frame(width: 9, height: 9)
                 if session.ports.count > 1 {
-                    Picker("", selection: Binding(get: { session.selectedPort }, set: { session.selectedPort = $0 })) {
+                    Picker("", selection: Binding(get: { session.selectedPort }, set: { session.choosePort($0) })) {
                         ForEach(session.ports) { Text($0.displayName).tag(MeterPort?.some($0)) }
                     }
                     .labelsHidden()
@@ -496,6 +497,12 @@ private struct SensorPanel: View {
                 Button("Connect") { session.connect() }
                     .disabled(session.busy || session.selectedPort == nil)
                     .help("Connect to the colorimeter selected above")
+                if session.meter?.supportsHighRes == true {
+                    Toggle("High res (3.3 nm)", isOn: Binding(get: { session.highRes }, set: { session.setHighRes($0) }))
+                        .font(.caption)
+                        .disabled(session.activity != .idle)
+                        .help("Spectral resolution of the spectrometer: 3.3 nm (high) or 10 nm (standard, default), as HCFR's HiRes option")
+                }
                 Spacer(minLength: 0)
             }
             // 3) Display

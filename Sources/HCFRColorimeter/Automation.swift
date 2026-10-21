@@ -83,6 +83,8 @@ extension Session {
         case .manual: return "manual"
         case .raspberryPi: return "Raspberry Pi"
         case .display: return "display"
+        case .window: return "window"
+        case .madVR: return "madVR"
         }
     }
 }
