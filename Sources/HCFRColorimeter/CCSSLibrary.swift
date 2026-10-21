@@ -11,7 +11,7 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The CCSS files of the display library (Resources/ccss-library.json): each one with its kind
+/// A CCSS of the display library (the files the user loads from a folder): its kind
 /// of display, technology and brand, to show them as a tree instead of one long list.
 struct CCSSEntry: Codable, Hashable {
     var file: String
@@ -136,7 +136,6 @@ enum CCSSLibrary {
         session.status = "Loaded \(n) correction files. Reconnecting the colorimeter to list them in Display…"
         if session.meter != nil, session.activity == .idle { session.connect() }
     }
-}
 }
 
 /// Display type of the colorimeter as a tree: built-in types, HCFR's families, the display library
