@@ -45,6 +45,15 @@ enum Snapshot {
     @MainActor
     static func runIfRequested() {
         let args = CommandLine.arguments
+        if args.contains("-AppleLanguages"), let exe = Bundle.main.executableURL?.deletingLastPathComponent() {
+            // Development binary (no app bundle): the translations next to it, so a language can be chosen
+            for l in ["en", "es"] {
+                let dst = exe.appendingPathComponent("\(l).lproj")
+                try? FileManager.default.removeItem(at: dst)
+                try? FileManager.default.copyItem(at: URL(fileURLWithPath: "Resources/\(l).lproj"), to: dst)
+            }
+            MessageRules.active = (UserDefaults.standard.array(forKey: "AppleLanguages") as? [String])?.first?.hasPrefix("es") ?? false
+        }
         if args.contains("--pattern-test") {
             // Development check of the built-in pattern generator (codes and drawing)
             for levels in VideoLevels.allCases {
@@ -153,6 +162,7 @@ enum Snapshot {
         if let g = args.firstIndex(of: "--grays"), g + 1 < args.count, let n = Int(args[g + 1]) {
             // Gray scale of n points with synthetic readings (gamma 2.3, slightly warm low end)
             session.applyGrayCount(n)
+            if maxLevel >= 0 { session.measurements[0] = XYZ.fromxyY(x: 0.30, y: 0.31, Y: 0.012) }
             for level in session.allLevels where level > 0 && level <= maxLevel {
                 let v = Reference.grayProp(level)
                 session.measurements[level] = XYZ.fromxyY(x: 0.3127 - 0.01 * (1 - v), y: 0.3290 - 0.008 * (1 - v), Y: 120 * pow(v, 2.3))
@@ -227,7 +237,7 @@ enum Snapshot {
                  to: args[i + 1])
             exit(0)
         }
-        session.status = "Ready — Display: CRT (Hitachi CM2112MET, Diamond View 1772ie)"
+        session.status = args.contains("--appkit") ? "Ready — Display: Projector" : "Ready — Display: CRT (Hitachi CM2112MET, Diamond View 1772ie)"
         session.lastMeasure = Date()
         let size = args.contains("--appkit") ? NSSize(width: 1440, height: 810)
             : args.contains("--small") ? NSSize(width: 1180, height: 680) : NSSize(width: 1400, height: 900)
