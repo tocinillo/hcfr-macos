@@ -633,13 +633,25 @@ private struct WhiteBalanceStep: View {
             .pickerStyle(.segmented).labelsHidden().frame(width: 360)
             Card {
                 HStack(spacing: 6) {
-                    ForEach(levelsShown, id: \.self) { l in
-                        Button("\(Reference.label(l))%") { session.wizardLive(level: l) }
-                            .buttonStyle(.bordered)
-                            .tint(session.selectedLevel == l && session.view == .grayScale ? .accentColor : .gray)
+                    // Multipoint can have up to 101 levels: they scroll, so the step keeps its width
+                    // (and the 2 points / Multipoint switch stays on screen)
+                    ScrollViewReader { proxy in
+                        ScrollView(.horizontal, showsIndicators: levelsShown.count > 8) {
+                            HStack(spacing: 6) {
+                                ForEach(levelsShown, id: \.self) { l in
+                                    Button("\(Reference.label(l))%") { session.wizardLive(level: l) }
+                                        .buttonStyle(.bordered)
+                                        .tint(session.selectedLevel == l && session.view == .grayScale ? .accentColor : .gray)
+                                        .id(l)
+                                }
+                            }
+                            .padding(.vertical, 2)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .onAppear { proxy.scrollTo(session.selectedLevel, anchor: .center) }
                     }
-                    Spacer()
                     LiveButton(session: session) { session.wizardLive(level: session.selectedLevel) }
+                        .fixedSize()
                 }
                 if !w.balanceMultipoint {
                     Text(session.selectedLevel >= 70 ? "High level: adjust Gain R / G / B." : "Low level: adjust Offset (Bias / Cut) R / G / B.")
@@ -657,7 +669,12 @@ private struct WhiteBalanceStep: View {
             Text("Tip: adjust the high level first, then the low one, and go back to the high one: they affect each other a little.")
                 .font(.caption).foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear { session.wizardLive(level: w.balanceMultipoint ? session.selectedLevel : 100) }
+        .onChange(of: w.balanceMultipoint) { multi in
+            // Back to 2 points: go to a level of that view (100%) if the selected one isn't there
+            if !multi && !levelsShown.contains(session.selectedLevel) { session.wizardLive(level: 100) }
+        }
     }
 
     private var levelsShown: [Double] {

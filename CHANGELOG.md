@@ -2,6 +2,12 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.16
+
+- **Wizard → White balance & gamma, Multipoint**: with many gray levels the level buttons now
+  scroll instead of widening the step past the window, so the "2 points / Multipoint" switch stays
+  visible and you can go back to 2 points.
+
 ## 1.3.15
 
 - **Color Checker → LG_540_2016, LG_540_2017, LG_1000_2017 and LG_4000_2017**: HCFR for Windows'
