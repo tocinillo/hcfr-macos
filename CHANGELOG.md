@@ -2,6 +2,14 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.10
+
+- **Updates from the app**: when a new version is out (checked at start-up, or with HCFR
+  Colorimeter → Check for Updates… / Help → Updates), "Install and Relaunch" downloads it,
+  replaces the app and opens the new version — no DMG to open and nothing to drag to
+  Applications. The release notes are shown first. Checking at start-up is now on by default
+  (Preferences → General → Check for updates).
+
 ## 1.3.9
 
 - **Project file format** in Preferences → Advanced: save projects in both formats (default:

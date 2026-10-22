@@ -828,3 +828,11 @@
 "Mac only (.hcfrex)" = "Solo Mac (.hcfrex)";
 "Windows only (.chc)" = "Solo Windows (.chc)";
 "Both: Save Project writes name.hcfrex (this app) and name.chc (HCFR for Windows) side by side, so the project opens on the Mac and on Windows. Windows .chc files always open here (File → Open Project…)." = "Ambos: Guardar proyecto escribe nombre.hcfrex (esta app) y nombre.chc (HCFR para Windows) uno al lado del otro, así el proyecto se abre en Mac y en Windows. Los .chc de Windows siempre se abren aquí (Archivo → Abrir proyecto…).";
+
+/* 1.4.0 */
+"Check for Updates…" = "Buscar actualizaciones…";
+"Install and Relaunch" = "Instalar y reabrir";
+"Downloading HCFR Colorimeter %@…" = "Descargando HCFR Colorimeter %@…";
+"The update could not be installed" = "No se pudo instalar la actualización";
+"The download failed." = "La descarga falló.";
+"The DMG has no app." = "El DMG no contiene la app.";

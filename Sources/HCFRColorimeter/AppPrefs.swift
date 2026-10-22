@@ -158,7 +158,7 @@ struct AppPrefs: Codable, Equatable {
 
     // General → Application / User measures (HCFR's General preferences)
     /// "Check for updates" when the app starts.
-    var checkUpdates = false
+    var checkUpdates = true
     /// Advanced → "Project file format".
     var saveFormat = ProjectSaveFormat.both
     /// "Continuous measuring": Measure → Free measure keeps reading (as Start) instead of one reading.

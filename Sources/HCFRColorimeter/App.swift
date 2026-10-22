@@ -29,6 +29,7 @@ struct ColorimeterApp: App {
         .commands {
             CommandGroup(replacing: .appInfo) {
                 Button("About HCFR Colorimeter") { AboutPanel.show() }
+                Button("Check for Updates…") { UpdateCheck.run(quiet: false) }
             }
             CommandGroup(before: .newItem) {
                 Button("Calibration Wizard…") { s.openWizard() }
@@ -132,7 +133,7 @@ struct ColorimeterApp: App {
 
 enum AboutPanel {
     /// The app's version (Info.plist, from the VERSION file); the fallback is for `swift run`.
-    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.9"
+    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.10"
     /// Public repository with this program's complete source code (GPL v2 requirement).
     static let sourceURL = "https://github.com/tocinillo/hcfr-macos"
 

@@ -25,20 +25,25 @@ enum HelpLinks {
 
 /// Help → Updates → "Check for new software" (and General → "Check for updates" at start-up).
 enum UpdateCheck {
-    /// Latest published version ("1.2"), from the releases or, without any, the tags of the repository.
-    static func latest() async -> String? {
-        func get(_ url: URL) async -> Any? {
-            var req = URLRequest(url: url, timeoutInterval: 10)
-            req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-            guard let (data, resp) = try? await URLSession.shared.data(for: req),
-                  (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
-            return try? JSONSerialization.jsonObject(with: data)
-        }
-        if let r = await get(HelpLinks.releasesAPI) as? [String: Any], let tag = r["tag_name"] as? String { return clean(tag) }
-        if let t = await get(HelpLinks.tagsAPI) as? [[String: Any]] {
-            return t.compactMap { $0["name"] as? String }.map(clean).max { isNewer($1, than: $0) }
-        }
-        return nil
+    struct Release {
+        var version: String
+        /// The DMG of the release (nil when it has none: only the page can be opened).
+        var dmg: URL?
+        var notes: String
+    }
+
+    /// Latest published release, from GitHub's API.
+    static func latestRelease() async -> Release? {
+        var req = URLRequest(url: HelpLinks.releasesAPI, timeoutInterval: 10)
+        req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+              (resp as? HTTPURLResponse)?.statusCode == 200,
+              let r = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let tag = r["tag_name"] as? String else { return nil }
+        let assets = r["assets"] as? [[String: Any]] ?? []
+        let dmg = assets.first { ($0["name"] as? String)?.lowercased().hasSuffix(".dmg") == true }
+        return Release(version: clean(tag), dmg: (dmg?["browser_download_url"] as? String).flatMap(URL.init(string:)),
+                       notes: (r["body"] as? String) ?? "")
     }
 
     static func clean(_ tag: String) -> String {
@@ -59,16 +64,27 @@ enum UpdateCheck {
     @MainActor
     static func run(quiet: Bool) {
         Task {
-            let v = await latest()
+            let rel = await latestRelease()
             let alert = NSAlert()
-            if let v, isNewer(v, than: AboutPanel.version) {
+            if let rel, isNewer(rel.version, than: AboutPanel.version) {
                 alert.messageText = tr("A new version is available")
-                alert.informativeText = tr("HCFR Colorimeter %@ is available (you have %@).", v, AboutPanel.version)
+                var info = tr("HCFR Colorimeter %@ is available (you have %@).", rel.version, AboutPanel.version)
+                let notes = rel.notes.components(separatedBy: "\n---").first?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                if !notes.isEmpty { info += "\n\n" + String(notes.prefix(900)) }
+                alert.informativeText = info
+                let canInstall = rel.dmg != nil && AutoUpdate.canReplaceApp
+                if canInstall { alert.addButton(withTitle: tr("Install and Relaunch")) }
                 alert.addButton(withTitle: tr("Download"))
                 alert.addButton(withTitle: tr("Later"))
-                if alert.runModal() == .alertFirstButtonReturn { HelpLinks.open(HelpLinks.releases) }
+                let r = alert.runModal()
+                if canInstall && r == .alertFirstButtonReturn, let dmg = rel.dmg {
+                    AutoUpdate.install(dmg, version: rel.version)
+                } else if r == (canInstall ? .alertSecondButtonReturn : .alertFirstButtonReturn) {
+                    HelpLinks.open(HelpLinks.releases)
+                }
             } else if !quiet {
-                if v == nil {
+                if rel == nil {
                     alert.messageText = tr("Could not check for updates")
                     alert.informativeText = tr("No answer from GitHub. Check the internet connection, or look at the project page.")
                     alert.addButton(withTitle: tr("OK"))
@@ -81,6 +97,138 @@ enum UpdateCheck {
                 }
             }
         }
+    }
+}
+
+/// Installs a new version without going through the DMG by hand: downloads the release's DMG,
+/// copies the app out of it, quits, replaces this app with it and opens it again.
+enum AutoUpdate {
+    static var appURL: URL { Bundle.main.bundleURL }
+
+    /// The app can be replaced: it runs from a real .app (not from the DMG or a translocated copy)
+    /// in a folder this user can write to.
+    static var canReplaceApp: Bool {
+        let path = appURL.path
+        guard path.hasSuffix(".app"), !path.contains("/AppTranslocation/"), !path.hasPrefix("/Volumes/") else { return false }
+        return FileManager.default.isWritableFile(atPath: appURL.deletingLastPathComponent().path)
+            && FileManager.default.isWritableFile(atPath: path)
+    }
+
+    @MainActor
+    static func install(_ dmg: URL, version: String) {
+        let panel = UpdateProgress.show(tr("Downloading HCFR Colorimeter %@…", version))
+        Task.detached {
+            do {
+                let staged = try await prepare(dmg)
+                await MainActor.run {
+                    panel.close()
+                    relaunch(with: staged)
+                }
+            } catch {
+                await MainActor.run {
+                    panel.close()
+                    let a = NSAlert()
+                    a.messageText = tr("The update could not be installed")
+                    a.informativeText = error.localizedDescription
+                    a.addButton(withTitle: tr("Download"))
+                    a.addButton(withTitle: tr("Cancel"))
+                    if a.runModal() == .alertFirstButtonReturn { HelpLinks.open(HelpLinks.releases) }
+                }
+            }
+        }
+    }
+
+    /// Downloads the DMG, mounts it and copies its app to a temporary folder; returns that copy.
+    private static func prepare(_ dmg: URL) async throws -> URL {
+        let work = FileManager.default.temporaryDirectory.appendingPathComponent("HCFR-update-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+        let (file, resp) = try await URLSession.shared.download(from: dmg)
+        guard (resp as? HTTPURLResponse)?.statusCode == 200 else { throw UpdateError("The download failed.") }
+        let image = work.appendingPathComponent("update.dmg")
+        try FileManager.default.moveItem(at: file, to: image)
+        let mount = work.appendingPathComponent("mnt")
+        try FileManager.default.createDirectory(at: mount, withIntermediateDirectories: true)
+        try run("/usr/bin/hdiutil", ["attach", image.path, "-nobrowse", "-readonly", "-noautoopen", "-mountpoint", mount.path])
+        defer { _ = try? run("/usr/bin/hdiutil", ["detach", mount.path, "-force"]) }
+        guard let app = try FileManager.default.contentsOfDirectory(atPath: mount.path).first(where: { $0.hasSuffix(".app") }) else {
+            throw UpdateError("The DMG has no app.")
+        }
+        let staged = work.appendingPathComponent(app)
+        try run("/usr/bin/ditto", [mount.appendingPathComponent(app).path, staged.path])
+        _ = try? run("/usr/bin/xattr", ["-dr", "com.apple.quarantine", staged.path])
+        return staged
+    }
+
+    /// Quits; a small script waits for the app to end, swaps the app and opens the new one.
+    @MainActor
+    private static func relaunch(with staged: URL) {
+        let script = """
+        #!/bin/sh
+        APP="$1"; NEW="$2"; PID="$3"
+        n=0
+        while kill -0 "$PID" 2>/dev/null; do sleep 0.3; n=$((n+1)); [ $n -gt 2000 ] && exit 0; done
+        rm -rf "$APP.old"
+        if mv "$APP" "$APP.old" && /usr/bin/ditto "$NEW" "$APP"; then
+          rm -rf "$APP.old"
+        else
+          rm -rf "$APP"; mv "$APP.old" "$APP"
+        fi
+        /usr/bin/xattr -dr com.apple.quarantine "$APP" 2>/dev/null
+        rm -rf "$(dirname "$NEW")"
+        /usr/bin/open "$APP"
+        """
+        let scriptURL = staged.deletingLastPathComponent().appendingPathComponent("install.sh")
+        do {
+            try script.write(to: scriptURL, atomically: true, encoding: .utf8)
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/bin/sh")
+            p.arguments = [scriptURL.path, appURL.path, staged.path, String(ProcessInfo.processInfo.processIdentifier)]
+            try p.run()
+        } catch {
+            HelpLinks.open(HelpLinks.releases)
+            return
+        }
+        NSApp.terminate(nil)
+    }
+
+    @discardableResult
+    private static func run(_ tool: String, _ args: [String]) throws -> String {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: tool)
+        p.arguments = args
+        let out = Pipe()
+        p.standardOutput = out
+        p.standardError = out
+        try p.run()
+        p.waitUntilExit()
+        let text = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        guard p.terminationStatus == 0 else { throw UpdateError(text.isEmpty ? "\(tool) failed" : text) }
+        return text
+    }
+
+    struct UpdateError: LocalizedError {
+        let message: String
+        init(_ m: String) { message = m }
+        var errorDescription: String? { tr(message) }
+    }
+}
+
+/// Small window with a spinner while the update downloads.
+enum UpdateProgress {
+    @MainActor
+    static func show(_ text: String) -> NSPanel {
+        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 360, height: 90), styleMask: [.titled], backing: .buffered, defer: false)
+        panel.title = "HCFR Colorimeter"
+        let spinner = NSProgressIndicator(frame: NSRect(x: 20, y: 33, width: 24, height: 24))
+        spinner.style = .spinning
+        spinner.startAnimation(nil)
+        let label = NSTextField(labelWithString: text)
+        label.frame = NSRect(x: 56, y: 35, width: 290, height: 20)
+        panel.contentView?.addSubview(spinner)
+        panel.contentView?.addSubview(label)
+        panel.center()
+        panel.makeKeyAndOrderFront(nil)
+        return panel
     }
 }
 
