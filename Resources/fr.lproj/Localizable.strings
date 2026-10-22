@@ -832,3 +832,10 @@
 "The update could not be installed" = "La mise à jour n'a pas pu être installée";
 "The download failed." = "Le téléchargement a échoué.";
 "The DMG has no app." = "Le DMG ne contient pas l'app.";
+
+/* 1.3.12 */
+"Open Recent" = "Ouvrir l'élément récent";
+"Clear Menu" = "Effacer le menu";
+"HCFR (.chc) — Mac and Windows" = "HCFR (.chc) — Mac et Windows";
+"Both (.chc and .hcfrex)" = "Les deux (.chc et .hcfrex)";
+"HCFR (.chc), the default: the format of HCFR for Windows, so the project opens on both. The file also carries everything this app saves (display, meter, spectra, lux, user Color Checker…), so nothing is lost on the Mac. Older .hcfrex projects still open." = "HCFR (.chc), par défaut : le format de HCFR pour Windows, pour que le projet s'ouvre sur les deux. Le fichier contient aussi tout ce que cette app enregistre (écran, sonde, spectres, lux, Color Checker utilisateur…), rien n'est donc perdu sur Mac. Les anciens projets .hcfrex s'ouvrent toujours.";

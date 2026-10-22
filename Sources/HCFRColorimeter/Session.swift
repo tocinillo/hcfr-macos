@@ -164,6 +164,8 @@ final class Session: ObservableObject {
     @Published var refData: ReferenceData?
     /// This window's project is the reference of the others (File → Set as Reference Project).
     @Published var isReferenceProject = false
+    /// File → Open Recent.
+    @Published var recentProjects: [URL] = Session.recentList
     /// The open project windows (for the reference project).
     @MainActor static var open: [Session] { openSessions.allObjects }
     @MainActor private static let openSessions = NSHashTable<Session>.weakObjects()

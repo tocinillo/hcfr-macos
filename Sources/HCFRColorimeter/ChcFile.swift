@@ -53,12 +53,38 @@ enum ChcFile {
 
     // MARK: - Reading
 
+    /// The complete project as this app saves it (JSON), after the Windows data. HCFR for
+    /// Windows stops reading before it and drops it when it saves the file again; this app uses
+    /// it, so nothing of the Mac project is lost in a .chc (display, meter, user Color Checker…).
+    static let macTrailer = Array("HCFRMAC1".utf8)
+
     static func read(_ data: Data) throws -> ProjectFile {
-        var r = Reader(data: [UInt8](data))
+        let bytes = [UInt8](data)
+        if let full = macProject(bytes) { return full }
+        var r = Reader(data: bytes)
         guard try r.i32() == 0x4F4C_4F43, try r.i32() == 0x4643_4852 else { throw ChcError.notHCFR }
         let docVersion = Int(try r.i32())
         guard docVersion <= 3 else { throw ChcError.newerVersion(docVersion) }
         return try readMeasure(&r)
+    }
+
+    /// The Mac project at the end of the file, if it is there and complete.
+    private static func macProject(_ b: [UInt8]) -> ProjectFile? {
+        let m = macTrailer
+        guard b.count > m.count + 4 else { return nil }
+        var i = b.count - m.count - 4
+        while i >= 0 {
+            if b[i] == m[0], Array(b[i ..< i + m.count]) == m {
+                let at = i + m.count
+                let n = Int(b[at]) | Int(b[at + 1]) << 8 | Int(b[at + 2]) << 16 | Int(b[at + 3]) << 24
+                guard at + 4 + n == b.count else { return nil }
+                let decoder = JSONDecoder()
+                decoder.dateDecodingStrategy = .iso8601
+                return try? decoder.decode(ProjectFile.self, from: Data(b[(at + 4)...]))
+            }
+            i -= 1
+        }
+        return nil
     }
 
     private static func readMeasure(_ r: inout Reader) throws -> ProjectFile {
@@ -190,6 +216,14 @@ enum ChcFile {
         writeMeasure(&w, f)
         writeSimulatedSensor(&w)
         writeManualGenerator(&w)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        if let json = try? encoder.encode(f) {
+            w.bytes += macTrailer
+            w.u32(UInt32(json.count))
+            w.bytes += [UInt8](json)
+        }
         return Data(w.bytes)
     }
 

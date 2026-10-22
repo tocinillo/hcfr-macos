@@ -171,10 +171,10 @@ struct AdvancedPage: View {
     var body: some View {
         Form {
             Section("Project file format") {
-                Picker("Save projects as", selection: $session.appPrefs.saveFormat) {
+                Picker("Save projects as", selection: $session.appPrefs.projectFormat) {
                     ForEach(ProjectSaveFormat.allCases) { Text(tr($0.title)).tag($0) }
                 }
-                Text("Both: Save Project writes name.hcfrex (this app) and name.chc (HCFR for Windows) side by side, so the project opens on the Mac and on Windows. Windows .chc files always open here (File → Open Project…).")
+                Text("HCFR (.chc), the default: the format of HCFR for Windows, so the project opens on both. The file also carries everything this app saves (display, meter, spectra, lux, user Color Checker…), so nothing is lost on the Mac. Older .hcfrex projects still open.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Calibration files - Advanced use") {

@@ -2,6 +2,15 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.12
+
+- **One project format for Mac and Windows: .chc is now the default.** Projects are saved in
+  HCFR for Windows' format, and the same file also carries everything the Mac version saves
+  (display and meter used, spectra, lux values, user Color Checker…), so it opens on Windows and
+  nothing is lost on the Mac. Older .hcfrex projects still open, and Preferences → Advanced →
+  Project file format can still save .hcfrex only or both.
+- **File → Open Recent**, with Clear Menu.
+
 ## 1.3.11
 
 - **.chc for Windows: correct gamma, Y targets and ΔE.** HCFR for Windows takes the white of

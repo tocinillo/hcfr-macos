@@ -97,18 +97,19 @@ enum GraphScale {
 
 /// Advanced → "Project file format": what Save Project writes.
 enum ProjectSaveFormat: String, Codable, CaseIterable, Identifiable {
-    /// name.hcfrex and name.chc side by side (default): the project opens on the Mac and on Windows.
-    case both
-    /// name.hcfrex only (this app's format, JSON).
-    case mac
-    /// name.chc only (HCFR for Windows' format).
+    /// name.chc (default): HCFR for Windows' format, with this app's complete project inside, so
+    /// it opens on Windows and loses nothing on the Mac.
     case windows
+    /// name.hcfrex only (this app's own format, JSON).
+    case mac
+    /// Both files side by side.
+    case both
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .both: return "Both (.hcfrex and .chc)"
+        case .windows: return "HCFR (.chc) — Mac and Windows"
         case .mac: return "Mac only (.hcfrex)"
-        case .windows: return "Windows only (.chc)"
+        case .both: return "Both (.chc and .hcfrex)"
         }
     }
 }
@@ -159,8 +160,8 @@ struct AppPrefs: Codable, Equatable {
     // General → Application / User measures (HCFR's General preferences)
     /// "Check for updates" when the app starts.
     var checkUpdates = true
-    /// Advanced → "Project file format".
-    var saveFormat = ProjectSaveFormat.both
+    /// Advanced → "Project file format" (a new key, so the new default applies to everyone).
+    var projectFormat = ProjectSaveFormat.windows
     /// "Continuous measuring": Measure → Free measure keeps reading (as Start) instead of one reading.
     var continuousFreeMeasures = false
     /// "Detect gray/primary colors during user measures": a free measure close (Δxy < 0.03) to a

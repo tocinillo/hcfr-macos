@@ -41,6 +41,14 @@ struct ColorimeterApp: App {
                     .keyboardShortcut("n")
                 Button("Open Project…") { s.openProjectDialog() }
                     .keyboardShortcut("o")
+                Menu("Open Recent") {
+                    ForEach(s.recentProjects, id: \.self) { url in
+                        Button(url.lastPathComponent) { s.openRecent(url) }
+                    }
+                    if !s.recentProjects.isEmpty { Divider() }
+                    Button("Clear Menu") { Session.clearRecent() }
+                        .disabled(s.recentProjects.isEmpty)
+                }
             }
             // Not "replacing: .saveItem": with the project windows (WindowGroup for:) macOS treats
             // the app as document based and leaves that group out of the File menu.
@@ -133,7 +141,7 @@ struct ColorimeterApp: App {
 
 enum AboutPanel {
     /// The app's version (Info.plist, from the VERSION file); the fallback is for `swift run`.
-    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.11"
+    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.12"
     /// Public repository with this program's complete source code (GPL v2 requirement).
     static let sourceURL = "https://github.com/tocinillo/hcfr-macos"
 

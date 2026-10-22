@@ -66,7 +66,7 @@ extension Session {
         if copyTo == nil && (url == nil || saveAs) {
             let panel = NSSavePanel()
             panel.title = "Save project"
-            let windowsOnly = appPrefs.saveFormat == .windows
+            let windowsOnly = appPrefs.projectFormat == .windows
             panel.allowedContentTypes = [windowsOnly ? .hcfrWindows : .hcfrProject]
             let base = projectURL?.deletingPathExtension().lastPathComponent
                 ?? (defaultProjectName() as NSString).deletingPathExtension
@@ -101,7 +101,7 @@ extension Session {
             }
             // Advanced → Project file format: .hcfrex, .chc or both side by side (same name)
             let base = url.deletingPathExtension()
-            let format = appPrefs.saveFormat
+            let format = appPrefs.projectFormat
             var main = base.appendingPathExtension(Self.projectExtension)
             if format != .windows { try Self.projectData(file, windows: false).write(to: main, options: .atomic) }
             if format != .mac {
@@ -112,7 +112,7 @@ extension Session {
             let url = main
             projectURL = url
             isDirty = false
-            NSDocumentController.shared.noteNewRecentDocumentURL(url)
+            Session.noteRecent(url)
             status = "Project saved: " + (format == .both ? "\(url.lastPathComponent) + .chc" : url.lastPathComponent)
         } catch {
             errorMessage = "Could not save the project: \(error.localizedDescription)"
@@ -139,6 +139,43 @@ extension Session {
         let file = try decoder.decode(ProjectFile.self, from: data)
         guard ProjectFile.acceptedFormats.contains(file.format) else { throw CocoaError(.fileReadCorruptFile) }
         return file
+    }
+
+    /// File → Open Recent: the projects opened or saved last (macOS' list), newest first.
+    static func noteRecent(_ url: URL) {
+        NSDocumentController.shared.noteNewRecentDocumentURL(url)
+        var list = Session.recentList.filter { $0.standardizedFileURL != url.standardizedFileURL }
+        list.insert(url, at: 0)
+        Session.recentList = Array(list.prefix(12))
+    }
+
+    static var recentList: [URL] {
+        get {
+            guard let paths = UserDefaults.standard.stringArray(forKey: "recentProjects") else {
+                return Array(NSDocumentController.shared.recentDocumentURLs.prefix(12))
+            }
+            return paths.map { URL(fileURLWithPath: $0) }
+        }
+        set {
+            UserDefaults.standard.set(newValue.map(\.path), forKey: "recentProjects")
+            for s in Session.open { s.recentProjects = newValue }
+        }
+    }
+
+    static func clearRecent() {
+        NSDocumentController.shared.clearRecentDocuments(nil)
+        recentList = []
+    }
+
+    /// Opens a recent project in this window (asking first if there are unsaved measures).
+    func openRecent(_ url: URL) {
+        guard activity == .idle else { return }
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            errorMessage = "Could not open \(url.lastPathComponent). It is not an HCFR Colorimeter project."
+            Session.recentList = Session.recentList.filter { $0 != url }
+            return
+        }
+        if confirmDiscardChanges() { openProject(url) }
     }
 
     /// Open project: shows the file dialog (warns first if there are unsaved measurements).
@@ -220,7 +257,7 @@ extension Session {
             selectedLevel = 100
             projectURL = url
             isDirty = false
-            NSDocumentController.shared.noteNewRecentDocumentURL(url)
+            Session.noteRecent(url)
             var msg = "Project opened: \(url.lastPathComponent)"
             // Same Display as when it was measured, if the connected meter has it
             if let name = file.display, name != correction?.name {
