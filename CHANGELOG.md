@@ -2,6 +2,10 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.18
+
+- **Right-click on a tab → Close all tabs** (the gray scale stays, as one table is always shown).
+
 ## 1.3.17
 
 - **CIE diagram menu as in HCFR for Windows**: Display saturations, Display saturations targets,

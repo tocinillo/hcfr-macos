@@ -206,6 +206,12 @@ struct TabContextMenu: View {
             session.view = tab
         }
         .disabled(session.openTabs.count < 2)
+        Button("Close all tabs") {
+            // One table is always shown: all tabs close and the gray scale stays
+            session.view = .grayScale
+            for t in session.openTabs where t != .grayScale { session.closeTab(t) }
+        }
+        .disabled(session.openTabs == [.grayScale])
     }
 
     private func copy(asTab: Bool) {
