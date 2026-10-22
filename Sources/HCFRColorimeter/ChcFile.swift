@@ -35,7 +35,8 @@ enum ChcError: LocalizedError {
 /// black, gray scale, near black, near white, six saturation scales, Color Checker (valid patches
 /// with their index, then a marker color), the same for the master set, free measures, primaries,
 /// secondaries, on/off and ANSI contrast, primary white, info text and IRE mode. A color is
-/// version · XYZ matrix · two ignored 3×3 matrices · [spectrum] · [lux].
+/// version · XYZ matrix · two ignored 3×3 matrices · [spectrum] · [lux]; spectra and lux values
+/// go both ways.
 ///
 /// Written files carry a simulated sensor and the manual generator (the Windows program replaces
 /// them by the ones you choose) and file format 2, without window positions.
@@ -96,17 +97,22 @@ enum ChcFile {
         var overrideBlack = false
         if v > 10 {
             overrideBlack = try r.bool()
-            if let b = try r.color() { p.manualBlack = b[1] }
+            if let b = try r.color(nil) { p.manualBlack = b[1] }
         }
         // Gray scale
         let gsize = Int(try r.i32())
+        let levels = Reference.levels(count: max(gsize, 2))
         var gray: [Int: [Double]] = [:]
-        for i in 0..<gsize { if let c = try r.color() { gray[i] = c } }
+        for i in 0..<gsize {
+            if let c = try r.color(i < levels.count ? "gray:" + Session.levelKey(levels[i]) : nil) { gray[i] = c }
+        }
         var series: [String: [String: [Double]]] = [:]
         var sizes: [String: Int] = [:]
         func readArray(_ view: MeasureView) throws -> Int {
             let n = Int(try r.i32())
-            for i in 0..<n { if let c = try r.color() { series[view.rawValue, default: [:]]["\(i)"] = c } }
+            for i in 0..<n {
+                if let c = try r.color("series:\(view.rawValue):\(i)") { series[view.rawValue, default: [:]]["\(i)"] = c }
+            }
             return n
         }
         if v > 2 {
@@ -119,26 +125,25 @@ enum ChcFile {
                 try readCC(&r, version: v, view: .colorChecker, into: &series)
                 if v >= 10 {
                     var ignored: [String: [String: [Double]]] = [:]
-                    try readCC(&r, version: v, view: .colorChecker, into: &ignored)   // master set
+                    try readCC(&r, version: v, view: .colorChecker, keep: false, into: &ignored)   // master set
                 }
             }
         }
         let freeCount = Int(try r.i32())
         var free: [[Double]] = []
-        for _ in 0..<freeCount { if let c = try r.color() { free.append(c) } }
+        for _ in 0..<freeCount { if let c = try r.color("free:\(free.count)") { free.append(c) } }
         var colors: [String: [Double]] = [:]
         for patch in [PatchColor.red, .green, .blue, .yellow, .cyan, .magenta] {
-            if let c = try r.color() { colors[patch.rawValue] = c }
+            if let c = try r.color("patch:" + patch.rawValue) { colors[patch.rawValue] = c }
         }
         var contrast: [String: [Double]] = [:]
-        for item in [ContrastPatch.black, .white, .ansi1, .ansi2] {
-            if let c = try r.color() { contrast[item.rawValue] = c }
+        for (i, item) in [ContrastPatch.black, .white, .ansi1, .ansi2].enumerated() {
+            if let c = try r.color("contrast:\(i)") { contrast[item.rawValue] = c }
         }
-        if v > 8, let c = try r.color() { colors[PatchColor.white.rawValue] = c }
+        if v > 8, let c = try r.color("patch:White") { colors[PatchColor.white.rawValue] = c }
         // info text and IRE mode follow; not needed
 
         // Gray levels as this app keys them
-        let levels = Reference.levels(count: max(gsize, 2))
         var measurements: [String: [Double]] = [:]
         for (i, c) in gray where i < levels.count { measurements[Session.levelKey(levels[i])] = c }
         var file = ProjectFile(standard: standard.rawValue, white: white.rawValue, gamma: gamma,
@@ -151,21 +156,28 @@ enum ChcFile {
         file.colorChecker = ccMode
         file.freeMeasures = free.isEmpty ? nil : free
         file.contrast = contrast.isEmpty ? nil : contrast
+        file.spectra = r.spectra.isEmpty ? nil : r.spectra
+        file.lux = r.lux.isEmpty ? nil : r.lux
         return file
     }
 
-    private static func readCC(_ r: inout Reader, version v: Int, view: MeasureView,
+    private static func readCC(_ r: inout Reader, version v: Int, view: MeasureView, keep: Bool = true,
                                into series: inout [String: [String: [Double]]]) throws {
         let size = Int(try r.i32())
         if v <= 12 {
-            for i in 0..<size { if let c = try r.color() { series[view.rawValue, default: [:]]["\(i)"] = c } }
+            for i in 0..<size {
+                if let c = try r.color(keep ? "series:\(view.rawValue):\(i)" : nil) { series[view.rawValue, default: [:]]["\(i)"] = c }
+            }
             return
         }
         for _ in 0..<size {
             let c = try r.rawColor()
             if c[0] == marker.0 && c[1] == marker.1 && c[2] == marker.2 { break }
             let j = Int(try r.i32())
-            if c[0] > -1, c[1] > -1, c[2] > -1 { series[view.rawValue, default: [:]]["\(j)"] = c }
+            if c[0] > -1, c[1] > -1, c[2] > -1 {
+                series[view.rawValue, default: [:]]["\(j)"] = c
+                if keep { r.keepExtras("series:\(view.rawValue):\(j)") }
+            }
         }
     }
 
@@ -200,7 +212,7 @@ enum ChcFile {
         w.f64(p.customBlueX); w.f64(p.customRedX); w.f64(p.customGreenX)
         w.f64(p.customBlueY); w.f64(p.customRedY); w.f64(p.customGreenY)
         w.bool(f.overrideBlack)
-        w.color([0, p.manualBlack, 0])
+        w.color([0, p.manualBlack, 0])   // user black
 
         // Gray scale: one color per level, no data where not measured
         let n = max(f.grayCount ?? Reference.defaultGrayCount, 2)
@@ -210,13 +222,16 @@ enum ChcFile {
             guard let level = Double(k), let i = levels.firstIndex(where: { abs($0 - level) < 1e-6 }) else { continue }
             gray[i] = v
         }
-        w.i32(Int32(n)); gray.forEach { w.color($0) }
+        let spectra = f.spectra ?? [:], lux = f.lux ?? [:]
+        func put(_ xyz: [Double]?, _ key: String) { w.color(xyz, spectrum: spectra[key], lux: lux[key]) }
+        w.i32(Int32(n))
+        for (i, c) in gray.enumerated() { put(c, "gray:" + Session.levelKey(levels[i])) }
 
         let sizes = f.scaleSizes ?? [:]
         func array(_ view: MeasureView, _ size: Int) {
             let m = f.series?[view.rawValue] ?? [:]
             w.i32(Int32(size))
-            for i in 0..<size { w.color(m["\(i)"]) }
+            for i in 0..<size { put(m["\(i)"], "series:\(view.rawValue):\(i)") }
         }
         array(.nearBlack, sizes["Near black"] ?? 5)
         array(.nearWhite, sizes["Near white"] ?? 5)
@@ -227,18 +242,21 @@ enum ChcFile {
         w.i32(Int32(maxUserCC))
         var patches: [(Int, [Double])] = []
         for (k, v) in cc { if let i = Int(k), v.count == 3 { patches.append((i, v)) } }
-        for (i, v) in patches.sorted(by: { $0.0 < $1.0 }) { w.color(v); w.i32(Int32(i)) }
+        for (i, v) in patches.sorted(by: { $0.0 < $1.0 }) {
+            put(v, "series:\(MeasureView.colorChecker.rawValue):\(i)"); w.i32(Int32(i))
+        }
         w.color([marker.0, marker.1, marker.2])
         w.i32(Int32(5 * maxUserCC))
         w.color([marker.0, marker.1, marker.2])
 
-        let free = (f.freeMeasures ?? []).filter { $0.count == 3 }
-        w.i32(Int32(free.count)); free.forEach { w.color($0) }
+        let free = f.freeMeasures ?? []
+        w.i32(Int32(free.count))
+        for (i, c) in free.enumerated() { put(c, "free:\(i)") }
         let colors = f.colors ?? [:]
-        for patch in [PatchColor.red, .green, .blue, .yellow, .cyan, .magenta] { w.color(colors[patch.rawValue]) }
+        for patch in [PatchColor.red, .green, .blue, .yellow, .cyan, .magenta] { put(colors[patch.rawValue], "patch:" + patch.rawValue) }
         let contrast = f.contrast ?? [:]
-        for item in [ContrastPatch.black, .white, .ansi1, .ansi2] { w.color(contrast[item.rawValue]) }
-        w.color(colors[PatchColor.white.rawValue])
+        for (i, item) in [ContrastPatch.black, .white, .ansi1, .ansi2].enumerated() { put(contrast[item.rawValue], "contrast:\(i)") }
+        put(colors[PatchColor.white.rawValue], "patch:White")
         w.string("Calibration by: \r\nDisplay: \(f.display ?? "")\r\nNote: Saved by HCFR Colorimeter for macOS \(AboutPanel.version)\r\n")
         w.bool(false)   // IRE scale mode
     }
@@ -270,6 +288,18 @@ enum ChcFile {
     struct Reader {
         let data: [UInt8]
         var pos = 0
+        /// Spectra and lux values of the colors read, by this app's column keys ("gray:50"…).
+        var spectra: [String: Spectrum] = [:]
+        var lux: [String: Double] = [:]
+        private var lastSpectrum: Spectrum?
+        private var lastLux: Double?
+
+        init(data: [UInt8]) { self.data = data }
+
+        mutating func keepExtras(_ key: String) {
+            if let s = lastSpectrum { spectra[key] = s }
+            if let l = lastLux { lux[key] = l }
+        }
 
         mutating func take(_ n: Int) throws -> ArraySlice<UInt8> {
             guard n >= 0, pos + n <= data.count else { throw ChcError.truncated }
@@ -300,19 +330,25 @@ enum ChcFile {
             guard version <= 6 else { throw ChcError.newerVersion(version) }
             let xyz = try matrix().values
             _ = try matrix(); _ = try matrix()
+            lastSpectrum = nil
+            lastLux = nil
             if [2, 4, 5, 6].contains(version) {
-                _ = try i32(); _ = try i32(); _ = try i32()
+                _ = try i32()
+                let lo = Double(try i32()), hi = Double(try i32())
                 if version == 2 || version == 4 { _ = try i32() } else { _ = try f64() }
-                _ = try i32()        // CSpectrum version
-                _ = try matrix()     // spectrum values
+                _ = try i32()                    // CSpectrum version
+                let values = try matrix().values
+                if values.count > 1 { lastSpectrum = Spectrum(start: lo, end: hi, values: values) }
             }
-            if [3, 4, 6].contains(version) { _ = try f64() }   // lux
+            if [3, 4, 6].contains(version) { lastLux = try f64() }
             return Array(xyz.prefix(3)) + [Double](repeating: 0, count: max(0, 3 - xyz.count))
         }
-        /// CColor, nil when not measured.
-        mutating func color() throws -> [Double]? {
+        /// CColor, nil when not measured; its spectrum and lux value are kept under `key`.
+        mutating func color(_ key: String?) throws -> [Double]? {
             let c = try rawColor()
-            return c[0] > -1 && c[1] > -1 && c[2] > -1 ? c : nil
+            guard c[0] > -1 && c[1] > -1 && c[2] > -1 else { return nil }
+            if let key { keepExtras(key) }
+            return c
         }
     }
 
@@ -329,13 +365,22 @@ enum ChcFile {
             i32(0x434d_6174); i32(0x7269_7843); i32(1); i32(Int32(cols)); i32(Int32(rows))
             for c in 0..<cols { for r in 0..<rows { f64(v[r * cols + c]) } }
         }
-        /// CColor version 1 (XYZ and the two unused matrices); nil = no data.
-        mutating func color(_ xyz: [Double]?) {
-            i32(1)
-            let v = xyz.flatMap { $0.count == 3 ? $0 : nil } ?? [ChcFile.noData, ChcFile.noData, ChcFile.noData]
-            matrix(cols: 1, rows: 3, v)
+        /// CColor: XYZ (nil = no data), the two unused matrices, the spectrum (version 5) and the
+        /// lux value (version 3), or both (version 6).
+        mutating func color(_ xyz: [Double]?, spectrum: Spectrum? = nil, lux: Double? = nil) {
+            let v = xyz.flatMap { $0.count == 3 ? $0 : nil }
+            let spec = v == nil ? nil : spectrum.flatMap { $0.values.count > 1 ? $0 : nil }
+            let lx = v == nil ? nil : lux
+            i32(lx != nil ? (spec != nil ? 6 : 3) : (spec != nil ? 5 : 1))
+            matrix(cols: 1, rows: 3, v ?? [ChcFile.noData, ChcFile.noData, ChcFile.noData])
             matrix(cols: 3, rows: 3, [Double](repeating: 0, count: 9))
             matrix(cols: 3, rows: 3, [Double](repeating: 0, count: 9))
+            if let s = spec {
+                i32(Int32(s.values.count)); i32(Int32(s.start.rounded())); i32(Int32(s.end.rounded())); f64(s.step)
+                i32(1)                                                     // CSpectrum version
+                matrix(cols: 1, rows: s.values.count, s.values)
+            }
+            if let lx { f64(lx) }
         }
         /// MFC CString (multibyte build): length (byte, or 0xFF + word) and the bytes.
         mutating func string(_ s: String) {
