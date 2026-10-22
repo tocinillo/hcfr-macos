@@ -2,6 +2,12 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.9
+
+- **Project file format** in Preferences → Advanced: save projects in both formats (default:
+  name.hcfrex and name.chc side by side), Mac only (.hcfrex) or Windows only (.chc). The save
+  dialog no longer asks for an extension.
+
 ## 1.3.8
 
 - **.chc files keep the spectra and lux values too**, both ways: the spectrum of each reading

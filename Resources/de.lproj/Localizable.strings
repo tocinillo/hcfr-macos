@@ -816,3 +816,11 @@
 "Type .chc at the end of the name to save it in HCFR for Windows' format." = "Geben Sie .chc am Ende des Namens ein, um im Format von HCFR für Windows zu speichern.";
 "It is not an HCFR measures file (.chc)." = "Es ist keine HCFR-Messdatei (.chc).";
 "The file is incomplete or damaged." = "Die Datei ist unvollständig oder beschädigt.";
+
+/* 1.3.9 */
+"Project file format" = "Format der Projektdateien";
+"Save projects as" = "Projekte sichern als";
+"Both (.hcfrex and .chc)" = "Beide (.hcfrex und .chc)";
+"Mac only (.hcfrex)" = "Nur Mac (.hcfrex)";
+"Windows only (.chc)" = "Nur Windows (.chc)";
+"Both: Save Project writes name.hcfrex (this app) and name.chc (HCFR for Windows) side by side, so the project opens on the Mac and on Windows. Windows .chc files always open here (File → Open Project…)." = "Beide: Projekt sichern schreibt name.hcfrex (diese App) und name.chc (HCFR für Windows) nebeneinander, sodass sich das Projekt auf dem Mac und unter Windows öffnen lässt. .chc-Dateien von Windows lassen sich hier immer öffnen (Ablage → Projekt öffnen…).";

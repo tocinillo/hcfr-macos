@@ -66,9 +66,11 @@ extension Session {
         if copyTo == nil && (url == nil || saveAs) {
             let panel = NSSavePanel()
             panel.title = "Save project"
-            panel.allowedContentTypes = [.hcfrProject, .hcfrWindows]
-            panel.nameFieldStringValue = projectURL?.lastPathComponent ?? defaultProjectName()
-            panel.message = tr("Type .chc at the end of the name to save it in HCFR for Windows' format.")
+            let windowsOnly = appPrefs.saveFormat == .windows
+            panel.allowedContentTypes = [windowsOnly ? .hcfrWindows : .hcfrProject]
+            let base = projectURL?.deletingPathExtension().lastPathComponent
+                ?? (defaultProjectName() as NSString).deletingPathExtension
+            panel.nameFieldStringValue = base + "." + (windowsOnly ? "chc" : Self.projectExtension)
             guard panel.runModal() == .OK, let chosen = panel.url else { return }
             url = chosen
         }
@@ -93,19 +95,25 @@ extension Session {
             lux: luxValues.isEmpty ? nil : luxValues)
         if let c = file.colorChecker, c == ColorCheckerSet.user.rawValue, userCCRows.isEmpty { file.colorChecker = nil }
         do {
-            let isChc = url.pathExtension.lowercased() == "chc"
-            try Self.projectData(file, windows: isChc).write(to: url, options: .atomic)
-            // Both formats side by side (General → "Also save in HCFR for Windows' format"), so the
-            // project opens on Windows and on the Mac
-            if copyTo == nil && appPrefs.saveBothFormats {
-                let other = url.deletingPathExtension().appendingPathExtension(isChc ? Self.projectExtension : "chc")
-                try? Self.projectData(file, windows: !isChc).write(to: other, options: .atomic)
+            if copyTo != nil {   // a copy (Duplicate): this app's format, and this window keeps its own file
+                try Self.projectData(file, windows: false).write(to: url, options: .atomic)
+                return
             }
-            if copyTo != nil { return }   // a copy (Duplicate): this window keeps its own file
+            // Advanced → Project file format: .hcfrex, .chc or both side by side (same name)
+            let base = url.deletingPathExtension()
+            let format = appPrefs.saveFormat
+            var main = base.appendingPathExtension(Self.projectExtension)
+            if format != .windows { try Self.projectData(file, windows: false).write(to: main, options: .atomic) }
+            if format != .mac {
+                let chc = base.appendingPathExtension("chc")
+                try Self.projectData(file, windows: true).write(to: chc, options: .atomic)
+                if format == .windows { main = chc }
+            }
+            let url = main
             projectURL = url
             isDirty = false
             NSDocumentController.shared.noteNewRecentDocumentURL(url)
-            status = "Project saved: \(url.lastPathComponent)"
+            status = "Project saved: " + (format == .both ? "\(url.lastPathComponent) + .chc" : url.lastPathComponent)
         } catch {
             errorMessage = "Could not save the project: \(error.localizedDescription)"
         }
