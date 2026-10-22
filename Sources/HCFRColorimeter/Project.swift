@@ -48,6 +48,56 @@ struct ProjectFile: Codable {
     /// Spectra (spectral meters) and luxmeter values, by column ("gray:10", "patch:Red"…).
     var spectra: [String: Spectrum]? = nil
     var lux: [String: Double]? = nil
+    /// Summary tab notes typed by the user (HCFR for Windows' editable Summary text).
+    var comments: String? = nil
+}
+
+extension ProjectFile {
+    enum CodingKeys: String, CodingKey {
+        case format, formatVersion, appVersion, saved, standard, white, gamma, overrideBlack
+        case display, meter, meterSerial, lastMeasure, measurements, grayCount, references
+        case colors, series, scaleSizes, colorChecker, userColorChecker, userColorCheckerName
+        case freeMeasures, contrast, spectra, lux, comments
+    }
+
+    /// Tolerant decoder: reads the essential fields and skips any legacy or malformed sub-block
+    /// (an old `references`, `spectra`… that no longer decodes) instead of failing the whole file,
+    /// so older .hcfrex projects keep opening. Dates may be an ISO-8601 string or a number.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func date(_ k: CodingKeys) -> Date? {
+            if let s = try? c.decode(String.self, forKey: k), let d = ISO8601DateFormatter().date(from: s) { return d }
+            if let n = try? c.decode(Double.self, forKey: k) { return Date(timeIntervalSinceReferenceDate: n) }
+            return nil
+        }
+        self.init(
+            standard: (try? c.decode(String.self, forKey: .standard)) ?? "",
+            white: (try? c.decode(String.self, forKey: .white)) ?? "",
+            gamma: (try? c.decode(Double.self, forKey: .gamma)) ?? 2.2,
+            overrideBlack: (try? c.decode(Bool.self, forKey: .overrideBlack)) ?? false,
+            measurements: (try? c.decode([String: [Double]].self, forKey: .measurements)) ?? [:])
+        if let v = try? c.decode(String.self, forKey: .format) { format = v }
+        if let v = try? c.decode(Int.self, forKey: .formatVersion) { formatVersion = v }
+        if let v = try? c.decode(String.self, forKey: .appVersion) { appVersion = v }
+        if let v = date(.saved) { saved = v }
+        display = try? c.decodeIfPresent(String.self, forKey: .display) ?? nil
+        meter = try? c.decodeIfPresent(String.self, forKey: .meter) ?? nil
+        meterSerial = try? c.decodeIfPresent(String.self, forKey: .meterSerial) ?? nil
+        lastMeasure = date(.lastMeasure)
+        grayCount = try? c.decodeIfPresent(Int.self, forKey: .grayCount) ?? nil
+        references = try? c.decodeIfPresent(ReferencePrefs.self, forKey: .references) ?? nil
+        colors = try? c.decodeIfPresent([String: [Double]].self, forKey: .colors) ?? nil
+        series = try? c.decodeIfPresent([String: [String: [Double]]].self, forKey: .series) ?? nil
+        scaleSizes = try? c.decodeIfPresent([String: Int].self, forKey: .scaleSizes) ?? nil
+        colorChecker = try? c.decodeIfPresent(Int.self, forKey: .colorChecker) ?? nil
+        userColorChecker = try? c.decodeIfPresent([String].self, forKey: .userColorChecker) ?? nil
+        userColorCheckerName = try? c.decodeIfPresent(String.self, forKey: .userColorCheckerName) ?? nil
+        freeMeasures = try? c.decodeIfPresent([[Double]].self, forKey: .freeMeasures) ?? nil
+        contrast = try? c.decodeIfPresent([String: [Double]].self, forKey: .contrast) ?? nil
+        spectra = try? c.decodeIfPresent([String: Spectrum].self, forKey: .spectra) ?? nil
+        lux = try? c.decodeIfPresent([String: Double].self, forKey: .lux) ?? nil
+        comments = try? c.decodeIfPresent(String.self, forKey: .comments) ?? nil
+    }
 }
 
 extension UTType {
@@ -92,7 +142,8 @@ extension Session {
             freeMeasures: freeMeasurements.isEmpty ? nil : freeMeasurements.map { [$0.X, $0.Y, $0.Z] },
             contrast: contrastMeasurements.isEmpty ? nil : Dictionary(uniqueKeysWithValues: contrastMeasurements.map { ($0.key.rawValue, [$0.value.X, $0.value.Y, $0.value.Z]) }),
             spectra: spectra.isEmpty ? nil : spectra,
-            lux: luxValues.isEmpty ? nil : luxValues)
+            lux: luxValues.isEmpty ? nil : luxValues,
+            comments: projectComments.isEmpty ? nil : projectComments)
         if let c = file.colorChecker, c == ColorCheckerSet.user.rawValue, userCCRows.isEmpty { file.colorChecker = nil }
         do {
             if copyTo != nil {   // a copy (Duplicate): this app's format, and this window keeps its own file
@@ -135,9 +186,14 @@ extension Session {
             return try ChcFile.read(data)
         }
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
         let file = try decoder.decode(ProjectFile.self, from: data)
-        guard ProjectFile.acceptedFormats.contains(file.format) else { throw CocoaError(.fileReadCorruptFile) }
+        // The decoder is tolerant, so check the file really is a project: our format, or at least a
+        // color standard / some measurements (older files whose format string we no longer list).
+        let looksLikeProject = !file.standard.isEmpty || !file.measurements.isEmpty
+            || !(file.series?.isEmpty ?? true) || !(file.colors?.isEmpty ?? true)
+        guard ProjectFile.acceptedFormats.contains(file.format) || looksLikeProject else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
         return file
     }
 
@@ -236,6 +292,7 @@ extension Session {
             contrastMeasurements = con
             spectra = file.spectra ?? [:]
             luxValues = file.lux ?? [:]
+            projectComments = file.comments ?? ""
             selectedIndex = 0
             // Tabs: the tables that have measures (as HCFR for Windows opens them)
             var tabs: [MeasureView] = []

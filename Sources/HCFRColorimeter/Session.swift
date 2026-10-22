@@ -317,6 +317,8 @@ final class Session: ObservableObject {
     @Published var confirmNewProject = false
     /// Project file currently open/saved (nil = never saved).
     @Published var projectURL: URL?
+    /// Summary tab notes typed by the user (saved in the project).
+    @Published var projectComments = "" { didSet { if projectComments != oldValue { isDirty = true } } }
     /// Measurements changed since the last save/open.
     @Published var isDirty = false
 
@@ -759,6 +761,7 @@ final class Session: ObservableObject {
         contrastMeasurements.removeAll()
         spectra.removeAll()
         luxValues.removeAll()
+        projectComments = ""
         lastMeasure = nil
         selectedLevel = 100
         selectedPatch = .red

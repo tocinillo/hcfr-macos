@@ -495,6 +495,23 @@ struct SummaryView: View {
             }
             .padding(6)
             .frame(maxWidth: .infinity, alignment: .leading)
+
+            // Editable notes, as HCFR for Windows' Summary tab (saved in the project)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Comments").font(.headline)
+                TextEditor(text: $session.projectComments)
+                    .font(.callout)
+                    .frame(minHeight: 48, maxHeight: 120)
+                    .overlay(RoundedRectangle(cornerRadius: 5).stroke(.separator))
+                    .overlay(alignment: .topLeading) {
+                        if session.projectComments.isEmpty {
+                            Text("Notes about this calibration (saved with the project)…")
+                                .font(.callout).foregroundStyle(.tertiary).padding(.horizontal, 5).padding(.vertical, 8)
+                                .allowsHitTesting(false)
+                        }
+                    }
+            }
+            .padding(.horizontal, 6).padding(.bottom, 6)
         }
     }
 

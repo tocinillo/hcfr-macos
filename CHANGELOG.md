@@ -2,6 +2,13 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.19
+
+- **Opens older .hcfrex projects again**: the reader is now tolerant — it loads the measurements
+  and skips any legacy or unreadable block instead of refusing the whole file (fixes a regression).
+- **Summary tab: editable Comments**, as in HCFR for Windows. Notes typed there are saved with the
+  project (in both .hcfrex and .chc).
+
 ## 1.3.18
 
 - **Right-click on a tab → Close all tabs** (the gray scale stays, as one table is always shown).
