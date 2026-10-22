@@ -2,6 +2,24 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.14
+
+- **Edit → Undo / Redo (⌘Z / ⌘⇧Z) of measures**, edits and deletes, as HCFR for Windows (up to
+  100 steps; while typing in a field, ⌘Z still undoes the typing).
+- **View → Luminance (luxmeter)** (⌥⌘L): HCFR's floating window with the luxmeter's live value
+  in Lux or Ft-cd ("++++" when out of range).
+- **Right-click on a table tab**: Activate tab, Activate tab on all documents, Duplicate tab,
+  Open tab in a new window (a copy of the project showing that table), Close tab.
+- **File → Duplicate Project…** asks which tables to copy to the new project.
+- **File → Add to Excel Workbook…**: adds the sheets to an existing .xlsx (also one saved by
+  Excel), named with the time, so measures taken at different times sit side by side.
+- **File → Page Setup…**
+- **Preferences → Reset to Defaults…** (the measures are kept).
+- **HCFR for Windows' function keys** in the Measure menu: F2 gray scale, F3 primaries, F4
+  primaries and secondaries, F5 gray scale and colors, ⇧F5 Full Tilt Boogie, F7 single
+  measurement, F8 continuous measurement.
+- Additional Patterns now always acts on the project of the window in front.
+
 ## 1.3.13
 
 - **Patterns → Additional Patterns… (⌘⇧P)**, as HCFR for Windows: Black +, colors, dot patterns

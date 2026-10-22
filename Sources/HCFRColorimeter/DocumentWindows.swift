@@ -27,6 +27,9 @@ extension FocusedValues {
 struct DocumentRequest: Codable, Hashable {
     var path: String?
     var isCopy = false
+    /// Table shown first (tab menu) and the tables a copy keeps (File → Duplicate…).
+    var view: String? = nil
+    var keep: [String]? = nil
     var token = UUID()
 }
 
@@ -44,7 +47,10 @@ struct DocumentWindow: View {
                 guard let r = request, let p = r.path else { return }
                 let url = URL(fileURLWithPath: p)
                 session.openProject(url)
+                if let k = r.keep { session.keepOnly(k) }
+                if let v = r.view.flatMap(MeasureView.init(rawValue:)) { session.view = v }
                 if r.isCopy {
+                    session.clearMeasureUndo()
                     try? FileManager.default.removeItem(at: url)
                     session.projectURL = nil
                     session.isDirty = true
@@ -121,6 +127,13 @@ struct DocumentCommands: Commands {
                 openWindow(id: "document", value: DocumentRequest(path: url.path, isCopy: true))
             }
             .keyboardShortcut("d", modifiers: [.command, .shift])
+            Button("Duplicate Project…") {
+                let s = focused ?? main
+                guard let keep = DuplicateData.choose(s) else { return }
+                let url = FileManager.default.temporaryDirectory.appendingPathComponent("HCFR copy \(UUID().uuidString).hcfrex")
+                s.saveProject(copyTo: url)
+                openWindow(id: "document", value: DocumentRequest(path: url.path, isCopy: true, keep: keep))
+            }
             Divider()
         }
     }

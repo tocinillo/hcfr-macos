@@ -905,3 +905,36 @@
 "Blue Dot Pattern" = "Patrón de puntos azules";
 "White Dot Pattern" = "Patrón de puntos blancos";
 "Pattern: " = "Patrón: ";
+
+/* 1.3.14 */
+"Undone" = "Deshecho";
+"Redone" = "Rehecho";
+"No luxmeter" = "Sin luxómetro";
+"Activate tab" = "Activar pestaña";
+"Activate tab on all documents" = "Activar pestaña en todos los documentos";
+"Duplicate tab" = "Duplicar pestaña";
+"A copy of the project, showing this table, as a new tab of this window" = "Una copia del proyecto, mostrando esta tabla, como nueva pestaña de esta ventana";
+"Open tab in a new window" = "Abrir pestaña en una ventana nueva";
+"A copy of the project, showing this table, in a new window" = "Una copia del proyecto, mostrando esta tabla, en una ventana nueva";
+"Duplicate project" = "Duplicar proyecto";
+"Data to copy to the new project:" = "Datos a copiar al nuevo proyecto:";
+"Duplicate" = "Duplicar";
+"It is not an Excel workbook." = "No es un libro de Excel.";
+"Could not read or write the workbook." = "No se pudo leer o escribir el libro.";
+"Reset all the preferences to their default values?" = "¿Restablecer todas las preferencias a sus valores por defecto?";
+"General, References, Appearance, Advanced, Sensor and the graph options go back to HCFR's defaults. The measures are kept." = "General, Referencias, Apariencia, Avanzado, Sensor y las opciones de los gráficos vuelven a los valores por defecto de HCFR. Las medidas se conservan.";
+"Preferences reset to their default values" = "Preferencias restablecidas a sus valores por defecto";
+"Add to Excel Workbook…" = "Añadir a un libro de Excel…";
+"Add to Excel Workbook" = "Añadir a un libro de Excel";
+"Added to " = "Añadido a ";
+"Could not add to the workbook: " = "No se pudo añadir al libro: ";
+"Gray scale and colors" = "Escala de grises y colores";
+"Full Tilt Boogie" = "Full Tilt Boogie";
+"Single measurement" = "Medida única";
+"Undo" = "Deshacer";
+"Redo" = "Rehacer";
+"Luminance (luxmeter)" = "Luminancia (luxómetro)";
+"Page Setup…" = "Ajustar página…";
+"Duplicate Project…" = "Duplicar proyecto…";
+"Reset to Defaults…" = "Restablecer valores por defecto…";
+"All the preferences back to HCFR's default values (the measures are kept)" = "Todas las preferencias vuelven a los valores por defecto de HCFR (las medidas se conservan)";

@@ -41,8 +41,15 @@ enum XLSXWriter {
             </Relationships>
             """)
         for (i, sheet) in sheets.enumerated() {
-            var x = header + "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>"
-            for (r, row) in sheet.1.enumerated() {
+            add("xl/worksheets/sheet\(i + 1).xml", worksheet(sheet.1))
+        }
+        return zip(files)
+    }
+
+    /// One worksheet's XML.
+    static func worksheet(_ rows: [[String]]) -> String {
+            var x = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>"
+            for (r, row) in rows.enumerated() {
                 x += "<row r=\"\(r + 1)\">"
                 for (c, v) in row.enumerated() {
                     let ref = column(c) + String(r + 1)
@@ -55,9 +62,7 @@ enum XLSXWriter {
                 x += "</row>"
             }
             x += "</sheetData></worksheet>"
-            add("xl/worksheets/sheet\(i + 1).xml", x)
-        }
-        return zip(files)
+            return x
     }
 
     static func column(_ i: Int) -> String {
@@ -114,6 +119,30 @@ extension Session {
         panel.nameFieldStringValue = projectName + ".xlsx"
         panel.allowedContentTypes = [UTType(filenameExtension: "xlsx") ?? .data]
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try XLSXWriter.make(sheets: excelSheets()).write(to: url)
+            status = "Exported: \(url.lastPathComponent)"
+        } catch {
+            errorMessage = "Could not save: \(error.localizedDescription)"
+        }
+    }
+
+    /// File → "Add to Excel Workbook…": the same sheets added to an existing workbook (as HCFR's
+    /// Excel export appends to its file), named with the time so several measures sit side by side.
+    func appendExcel() {
+        let panel = NSOpenPanel()
+        panel.title = tr("Add to Excel Workbook")
+        panel.allowedContentTypes = [UTType(filenameExtension: "xlsx") ?? .data]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try XLSXAppend.append(sheets: excelSheets(), to: url)
+            status = tr("Added to ") + url.lastPathComponent
+        } catch {
+            errorMessage = tr("Could not add to the workbook: ") + error.localizedDescription
+        }
+    }
+
+    func excelSheets() -> [(String, [[String]])] {
         var sheets: [(String, [[String]])] = hcfrSheets().map { suffix, text in
             let rows = text.components(separatedBy: "\r\n").filter { !$0.isEmpty }.map { line in
                 line.components(separatedBy: ";").map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "\"")) }
@@ -123,11 +152,6 @@ extension Session {
         let table = csvText().components(separatedBy: .newlines).filter { !$0.isEmpty && !$0.hasPrefix("#") }
             .map { $0.components(separatedBy: ",") }
         if !table.isEmpty { sheets.append(("Table", table)) }
-        do {
-            try XLSXWriter.make(sheets: sheets).write(to: url)
-            status = "Exported: \(url.lastPathComponent)"
-        } catch {
-            errorMessage = "Could not save: \(error.localizedDescription)"
-        }
+        return sheets
     }
 }

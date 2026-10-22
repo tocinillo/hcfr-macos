@@ -23,6 +23,14 @@ struct PreferencesView: View {
             SensorPage(session: session).tabItem { Label("Sensor", systemImage: "camera.metering.center.weighted") }
         }
         .frame(width: 680)
+        .safeAreaInset(edge: .bottom) {
+            HStack {
+                Spacer()
+                Button("Reset to Defaults…") { session.resetPreferences() }
+                    .help("All the preferences back to HCFR's default values (the measures are kept)")
+            }
+            .padding(.horizontal, 16).padding(.bottom, 10)
+        }
         .disabled(session.activity != .idle)
     }
 }

@@ -31,7 +31,18 @@ final class Luxmeter: @unchecked Sendable {
     private var thread: Thread?
     private var running = false
     private var readings: [(Date, Double)] = []
+    /// Last packet the luxmeter sent out of its range (HCFR shows "++++" / "----").
+    private var outOfRange: Date?
     private(set) var port = ""
+
+    /// The luxmeter's latest value (lux), or nil; `overRange` when its last packet was out of range.
+    func latest() -> (value: Double?, overRange: Bool, running: Bool) {
+        lock.lock(); defer { lock.unlock() }
+        let last = readings.last
+        let over = outOfRange.map { o in last.map { o > $0.0 } ?? true } ?? false
+        let fresh = last.flatMap { Date().timeIntervalSince($0.0) < 5 ? $0.1 : nil }
+        return (fresh, over, running)
+    }
 
     /// Serial ports (USB serial adapters show up as /dev/cu.usbserial…).
     static func ports() -> [String] {
@@ -92,6 +103,9 @@ final class Luxmeter: @unchecked Sendable {
             guard !packet.isEmpty else { continue }
             packet.append(byte)
             if byte == 0x0D {
+                if Self.parse(packet) == nil, String(decoding: packet, as: UTF8.self).hasPrefix("\u{2}411") {
+                    lock.lock(); outOfRange = Date(); lock.unlock()
+                }
                 if let v = Self.parse(packet) {
                     lock.lock()
                     readings.append((Date(), v))

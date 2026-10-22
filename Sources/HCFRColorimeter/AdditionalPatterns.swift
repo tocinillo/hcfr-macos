@@ -298,9 +298,12 @@ enum ExtraPatternDrawing {
 @MainActor
 enum AdditionalPatternsPanel {
     private static var panel: NSPanel?
+    private static weak var owner: Session?
 
     static func show(_ session: Session) {
-        if let panel { panel.makeKeyAndOrderFront(nil); return }
+        if let panel, owner === session { panel.makeKeyAndOrderFront(nil); return }
+        panel?.close()
+        owner = session
         let p = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 560, height: 640),
                         styleMask: [.titled, .closable, .utilityWindow], backing: .buffered, defer: false)
         p.title = tr("Additional Patterns")

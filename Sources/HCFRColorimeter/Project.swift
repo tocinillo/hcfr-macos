@@ -257,6 +257,7 @@ extension Session {
             selectedLevel = 100
             projectURL = url
             isDirty = false
+            clearMeasureUndo()
             Session.noteRecent(url)
             var msg = "Project opened: \(url.lastPathComponent)"
             // Same Display as when it was measured, if the connected meter has it

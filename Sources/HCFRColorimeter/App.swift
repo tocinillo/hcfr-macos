@@ -74,20 +74,13 @@ struct ColorimeterApp: App {
                     .disabled(!s.hasMeasurements)
                 Button("Export to Excel (.xlsx)…") { s.exportExcel() }
                     .disabled(!s.hasMeasurements)
+                Button("Add to Excel Workbook…") { s.appendExcel() }
+                    .disabled(!s.hasMeasurements)
                 Button("Create PDF Report…") { s.exportPDFReport() }
                     .disabled(!s.hasMeasurements)
                 Divider()
             }
-            CommandMenu("Measure") {
-                Button("Measure Selected Column") { s.measureSelected() }
-                    .keyboardShortcut("r")
-                    .disabled(s.meter == nil || s.activity == .measuring)
-                Button(s.activity == .continuous ? "Stop Continuous Reading" : "Read Selected Column Continuously") {
-                    s.activity == .continuous ? s.stop() : s.start()
-                }
-                .keyboardShortcut("r", modifiers: [.command, .shift])
-                .disabled(s.meter == nil || s.activity == .measuring)
-            }
+            MeasureCommands(main: session)
             CommandMenu("Patterns") {
                 Button("Black +1% & +2% moving bars") { s.showMovingBars(white: false) }
                 Button("White −1% & −2% moving bars") { s.showMovingBars(white: true) }
@@ -121,11 +114,6 @@ struct ColorimeterApp: App {
                     .keyboardShortcut("c", modifiers: [.command, .shift])
                     .disabled(!s.hasMeasurements)
             }
-            CommandGroup(replacing: .printItem) {
-                Button("Print…") { Report.printReport(s) }
-                    .keyboardShortcut("p")
-                    .disabled(!s.hasMeasurements)
-            }
             HelpCommands()
             DocumentCommands(main: session)
         }
@@ -143,7 +131,7 @@ struct ColorimeterApp: App {
 
 enum AboutPanel {
     /// The app's version (Info.plist, from the VERSION file); the fallback is for `swift run`.
-    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.13"
+    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.14"
     /// Public repository with this program's complete source code (GPL v2 requirement).
     static let sourceURL = "https://github.com/tocinillo/hcfr-macos"
 
@@ -285,4 +273,67 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         return .terminateCancel
     }
+}
+
+/// Measure, Undo / Redo, View → Luminance and Page Setup / Print (kept apart from the app's
+/// commands so the compiler can type-check them).
+struct MeasureCommands: Commands {
+    let main: Session
+    @FocusedValue(\.activeSession) private var focused
+    private var s: Session { focused ?? main }
+
+    var body: some Commands {
+        CommandMenu("Measure") {
+            Button("Measure Selected Column") { s.measureSelected() }
+                .keyboardShortcut("r")
+                .disabled(s.meter == nil || s.activity == .measuring)
+            Button(s.activity == .continuous ? "Stop Continuous Reading" : "Read Selected Column Continuously") {
+                s.activity == .continuous ? s.stop() : s.start()
+            }
+            .keyboardShortcut("r", modifiers: [.command, .shift])
+            .disabled(s.meter == nil || s.activity == .measuring)
+            Divider()
+            // HCFR for Windows' function keys
+            Group {
+                Button("Gray scale") { s.measure(.grayScale) }.keyboardShortcut(FKey.f2, modifiers: [])
+                Button("Primary colors") { s.measure(.primaries) }.keyboardShortcut(FKey.f3, modifiers: [])
+                Button("Primary and secondary colors") { s.measure(.primariesSecondaries) }.keyboardShortcut(FKey.f4, modifiers: [])
+                Button("Gray scale and colors") { s.measure(.grayScaleAndColors) }.keyboardShortcut(FKey.f5, modifiers: [])
+                Button("Full Tilt Boogie") { s.measure(.fullTiltBoogie) }.keyboardShortcut(FKey.f5, modifiers: [.shift])
+            }
+            .disabled(s.meter == nil || s.activity != .idle)
+            Divider()
+            Button("Single measurement") { s.measureSelected() }
+                .keyboardShortcut(FKey.f7, modifiers: [])
+                .disabled(s.meter == nil || s.activity == .measuring)
+            Button("Continuous measurement") { s.activity == .continuous ? s.stop() : s.start() }
+                .keyboardShortcut(FKey.f8, modifiers: [])
+                .disabled(s.meter == nil || s.activity == .measuring)
+        }
+        CommandGroup(replacing: .undoRedo) {
+            Button(tr("Undo")) { Session.undoCommand(s, redo: false) }
+                .keyboardShortcut("z")
+            Button(tr("Redo")) { Session.undoCommand(s, redo: true) }
+                .keyboardShortcut("z", modifiers: [.command, .shift])
+        }
+        CommandGroup(after: .toolbar) {
+            Button("Luminance (luxmeter)") { LuminanceWindow.toggle(s) }
+                .keyboardShortcut("l", modifiers: [.command, .option])
+                .disabled(s.appPrefs.luxPort.isEmpty)
+            Divider()
+        }
+        CommandGroup(replacing: .printItem) {
+            Button("Page Setup…") { Session.pageSetup() }
+            Button("Print…") { Report.printReport(s) }
+                .keyboardShortcut("p")
+                .disabled(!s.hasMeasurements)
+        }
+    }
+}
+
+/// Function keys as menu shortcuts (HCFR for Windows' F2–F8).
+enum FKey {
+    static func key(_ code: Int) -> KeyEquivalent { KeyEquivalent(Character(UnicodeScalar(UInt32(code))!)) }
+    static let f2 = key(NSF2FunctionKey), f3 = key(NSF3FunctionKey), f4 = key(NSF4FunctionKey)
+    static let f5 = key(NSF5FunctionKey), f7 = key(NSF7FunctionKey), f8 = key(NSF8FunctionKey)
 }

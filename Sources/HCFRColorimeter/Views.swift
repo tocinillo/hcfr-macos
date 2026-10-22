@@ -84,6 +84,7 @@ struct TableTabs: View {
                 .overlay(RoundedRectangle(cornerRadius: 5).stroke(on ? Color.accentColor.opacity(0.6) : Color.clear))
                 .contentShape(Rectangle())
                 .onTapGesture { if session.activity != .measuring { session.view = v } }
+                .contextMenu { TabContextMenu(session: session, tab: v) }
             }
             Spacer()
         }

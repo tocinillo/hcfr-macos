@@ -137,21 +137,21 @@ final class Session: ObservableObject {
     @Published var status = "Looking for colorimeters…"
     @Published var activity: Activity = .idle
     /// Gray scale measurements by level (% white).
-    @Published var measurements: [Double: XYZ] = [:]
+    @Published var measurements: [Double: XYZ] = [:] { willSet { noteMeasureChange() } }
     /// Number of points of the gray scale (11 = 0, 10, … 100%), as HCFR's "Scale sizes" → Gray.
     @Published private(set) var grayCount = Reference.defaultGrayCount
     /// Gray scale size chosen while measurements exist: asks before clearing them.
     @Published var pendingGrayCount: Int?
     @Published var selectedLevel: Double = 100
     /// Primary / secondary color measurements (and the White measured with them).
-    @Published var colorMeasurements: [PatchColor: XYZ] = [:]
+    @Published var colorMeasurements: [PatchColor: XYZ] = [:] { willSet { noteMeasureChange() } }
     @Published var selectedPatch: PatchColor = .red
     /// Near black, near white, saturation and Color Checker measurements: by view, by column.
-    @Published var seriesMeasurements: [MeasureView: [Int: XYZ]] = [:]
+    @Published var seriesMeasurements: [MeasureView: [Int: XYZ]] = [:] { willSet { noteMeasureChange() } }
     /// Free measures, in the order they were taken.
-    @Published var freeMeasurements: [XYZ] = []
+    @Published var freeMeasurements: [XYZ] = [] { willSet { noteMeasureChange() } }
     /// Contrast view: black, white and the two ANSI checkerboards.
-    @Published var contrastMeasurements: [ContrastPatch: XYZ] = [:]
+    @Published var contrastMeasurements: [ContrastPatch: XYZ] = [:] { willSet { noteMeasureChange() } }
     /// Selected column of the series and contrast views.
     @Published var selectedIndex = 0
     /// HCFR's "Scale sizes": number of near black, near white and saturation points.
@@ -218,13 +218,15 @@ final class Session: ObservableObject {
     @Published var settleSeconds: Double = 1.0 { didSet { defaults.set(settleSeconds, forKey: "settleSeconds") } }
     let patternWindow = PatternWindowController()
     /// Spectra (spectral meters) and luxmeter values of the measures, by column (EditTarget id).
-    @Published var spectra: [String: Spectrum] = [:]
-    @Published var luxValues: [String: Double] = [:]
+    @Published var spectra: [String: Spectrum] = [:] { willSet { noteMeasureChange() } }
+    @Published var luxValues: [String: Double] = [:] { willSet { noteMeasureChange() } }
     var lastSpectrum: Spectrum?
     var lastLux: Double?
     var lastSecondXYZ: XYZ?
     /// Luxmeter (HCFR's LX-1108 on a serial port).
     let luxmeter = Luxmeter()
+    /// Edit → Undo / Redo of the measures (Parity.swift).
+    let measureUndo = MeasureUndo()
     @Published var luxStatus: String?
     /// Second meter for simultaneous measures; its readings go to the compared data.
     @Published var meter2: ArgyllMeter?
@@ -763,6 +765,7 @@ final class Session: ObservableObject {
         selectedIndex = 0
         projectURL = nil
         isDirty = false
+        clearMeasureUndo()
         status = meter == nil ? "Colorimeter not connected" : "New project — ready to measure"
     }
 
