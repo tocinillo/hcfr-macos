@@ -2,6 +2,12 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.21
+
+- **Fixed CIELUV u'v' Delta E (ported from HCFR 4.1, finding MATH-005)**: the u' denominator used
+  x where y is required, which under-reported the error of saturated colors by up to several dE in
+  every u'v'-based Delta E (the grayscale ΔE among them). Now matches the canonical CIE 1976 u'v'.
+
 ## 1.3.20
 
 - **Renamed to "HCFR for macOS"** (window titles, About, reports and the app name). The project

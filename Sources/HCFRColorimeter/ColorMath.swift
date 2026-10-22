@@ -640,16 +640,17 @@ enum ColorMath {
         }
     }
 
-    /// Luv as HCFR's ColorLuv (including its u' formula, which uses x in the denominator, so the
-    /// values match HCFR for Windows).
+    /// Luv as HCFR's ColorLuv. Uses the canonical CIE 1976 u' denominator (−2x + 12y + 3): HCFR
+    /// for Windows had x there by mistake, fixed upstream in 4.1 (MATH-005); it was under-reporting
+    /// the error of saturated colors by up to several dE in every u'v'-based ΔE.
     static func luv(_ c: XYZ, whiteY: Double, white: WhitePoint) -> [Double] {
         var y = c.Y / whiteY
         guard y > 0 else { return [0, 0, 0] }
         y = y > 216.0 / 24389 ? cbrt(y) : (24389.0 / 27 * y + 16) / 116
         let l = 116 * y - 16
         let (x0, y0) = (c.x, c.y), (xw, yw) = (white.x, white.y)
-        let u = 4 * x0 / (-2 * x0 + 12 * x0 + 3), v = 9 * y0 / (-2 * x0 + 12 * y0 + 3)
-        let uw = 4 * xw / (-2 * xw + 12 * xw + 3), vw = 9 * yw / (-2 * xw + 12 * yw + 3)
+        let u = 4 * x0 / (-2 * x0 + 12 * y0 + 3), v = 9 * y0 / (-2 * x0 + 12 * y0 + 3)
+        let uw = 4 * xw / (-2 * xw + 12 * yw + 3), vw = 9 * yw / (-2 * xw + 12 * yw + 3)
         return [l, 13 * l * (u - uw), 13 * l * (v - vw)]
     }
 
