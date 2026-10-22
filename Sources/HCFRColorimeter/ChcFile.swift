@@ -254,7 +254,15 @@ enum ChcFile {
         for (i, c) in free.enumerated() { put(c, "free:\(i)") }
         let colors = f.colors ?? [:]
         for patch in [PatchColor.red, .green, .blue, .yellow, .cyan, .magenta] { put(colors[patch.rawValue], "patch:" + patch.rawValue) }
-        let contrast = f.contrast ?? [:]
+        // On/off black and white: HCFR for Windows takes the white of the gray scale (gamma, Y
+        // targets, ΔE) from the on/off white, and sets both when it measures a gray scale (its 0 %
+        // and 100 %, or the override black). Without them Windows shows no targets and wrong ΔE.
+        var contrast = f.contrast ?? [:]
+        if contrast[ContrastPatch.white.rawValue] == nil, let w = gray.last ?? nil { contrast[ContrastPatch.white.rawValue] = w }
+        if contrast[ContrastPatch.black.rawValue] == nil {
+            if f.overrideBlack { contrast[ContrastPatch.black.rawValue] = [0, p.manualBlack, 0] }
+            else if let b = gray.first ?? nil { contrast[ContrastPatch.black.rawValue] = b }
+        }
         for (i, item) in [ContrastPatch.black, .white, .ansi1, .ansi2].enumerated() { put(contrast[item.rawValue], "contrast:\(i)") }
         put(colors[PatchColor.white.rawValue], "patch:White")
         w.string("Calibration by: \r\nDisplay: \(f.display ?? "")\r\nNote: Saved by HCFR Colorimeter for macOS \(AboutPanel.version)\r\n")

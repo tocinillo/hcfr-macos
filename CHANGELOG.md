@@ -2,6 +2,13 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.11
+
+- **.chc for Windows: correct gamma, Y targets and ΔE.** HCFR for Windows takes the white of
+  the gray scale from the on/off contrast white (it fills it in when it measures a gray scale);
+  the .chc files now carry it (100 % white, and 0 % or the override black), so Windows shows
+  the same gamma, targets and ΔE as the Mac instead of gamma 1.00 and larger ΔE.
+
 ## 1.3.10
 
 - **Updates from the app**: when a new version is out (checked at start-up, or with HCFR
