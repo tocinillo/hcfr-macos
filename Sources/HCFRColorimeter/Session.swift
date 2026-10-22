@@ -262,6 +262,10 @@ final class Session: ObservableObject {
         didSet { if let d = try? JSONEncoder().encode(piOutput) { defaults.set(d, forKey: "piOutput") } }
     }
     @Published var piCurrentOutput: PiOutput?
+    /// Pi video modes (resolutions) for the output sheet, and the current one.
+    @Published var piModes: [PiMode] = []
+    @Published var piCurrentMode: Int = -1
+    @Published var confirmRebootPi = false
     /// Set the Pi to SDR or HDR10 automatically from the reference (Preferences → References).
     @Published var piAutoMode = true { didSet { defaults.set(piAutoMode, forKey: "piAutoMode") } }
     @Published var editingPiOutput = false

@@ -2,6 +2,16 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.24
+
+- **PGenerator output: resolution control and Reboot** (ported from HCFR 4.1). The output sheet now
+  lists the Pi's available video modes (resolution / refresh) and lets you switch, and can reboot the
+  Pi. (The Mac version already had SDR/HDR10, colour format, bit depth, range, colorimetry and the
+  full HDR10 metadata / infoframe controls, and 10-bit pattern output.)
+- **Coordinated levels** (feature request): the PGenerator range and the Generator-menu Levels now
+  follow each other — Limited with Video (16–235), Full with PC (0–255) — so they can't be left
+  mismatched by accident (still overridable).
+
 ## 1.3.23
 
 - **Several projects open at once**: Open Project… (⌘O), Open Recent and double-clicking files in

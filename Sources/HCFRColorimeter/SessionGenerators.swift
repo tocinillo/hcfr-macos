@@ -85,10 +85,68 @@ extension Session {
                 }
                 piCurrentOutput = o
                 piOutput = o
+                coordinateLevels(withLimited: o.limited)
             } catch {
                 errorMessage = error.localizedDescription
             }
         }
+    }
+
+    /// Reads the Pi's video modes (resolutions) for the output sheet.
+    func readPiModes() {
+        Task {
+            do {
+                let c = try await piClient()
+                let (current, list) = try await c.modes()
+                piModes = list
+                piCurrentMode = current
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    /// Sets the Pi's video mode (resolution) and reconnects once it has restarted.
+    func setPiMode(_ id: Int) {
+        Task {
+            piApplying = true
+            defer { piApplying = false }
+            do {
+                let c = try await piClient()
+                status = "Setting the PGenerator resolution…"
+                try await c.setMode(id)
+                dropPi()
+                try await Task.sleep(for: .seconds(3))
+                _ = try? await piClient()
+                piCurrentMode = id
+                readPiModes()
+                status = "PGenerator resolution set"
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    /// Reboots the Raspberry Pi.
+    func rebootPi() {
+        Task {
+            if let c = try? await piClient() { try? await c.reboot() }
+            dropPi()
+            status = "Rebooting the Raspberry Pi — it will be back in a minute"
+        }
+    }
+
+    /// Coordinates the pattern Levels with the PGenerator range (feature request): the range and the
+    /// Generator-menu Levels must agree — Limited with Video (16–235), Full with PC (0–255). Changing
+    /// one moves the other to the matching value (still overridable).
+    func coordinateLevels(withLimited limited: Bool) {
+        let want: VideoLevels = limited ? .video : .full
+        if videoLevels != want { videoLevels = want }
+    }
+
+    func coordinateRange(withLevels levels: VideoLevels) {
+        let want = levels == .video
+        if piOutput.limited != want { piOutput.limited = want }
     }
 
     // MARK: - madVR Envy / madTPG

@@ -339,6 +339,7 @@ private struct GeneratorMenu: View {
                 Picker("Levels", selection: $session.videoLevels) {
                     ForEach(VideoLevels.allCases) { Text(tr($0.rawValue)).tag($0) }
                 }
+                .onChange(of: session.videoLevels) { if session.patternSource == .raspberryPi { session.coordinateRange(withLevels: $0) } }
                 Picker("Patch size", selection: $session.patternArea) {
                     Text("Full field").tag(100.0)
                     ForEach(Self.patchSizes, id: \.self) { v in
@@ -1524,6 +1525,18 @@ struct PiOutputSheet: View {
                     Text("Full (0–255)").tag(false)
                 }
                 .pickerStyle(.segmented)
+                .onChange(of: session.piOutput.limited) { session.coordinateLevels(withLimited: $0) }
+                if !session.piModes.isEmpty {
+                    Picker("Resolution", selection: Binding(
+                        get: { session.piCurrentMode },
+                        set: { session.setPiMode($0) })) {
+                        if !session.piModes.contains(where: { $0.id == session.piCurrentMode }) {
+                            Text("Current").tag(session.piCurrentMode)
+                        }
+                        ForEach(session.piModes) { Text($0.label).tag($0.id) }
+                    }
+                    .disabled(session.piApplying || session.activity != .idle)
+                }
                 Picker("Colorimetry", selection: $session.piOutput.colorimetry) {
                     Text("Automatic").tag(-1)
                     Text("Default").tag(0)
@@ -1548,7 +1561,9 @@ struct PiOutputSheet: View {
             Text("Video levels in the Generator menu must match the range: Limited with Video (16–235), Full with PC (0–255). In HDR10 the patterns are sent in 10 bits. Applying restarts PGenerator (a few seconds).")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack {
-                Button("Read from the Pi") { session.readPiOutput() }
+                Button("Read from the Pi") { session.readPiOutput(); session.readPiModes() }
+                Button("Reboot the Pi") { session.confirmRebootPi = true }
+                    .disabled(session.piApplying || session.activity != .idle)
                 Spacer()
                 if session.piApplying { ProgressView().controlSize(.small) }
                 Button("Close") { dismiss() }
@@ -1565,6 +1580,13 @@ struct PiOutputSheet: View {
         }
         .padding(20)
         .frame(width: 520)
+        .onAppear { session.readPiModes() }
+        .alert("Reboot the Raspberry Pi?", isPresented: $session.confirmRebootPi) {
+            Button("Reboot", role: .destructive) { session.rebootPi() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The Pi will restart and be unavailable for about a minute.")
+        }
     }
 
     private func number(_ title: String, _ value: Binding<Int>, _ unit: String) -> some View {

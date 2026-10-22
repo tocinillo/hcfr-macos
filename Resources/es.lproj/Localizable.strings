@@ -966,3 +966,14 @@
 /* 1.3.19 */
 "Comments" = "Comentarios";
 "Notes about this calibration (saved with the project)…" = "Notas sobre esta calibración (se guardan con el proyecto)…";
+
+/* 1.3.24 */
+"Resolution" = "Resolución";
+"Current" = "Actual";
+"Reboot the Pi" = "Reiniciar la Pi";
+"Reboot the Raspberry Pi?" = "¿Reiniciar la Raspberry Pi?";
+"Reboot" = "Reiniciar";
+"The Pi will restart and be unavailable for about a minute." = "La Pi se reiniciará y no estará disponible durante un minuto aproximadamente.";
+"Setting the PGenerator resolution…" = "Ajustando la resolución de PGenerator…";
+"PGenerator resolution set" = "Resolución de PGenerator ajustada";
+"Rebooting the Raspberry Pi — it will be back in a minute" = "Reiniciando la Raspberry Pi — volverá en un minuto";

@@ -149,6 +149,68 @@ final class PGeneratorClient: @unchecked Sendable {
         try await run { try self.exchange(message) }
     }
 
+    /// HCFR's resolution list: the Pi's current mode id and the available modes (CMD:GET_MODE and
+    /// CMD:GET_MODES_AVAILABLE, whose body is base64 of "<id>[<description>]" entries).
+    func modes() async throws -> (current: Int, list: [PiMode]) {
+        let cur = try await run { try self.exchange("CMD:GET_MODE") }
+        var curStr = cur
+        if let t = curStr.firstIndex(of: ":") { curStr = String(curStr[curStr.index(after: t)...]) }
+        if let b = curStr.firstIndex(of: "[") { curStr = String(curStr[..<b]) }
+        let current = Int(curStr.trimmingCharacters(in: .whitespaces).prefix { $0 == "-" || $0.isNumber }) ?? -1
+
+        let raw = try await run { try self.exchange("CMD:GET_MODES_AVAILABLE") }
+        var body = raw
+        if let r = body.range(of: "OK:") { body = String(body[r.upperBound...]) }
+        body = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let decoded = Self.base64Decode(body) else { return (current, []) }
+        return (current, Self.parseModes(decoded).map { PiMode(id: $0.id, label: $0.label) })
+    }
+
+    /// Sets the Pi's video mode (resolution / refresh) and restarts PGenerator so it takes effect.
+    func setMode(_ id: Int) async throws {
+        _ = try await run { try self.exchange("CMD:SET_MODE:\(id)") }
+        _ = try? await run { try self.exchange("RESTARTPGENERATOR:") }
+    }
+
+    /// Reboots the Raspberry Pi (CMD:REBOOT).
+    func reboot() async throws { _ = try? await run { try self.exchange("CMD:REBOOT") } }
+
+    /// Base64 payload of GET_MODES_AVAILABLE (standard alphabet; tolerant of missing padding).
+    static func base64Decode(_ s: String) -> String? {
+        var t = s.filter { $0.isLetter || $0.isNumber || $0 == "+" || $0 == "/" || $0 == "=" }
+        while t.count % 4 != 0 { t += "=" }
+        guard let d = Data(base64Encoded: t) else { return nil }
+        return String(decoding: d, as: UTF8.self)
+    }
+
+    /// Parses "<id>[<description>]" entries into (id, "WxH @ rateHz") labels (as HCFR's QueryPGeneratorModes).
+    static func parseModes(_ text: String) -> [(id: Int, label: String)] {
+        var out: [(Int, String)] = []
+        let chars = Array(text)
+        var i = 0
+        while i < chars.count {
+            guard chars[i] == "[" else { i += 1; continue }
+            var idStart = i
+            while idStart > 0, chars[idStart - 1].isNumber { idStart -= 1 }
+            guard idStart < i, let close = chars[i...].firstIndex(of: "]") else { i += 1; continue }
+            let id = Int(String(chars[idStart..<i])) ?? -1
+            let desc = String(chars[(i + 1)..<close]).trimmingCharacters(in: .whitespaces)
+            var label = desc
+            if let sp = desc.firstIndex(of: " ") {
+                let wh = String(desc[..<sp])
+                if let hz = desc.range(of: "Hz") {
+                    var st = desc.index(before: hz.lowerBound)
+                    while st > desc.startIndex, desc[desc.index(before: st)] != " " { st = desc.index(before: st) }
+                    let rate = String(desc[st..<hz.upperBound])
+                    label = rate.isEmpty ? wh : "\(wh) @ \(rate)"
+                } else { label = wh }
+            }
+            out.append((id, label))
+            i = close + 1
+        }
+        return out
+    }
+
     /// Says goodbye ("QUIT", as RB8PG_close) and closes the connection. Does not wait.
     func close() {
         queue.async {
@@ -335,6 +397,8 @@ private extension Array where Element == UInt8 {
 /// PGenerator's HDMI output (its PGenerator.conf), set from this app as pgen_client / DeviceControl
 /// do: "CMD:SET_PGENERATOR_CONF_<KEY>:<value>" for each setting, then "RESTARTPGENERATOR:" so it
 /// takes effect; read with "CMD:MULTIPLE:GET_PGENERATOR_CONF_<KEY>:…".
+struct PiMode: Identifiable, Equatable { let id: Int; let label: String }
+
 struct PiOutput: Codable, Equatable {
     /// HDR10 (PQ, with HDR metadata) instead of SDR.
     var hdr = false
