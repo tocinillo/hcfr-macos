@@ -2,6 +2,11 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.22
+
+- **Hardened the .chc reader** (in the spirit of HCFR 4.1's MATH-001/002): array lengths read from
+  the file are now bounded, so a corrupt or truncated .chc can't crash the app on a bad count.
+
 ## 1.3.21
 
 - **Fixed CIELUV u'v' Delta E (ported from HCFR 4.1, finding MATH-005)**: the u' denominator used

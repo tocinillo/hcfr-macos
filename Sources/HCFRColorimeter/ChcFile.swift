@@ -126,8 +126,8 @@ enum ChcFile {
             if let b = try r.color(nil) { p.manualBlack = b[1] }
         }
         // Gray scale
-        let gsize = Int(try r.i32())
-        let levels = Reference.levels(count: max(gsize, 2))
+        let gsize = try r.count()
+        let levels = Reference.levels(count: max(min(gsize, 1001), 2))
         var gray: [Int: [Double]] = [:]
         for i in 0..<gsize {
             if let c = try r.color(i < levels.count ? "gray:" + Session.levelKey(levels[i]) : nil) { gray[i] = c }
@@ -135,7 +135,7 @@ enum ChcFile {
         var series: [String: [String: [Double]]] = [:]
         var sizes: [String: Int] = [:]
         func readArray(_ view: MeasureView) throws -> Int {
-            let n = Int(try r.i32())
+            let n = try r.count()
             for i in 0..<n {
                 if let c = try r.color("series:\(view.rawValue):\(i)") { series[view.rawValue, default: [:]]["\(i)"] = c }
             }
@@ -155,7 +155,7 @@ enum ChcFile {
                 }
             }
         }
-        let freeCount = Int(try r.i32())
+        let freeCount = try r.count()
         var free: [[Double]] = []
         for _ in 0..<freeCount { if let c = try r.color("free:\(free.count)") { free.append(c) } }
         var colors: [String: [Double]] = [:]
@@ -189,7 +189,7 @@ enum ChcFile {
 
     private static func readCC(_ r: inout Reader, version v: Int, view: MeasureView, keep: Bool = true,
                                into series: inout [String: [String: [Double]]]) throws {
-        let size = Int(try r.i32())
+        let size = try r.count()
         if v <= 12 {
             for i in 0..<size {
                 if let c = try r.color(keep ? "series:\(view.rawValue):\(i)" : nil) { series[view.rawValue, default: [:]]["\(i)"] = c }
@@ -352,6 +352,13 @@ enum ChcFile {
             try take(4).reversed().reduce(0) { $0 << 8 | UInt32($1) }
         }
         mutating func i32() throws -> Int32 { Int32(bitPattern: try u32()) }
+        /// An array length read from the file, bounded so a corrupt .chc can't crash on a negative
+        /// range or loop on a garbage count (as HCFR 4.1's MATH-001/002: bound file-supplied sizes).
+        mutating func count() throws -> Int {
+            let n = Int(try i32())
+            guard n >= 0, n <= 1_000_000 else { throw ChcError.truncated }
+            return n
+        }
         mutating func bool() throws -> Bool { try i32() != 0 }
         mutating func f64() throws -> Double {
             Double(bitPattern: try take(8).reversed().reduce(0) { $0 << 8 | UInt64($1) })
