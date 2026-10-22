@@ -778,8 +778,12 @@ struct GraphOptionsItems: View {
                 Text("Auto-adjust").tag(0); Text("2000K-10000K").tag(1); Text("4000K-8000K").tag(2)
             }
         case .cie, .targetCIE:
-            Toggle("Display saturations, color checker and free measures", isOn: o.cieAllSeries)
             Toggle("Display grays", isOn: $session.cieShowGrays)
+            Toggle("Display saturations", isOn: o.cieSaturations)
+            Toggle("Display saturations targets", isOn: o.cieSaturationTargets)
+            Toggle("Display color checker measures", isOn: o.cieCCMeasures)
+            Toggle("Display color checker targets", isOn: o.cieCCTargets)
+            Toggle("Display free measures", isOn: o.cieFree)
             Toggle("Display references", isOn: $session.cieShowReferences)
             Toggle("Display Delta E = 3 and 10", isOn: o.cieDeltaE)
             Toggle("Worst 10%", isOn: o.cieWorst10)
@@ -978,8 +982,18 @@ struct GraphScaleMenu: View {
     let key: String
     static let titles = ["luminance": "Luminance", "gamma": "Gamma", "rgb": "RGB", "temperature": "Temperature", "saturation": "Saturation"]
 
+    /// HCFR's fixed scales of each graph's Scale menu.
+    static let presets: [String: [(String, Double, Double)]] = [
+        "luminance": [("0-100%", 0, 100)],
+        "gamma": [("1-3", 1, 3)],
+        "saturation": [("0% / +100%", 0, 100), ("-100% / +100%", -100, 100), ("-20% / +20%", -20, 20)],
+    ]
+
     var body: some View {
         Button("Auto-adjust") { session.graphOptions.customY[key] = nil }
+        ForEach(Self.presets[key] ?? [], id: \.0) { p in
+            Button(p.0) { session.graphOptions.customY[key] = [p.1, p.2] }
+        }
         Button("Zoom +") { change { r in let c = (r.lowerBound + r.upperBound) / 2, h = (r.upperBound - r.lowerBound) / 4; return (c - h)...(c + h) } }
         Button("Zoom −") { change { r in let c = (r.lowerBound + r.upperBound) / 2, h = r.upperBound - r.lowerBound; return (c - h)...(c + h) } }
         Button("Shift Up") { change { r in let d = (r.upperBound - r.lowerBound) / 5; return (r.lowerBound + d)...(r.upperBound + d) } }

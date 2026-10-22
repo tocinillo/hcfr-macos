@@ -672,9 +672,14 @@ struct CIEChart: View {
         let selectedLevel = session.view == .grayScale ? session.selectedLevel : nil
         let showRefs = session.cieShowReferences
         // Saturation scales (all six), Color Checker or free measures: their points as well
-        let seriesViews: [MeasureView] = session.graphOptions.cieAllSeries ? MeasureView.saturations + [.colorChecker, .freeMeasures]
-            : session.view.saturationColor != nil ? MeasureView.saturations
+        let o = session.graphOptions
+        var seriesViews: [MeasureView] = session.view.saturationColor != nil ? MeasureView.saturations
             : (session.view == .colorChecker || session.view == .freeMeasures ? [session.view] : [])
+        if o.cieSaturations { seriesViews += MeasureView.saturations.filter { !seriesViews.contains($0) } }
+        if o.cieCCMeasures && !seriesViews.contains(.colorChecker) { seriesViews.append(.colorChecker) }
+        if o.cieFree && !seriesViews.contains(.freeMeasures) { seriesViews.append(.freeMeasures) }
+        // HCFR's "… targets": the reference rings of the saturations / Color Checker
+        let satTargets = o.cieSaturationTargets, ccTargets = o.cieCCTargets
         let series = seriesViews.map { v in (v, session.seriesResults(v)) }
         let currentView = session.view, selectedIndex = session.selectedIndex
         // Delta E contours (3 and 10) around the references of the colors shown
@@ -857,7 +862,8 @@ struct CIEChart: View {
                 for r in results {
                     let selected = v == currentView && r.index == selectedIndex
                     var refPoint: CGPoint?
-                    if let ref = r.reference, ref.Y > 0 {
+                    let showTarget = v.saturationColor != nil ? satTargets : v == .colorChecker ? ccTargets : true
+                    if showTarget, let ref = r.reference, ref.Y > 0 {
                         let c = pos((ref.x, ref.y))
                         refPoint = c
                         let rr: CGFloat = small ? 2.5 : 3.5
@@ -954,8 +960,9 @@ struct LabChart: View {
             return (l[1], l[2])
         }
         let patches = session.patchResults.filter { $0.patch != .white }
-        let views: [MeasureView] = session.graphOptions.cieAllSeries ? MeasureView.saturations + [.colorChecker]
-            : session.view.saturationColor != nil ? MeasureView.saturations : (session.view == .colorChecker ? [.colorChecker] : [])
+        var views: [MeasureView] = session.view.saturationColor != nil ? MeasureView.saturations : (session.view == .colorChecker ? [.colorChecker] : [])
+        if session.graphOptions.cieSaturations { views += MeasureView.saturations.filter { !views.contains($0) } }
+        if session.graphOptions.cieCCMeasures && !views.contains(.colorChecker) { views.append(.colorChecker) }
         let series = views.flatMap { session.seriesResults($0) }.filter { $0.reference != nil }
         let grays = session.cieShowGrays ? session.results.compactMap(\.xyz).filter { $0.Y > 0 } : []
         var pairs: [((Double, Double), (Double, Double)?, Color)] = patches.map { p in

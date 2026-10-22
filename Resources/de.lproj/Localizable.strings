@@ -949,3 +949,11 @@
 "HCFR's \"Pattern Intensity\": level of the color patches (primaries, secondaries, saturations, Color Checker), e.g. 75% amplitude." = "HCFRs \"Pattern Intensity\": Pegel der Farbfelder (Primär-, Sekundärfarben, Sättigungen, Color Checker), z. B. 75 % Amplitude.";
 "Display triplets (R:G:B codes on the patch)" = "Tripel anzeigen (R:G:B-Codes auf dem Feld)";
 "Large verification sets: every combination of the R, G and B levels (a cube of the color space), measured as a User defined Color Checker set. The report (File → Create PDF Report…) gives the share of patches under ΔE 1, 2 and 3 and the worst ones." = "Große Verifikationssätze: alle Kombinationen der R-, G- und B-Pegel (ein Würfel des Farbraums), gemessen als benutzerdefinierter Color-Checker-Satz. Der Bericht (Ablage → PDF-Bericht erstellen…) zeigt den Anteil der Felder unter ΔE 1, 2 und 3 und die schlechtesten.";
+
+/* 1.3.17 */
+"Display saturations" = "Sättigungen anzeigen";
+"Display saturations targets" = "Sättigungsziele anzeigen";
+"Display color checker measures" = "Color-Checker-Messungen anzeigen";
+"Display color checker targets" = "Color-Checker-Ziele anzeigen";
+"Display free measures" = "Freie Messungen anzeigen";
+"Close other tabs" = "Andere Tabs schließen";

@@ -201,6 +201,11 @@ struct TabContextMenu: View {
         Divider()
         Button("Close tab") { session.closeTab(tab) }
             .disabled(session.openTabs.count < 2)
+        Button("Close other tabs") {
+            for t in session.openTabs where t != tab { session.closeTab(t) }
+            session.view = tab
+        }
+        .disabled(session.openTabs.count < 2)
     }
 
     private func copy(asTab: Bool) {

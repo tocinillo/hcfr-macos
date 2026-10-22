@@ -2,6 +2,15 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.17
+
+- **CIE diagram menu as in HCFR for Windows**: Display saturations, Display saturations targets,
+  Display color checker measures, Display color checker targets and Display free measures, each on
+  its own (they were a single option).
+- **Graph Scale menus**: HCFR's fixed scales — Luminance 0-100 %, Gamma 1-3, Saturation 0 / +100 %,
+  -100 / +100 % and -20 / +20 %.
+- **Right-click on a tab → Close other tabs.**
+
 ## 1.3.16
 
 - **Wizard → White balance & gamma, Multipoint**: with many gray levels the level buttons now

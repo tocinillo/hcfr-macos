@@ -70,6 +70,13 @@ struct GraphOptions: Codable, Equatable {
     var tempScale = 0
     /// CIE diagram: saturations, Color Checker and free measures shown whatever the table.
     var cieAllSeries = false
+    /// CIE: HCFR's "Display saturations / saturations targets / color checker measures / color
+    /// checker targets / free measures" (shown whatever the table; the table shown is always drawn).
+    var cieSaturations = false
+    var cieSaturationTargets = true
+    var cieCCMeasures = false
+    var cieCCTargets = true
+    var cieFree = false
     /// CIE: HCFR's "Display Delta E = 3 and 10" contours around the references.
     var cieDeltaE = false
     /// CIE: HCFR's "CIE a*b* mode" (CIELAB a*, b* plane instead of chromaticity).

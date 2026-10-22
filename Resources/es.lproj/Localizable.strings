@@ -953,3 +953,11 @@
 "HCFR's \"Pattern Intensity\": level of the color patches (primaries, secondaries, saturations, Color Checker), e.g. 75% amplitude." = "La \"Pattern Intensity\" de HCFR: nivel de los parches de color (primarios, secundarios, saturaciones, Color Checker), p. ej. 75 % de amplitud.";
 "Display triplets (R:G:B codes on the patch)" = "Mostrar tripletes (códigos R:G:B en el parche)";
 "Large verification sets: every combination of the R, G and B levels (a cube of the color space), measured as a User defined Color Checker set. The report (File → Create PDF Report…) gives the share of patches under ΔE 1, 2 and 3 and the worst ones." = "Conjuntos de verificación grandes: todas las combinaciones de niveles de R, G y B (un cubo del espacio de color), medidas como un conjunto Color Checker definido por el usuario. El informe (Archivo → Crear informe PDF…) da el porcentaje de parches por debajo de ΔE 1, 2 y 3 y los peores.";
+
+/* 1.3.17 */
+"Display saturations" = "Mostrar saturaciones";
+"Display saturations targets" = "Mostrar objetivos de saturación";
+"Display color checker measures" = "Mostrar medidas del Color Checker";
+"Display color checker targets" = "Mostrar objetivos del Color Checker";
+"Display free measures" = "Mostrar medidas libres";
+"Close other tabs" = "Cerrar las demás pestañas";
