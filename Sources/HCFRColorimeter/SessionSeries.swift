@@ -109,6 +109,14 @@ extension Session {
             return freeMeasurements.enumerated().map { i, xyz in
                 SeriesResult(index: i, name: "\(i + 1)", signal: [0, 0, 0], xyz: xyz, reference: nil, whiteY: grayBaseY, ref: r)
             }
+        case .colorChecker where ccSet.lgToneTarget(0, peak: 1) != nil:
+            // LG base tone curve: gray steps with LG's fixed targets against the measured peak white
+            let peak = whiteY ?? prefs.targetMaxL
+            return ccPatches.enumerated().map { i, p in
+                let t = ccSet.lgToneTarget(i, peak: peak) ?? 1
+                return SeriesResult(index: i, name: p.name, signal: p.signal, xyz: data[i], reference: r.white.xyz(Y: t),
+                                    whiteY: peak, ref: r)
+            }
         case .colorChecker where ccSet.isHDRSet:
             // PQ signals: absolute targets (nits), compared with the measured peak white (gray 100%)
             var pq = r

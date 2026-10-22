@@ -353,6 +353,22 @@ private struct GeneratorMenu: View {
                     session.editingPatchSize = true
                 }
                 Button("Patch position…") { session.editingPatchPosition = true }
+                Picker("Constant APL (background)", selection: $session.appPrefs.aplPercent) {
+                    Text("Off (black background)").tag(0.0)
+                    ForEach([5.0, 10, 18, 20, 25, 33, 50], id: \.self) { Text(Reference.label($0) + "%").tag($0) }
+                    if ![0.0, 5, 10, 18, 20, 25, 33, 50].contains(session.appPrefs.aplPercent) {
+                        Text(Reference.label(session.appPrefs.aplPercent) + "%").tag(session.appPrefs.aplPercent)
+                    }
+                }
+                .help("HCFR's \"APL (video) level\": with a window patch, the background is filled so the average picture level of the screen stays at this value for every pattern (useful on HDR TVs and OLEDs whose brightness depends on the APL).")
+                Picker("Pattern intensity", selection: $session.appPrefs.patternIntensity) {
+                    ForEach([100.0, 75, 50], id: \.self) { Text(Reference.label($0) + "%").tag($0) }
+                    if ![100.0, 75, 50].contains(session.appPrefs.patternIntensity) {
+                        Text(Reference.label(session.appPrefs.patternIntensity) + "%").tag(session.appPrefs.patternIntensity)
+                    }
+                }
+                .help("HCFR's \"Pattern Intensity\": level of the color patches (primaries, secondaries, saturations, Color Checker), e.g. 75% amplitude.")
+                Toggle("Display triplets (R:G:B codes on the patch)", isOn: $session.appPrefs.displayTriplets)
                 Toggle("Black on the other displays (screen blanking)", isOn: $session.blankOtherScreens)
                 Picker("Wait before reading", selection: $session.settleSeconds) {
                     ForEach([0.5, 1.0, 1.5, 2.0, 3.0], id: \.self) { Text(String(format: "%.1f s", $0)).tag($0) }
@@ -1104,6 +1120,13 @@ private struct ScaleSizeControl: View {
                 if session.ccSet == .user {
                     Button("Load file…") { session.loadUserColorChecker() }
                 }
+                Menu("Verification") {
+                    ForEach(VerificationCube.sizes, id: \.self) { n in
+                        Button(tr("RGB cube") + " \(n)×\(n)×\(n) (\(n * n * n) " + tr("patches") + ")") { session.useVerificationCube(n) }
+                    }
+                }
+                .fixedSize()
+                .help("Large verification sets: every combination of the R, G and B levels (a cube of the color space), measured as a User defined Color Checker set. The report (File → Create PDF Report…) gives the share of patches under ΔE 1, 2 and 3 and the worst ones.")
             }
             .help("Color Checker pattern set (HCFR's References → Color Checker Patterns). User defined reads a CSV file as HCFR's usercolors.csv: R,G,B,name per line with video levels 16-235.")
         default:

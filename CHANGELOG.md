@@ -2,6 +2,19 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.15
+
+- **Color Checker → LG_540_2016, LG_540_2017, LG_1000_2017 and LG_4000_2017**: HCFR for Windows'
+  LG HDR base tone curve sets, with LG's fixed targets against the measured peak white (they
+  were missing on the Mac). Also in .chc files.
+- **Generator menu: Constant APL (background), Pattern intensity and Display triplets**, HCFR's
+  generator options: with a window patch the background keeps the average picture level
+  constant (5–50 %), the color patches can be shown at 75 % or 50 % amplitude, and the R:G:B
+  codes can be drawn on the patch.
+- **Color Checker → Verification**: RGB cube sets of 64, 125, 216 and 729 patches (every
+  combination of R, G and B levels), measured as a User defined set, so they also open in HCFR
+  for Windows. The PDF report gives the share of patches under ΔE 1, 2 and 3 and the worst ones.
+
 ## 1.3.14
 
 - **Edit → Undo / Redo (⌘Z / ⌘⇧Z) of measures**, edits and deletes, as HCFR for Windows (up to

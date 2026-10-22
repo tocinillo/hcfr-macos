@@ -938,3 +938,18 @@
 "Duplicate Project…" = "Duplicar proyecto…";
 "Reset to Defaults…" = "Restablecer valores por defecto…";
 "All the preferences back to HCFR's default values (the measures are kept)" = "Todas las preferencias vuelven a los valores por defecto de HCFR (las medidas se conservan)";
+
+/* 1.3.15 */
+"The Color Checker measurements are cleared to use the new pattern set." = "Las medidas del Color Checker se borran para usar el nuevo conjunto de patrones.";
+"Clear" = "Borrar";
+"RGB cube" = "Cubo RGB";
+"Verification set: " = "Conjunto de verificación: ";
+"patches" = "parches";
+"Verification" = "Verificación";
+"Constant APL (background)" = "APL constante (fondo)";
+"Off (black background)" = "Desactivado (fondo negro)";
+"HCFR's \"APL (video) level\": with a window patch, the background is filled so the average picture level of the screen stays at this value for every pattern (useful on HDR TVs and OLEDs whose brightness depends on the APL)." = "El \"APL (video) level\" de HCFR: con un parche de ventana, el fondo se rellena para que el nivel medio de imagen de la pantalla se mantenga en este valor en todos los patrones (útil en televisores HDR y OLED cuyo brillo depende del APL).";
+"Pattern intensity" = "Intensidad del patrón";
+"HCFR's \"Pattern Intensity\": level of the color patches (primaries, secondaries, saturations, Color Checker), e.g. 75% amplitude." = "La \"Pattern Intensity\" de HCFR: nivel de los parches de color (primarios, secundarios, saturaciones, Color Checker), p. ej. 75 % de amplitud.";
+"Display triplets (R:G:B codes on the patch)" = "Mostrar tripletes (códigos R:G:B en el parche)";
+"Large verification sets: every combination of the R, G and B levels (a cube of the color space), measured as a User defined Color Checker set. The report (File → Create PDF Report…) gives the share of patches under ΔE 1, 2 and 3 and the worst ones." = "Conjuntos de verificación grandes: todas las combinaciones de niveles de R, G y B (un cubo del espacio de color), medidas como un conjunto Color Checker definido por el usuario. El informe (Archivo → Crear informe PDF…) da el porcentaje de parches por debajo de ΔE 1, 2 y 3 y los peores.";

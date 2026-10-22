@@ -236,7 +236,10 @@ private struct ReportView: View {
         let d = results.compactMap(\.deltaE)
         var summary = v == .freeMeasures ? "\(results.count) measures"
             : "Average dE: \(d.isEmpty ? "—" : rfmt(d.reduce(0, +) / Double(d.count), 2))   Max dE: \(d.max().map { rfmt($0, 2) } ?? "—")"
-        if v == .colorChecker { summary += "   Patterns: \(session.ccSet.title)" }
+        if v == .colorChecker {
+            summary += "   Patterns: \(session.ccSet == .user && !session.userCCName.isEmpty ? session.userCCName : session.ccSet.title)"
+            if let s = VerificationCube.summary(results) { summary += "\n" + s }
+        }
         let per = 12
         return VStack(alignment: .leading, spacing: 4) {
             Text(tr(v.rawValue)).font(.system(size: 13, weight: .bold))

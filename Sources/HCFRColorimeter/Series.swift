@@ -76,7 +76,7 @@ enum ColorCheckerSet: Int, CaseIterable, Identifiable, Codable {
     case cm4Lum = 8, cm5Lum = 9, cm10Lum = 10
     case cm4Sat = 11, cm4Sat75 = 12, cm5Sat = 13, cm5Sat75 = 14, cm10Sat = 15, cm10Sat75 = 16
     case cm6NearBlack = 17, cmDynamicRange = 18
-    case mascior50 = 19, lgUK65xx = 24, lgOLED2018V1 = 25, lgOLED2018V2 = 26, lgOLED2018V3 = 27
+    case mascior50 = 19, lg540_2016 = 20, lg540_2017 = 21, lg1000_2017 = 22, lg4000_2017 = 23, lgUK65xx = 24, lgOLED2018V1 = 25, lgOLED2018V2 = 26, lgOLED2018V3 = 27
     case lgOLED2019_10 = 28, lgOLED2019_22 = 29, lgOLED2020_10 = 30, lgOLED2020_22 = 31, lgOLED2021_10 = 32, lgOLED2021_22 = 33
     case random250 = 34, random500 = 35, user = 36
 
@@ -104,6 +104,10 @@ enum ColorCheckerSet: Int, CaseIterable, Identifiable, Codable {
         case .cm6NearBlack: return "CM 6-Point Near Black"
         case .cmDynamicRange: return "CM Dynamic Range (Clipping)"
         case .mascior50: return "BT2020HDR_50_50"
+        case .lg540_2016: return "LG_540_2016"
+        case .lg540_2017: return "LG_540_2017"
+        case .lg1000_2017: return "LG_1000_2017"
+        case .lg4000_2017: return "LG_4000_2017"
         case .lgUK65xx: return "LG UK65xx 20-Point"
         case .lgOLED2018V1: return "LG 2018 OLED V1 20-Point"
         case .lgOLED2018V2: return "LG 2018 OLED V2 20-Point"
@@ -152,6 +156,10 @@ enum ColorCheckerSet: Int, CaseIterable, Identifiable, Codable {
         case .cm6NearBlack: return csv(ColorCheckerData.cm6NearBlack)
         case .cmDynamicRange: return csv(ColorCheckerData.cmDynamicRange)
         case .mascior50: return csv(ColorCheckerData.mascior50)
+        case .lg540_2016: return csv(ColorCheckerData.lg540_2016)
+        case .lg540_2017: return csv(ColorCheckerData.lg540_2017)
+        case .lg1000_2017: return csv(ColorCheckerData.lg1000_2017)
+        case .lg4000_2017: return csv(ColorCheckerData.lg4000_2017)
         case .lgUK65xx: return csv(ColorCheckerData.lgUK65xx)
         case .lgOLED2018V1: return csv(ColorCheckerData.lgOLED2018V1)
         case .lgOLED2018V2: return csv(ColorCheckerData.lgOLED2018V2)
@@ -170,6 +178,18 @@ enum ColorCheckerSet: Int, CaseIterable, Identifiable, Codable {
 
     /// HDR10 sets: PQ signals, targets in nits against the measured peak white (HCFR's MASCIOR50…CCMAXHDR).
     var isHDRSet: Bool { (19...33).contains(rawValue) }
+
+    /// LG base tone curve sets: target of step `i` as a fraction of the peak white (HCFR's Measure.cpp).
+    func lgToneTarget(_ i: Int, peak: Double) -> Double? {
+        func pq(_ l: [Double]) -> Double { i < l.count ? min(l[i] * 10000 / max(peak, 1e-6), 1) : 1 }
+        switch self {
+        case .lg540_2016: return i < ColorCheckerData.lg540_2016Levels.count ? ColorCheckerData.lg540_2016Levels[i] : 1
+        case .lg540_2017: return pq(ColorCheckerData.lg540_2017Levels)
+        case .lg1000_2017: return pq(ColorCheckerData.lg1000_2017Levels)
+        case .lg4000_2017: return pq(ColorCheckerData.lg4000_2017Levels)
+        default: return nil
+        }
+    }
 
     /// HCFR's m_bRecalc: in HDR the signals of these sets are recomputed so they give the same colors.
     var recomputedInHDR: Bool {

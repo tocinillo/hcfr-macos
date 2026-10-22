@@ -381,3 +381,54 @@ extension Session {
         NSPageLayout().runModal(with: NSPrintInfo.shared)
     }
 }
+
+// MARK: - Verification sets (an RGB cube measured as a User defined Color Checker)
+
+enum VerificationCube {
+    static let sizes = [4, 5, 6, 9]
+
+    /// n × n × n patches: every combination of n levels of R, G and B (video 16-235).
+    static func rows(_ n: Int) -> [ColorCheckerData.Row] {
+        let codes = (0..<n).map { 16 + Int((219 * Double($0) / Double(n - 1)).rounded()) }
+        let pct = (0..<n).map { Int((100 * Double($0) / Double(n - 1)).rounded()) }
+        var out: [ColorCheckerData.Row] = []
+        for r in 0..<n { for g in 0..<n { for b in 0..<n {
+            out.append((codes[r], codes[g], codes[b], "\(pct[r])/\(pct[g])/\(pct[b])"))
+        } } }
+        return out
+    }
+
+    /// Share of patches under ΔE 1, 2 and 3, and the worst ones (report of a verification).
+    static func summary(_ results: [SeriesResult]) -> String? {
+        let measured = results.filter { $0.deltaE != nil }
+        guard measured.count >= 10 else { return nil }
+        let n = Double(measured.count)
+        func share(_ limit: Double) -> String {
+            String(format: "%.0f%%", 100 * Double(measured.filter { ($0.deltaE ?? 0) < limit }.count) / n)
+        }
+        let worst = measured.sorted { ($0.deltaE ?? 0) > ($1.deltaE ?? 0) }.prefix(5)
+            .map { "\($0.name) (\(String(format: "%.1f", $0.deltaE ?? 0)))" }.joined(separator: ", ")
+        // The report is in English, as HCFR's
+        return "Under dE 1: " + share(1) + "   Under dE 2: " + share(2) + "   Under dE 3: " + share(3) + "   Worst: " + worst
+    }
+}
+
+extension Session {
+    func useVerificationCube(_ n: Int) {
+        guard activity == .idle else { return }
+        if ccSet == .user || !(seriesMeasurements[.colorChecker]?.isEmpty ?? true) {
+            if !(seriesMeasurements[.colorChecker]?.isEmpty ?? true) {
+                let alert = NSAlert()
+                alert.messageText = tr("Clear the measurements?")
+                alert.informativeText = tr("The Color Checker measurements are cleared to use the new pattern set.")
+                alert.addButton(withTitle: tr("Clear"))
+                alert.addButton(withTitle: tr("Cancel"))
+                guard alert.runModal() == .alertFirstButtonReturn else { return }
+            }
+        }
+        seriesMeasurements[.colorChecker] = nil
+        setUserColorChecker(VerificationCube.rows(n), name: tr("RGB cube") + " \(n * n * n)")
+        applyColorCheckerSet(.user)
+        status = tr("Verification set: ") + "\(n * n * n) " + tr("patches") + " — Measure → Color Checker"
+    }
+}

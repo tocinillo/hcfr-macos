@@ -934,3 +934,18 @@
 "Duplicate Project…" = "Dupliquer le projet…";
 "Reset to Defaults…" = "Rétablir les valeurs par défaut…";
 "All the preferences back to HCFR's default values (the measures are kept)" = "Toutes les préférences reviennent aux valeurs par défaut de HCFR (les mesures sont conservées)";
+
+/* 1.3.15 */
+"The Color Checker measurements are cleared to use the new pattern set." = "Les mesures du Color Checker sont effacées pour utiliser le nouveau jeu de mires.";
+"Clear" = "Effacer";
+"RGB cube" = "Cube RVB";
+"Verification set: " = "Jeu de vérification : ";
+"patches" = "plages";
+"Verification" = "Vérification";
+"Constant APL (background)" = "APL constant (fond)";
+"Off (black background)" = "Désactivé (fond noir)";
+"HCFR's \"APL (video) level\": with a window patch, the background is filled so the average picture level of the screen stays at this value for every pattern (useful on HDR TVs and OLEDs whose brightness depends on the APL)." = "L'\"APL (video) level\" de HCFR : avec une mire fenêtre, le fond est rempli pour que le niveau moyen de l'image reste à cette valeur pour chaque mire (utile sur les téléviseurs HDR et OLED dont la luminosité dépend de l'APL).";
+"Pattern intensity" = "Intensité de la mire";
+"HCFR's \"Pattern Intensity\": level of the color patches (primaries, secondaries, saturations, Color Checker), e.g. 75% amplitude." = "La \"Pattern Intensity\" de HCFR : niveau des plages de couleur (primaires, secondaires, saturations, Color Checker), p. ex. 75 % d'amplitude.";
+"Display triplets (R:G:B codes on the patch)" = "Afficher les triplets (codes R:V:B sur la plage)";
+"Large verification sets: every combination of the R, G and B levels (a cube of the color space), measured as a User defined Color Checker set. The report (File → Create PDF Report…) gives the share of patches under ΔE 1, 2 and 3 and the worst ones." = "Grands jeux de vérification : toutes les combinaisons des niveaux R, V et B (un cube de l'espace colorimétrique), mesurées comme jeu Color Checker défini par l'utilisateur. Le rapport (Fichier → Créer un rapport PDF…) donne la part des plages sous ΔE 1, 2 et 3 et les pires.";
