@@ -66,6 +66,19 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleTypeRole</key><string>Editor</string>
     <key>LSHandlerRank</key><string>Owner</string>
     <key>LSItemContentTypes</key><array><string>org.hcfr.colorimeterexpress.project</string></array>
+  </dict><dict>
+    <key>CFBundleTypeName</key><string>HCFR for Windows Measures</string>
+    <key>CFBundleTypeRole</key><string>Editor</string>
+    <key>LSHandlerRank</key><string>Alternate</string>
+    <key>LSItemContentTypes</key><array><string>org.hcfr.windows.chc</string></array>
+  </dict></array>
+  <key>UTImportedTypeDeclarations</key><array><dict>
+    <key>UTTypeIdentifier</key><string>org.hcfr.windows.chc</string>
+    <key>UTTypeDescription</key><string>HCFR for Windows Measures</string>
+    <key>UTTypeConformsTo</key><array><string>public.data</string></array>
+    <key>UTTypeTagSpecification</key><dict>
+      <key>public.filename-extension</key><array><string>chc</string></array>
+    </dict>
   </dict></array>
 </dict></plist>
 PLIST

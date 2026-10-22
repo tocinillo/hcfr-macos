@@ -32,7 +32,13 @@ struct InformationPanel: View {
                 .buttonStyle(.borderless)
                 .help("Save this graph as a PNG image (HCFR's graph Save…)")
             }
-            graph(shownGraph)
+            if session.infoGraph == .auto && autoGraphs.count > 1 {
+                HStack(spacing: 8) {
+                    ForEach(autoGraphs, id: \.self) { g in graph(g).frame(maxWidth: .infinity) }
+                }
+            } else {
+                graph(shownGraph)
+            }
         }
         .padding(8)
         .frame(maxHeight: .infinity, alignment: .topLeading)
@@ -45,9 +51,23 @@ struct InformationPanel: View {
 
     private var shownGraph: InfoGraph { session.infoGraph == .auto ? autoGraph : session.infoGraph }
 
-    /// Auto: the graph that goes with the table shown.
-    private var autoGraph: InfoGraph {
-        switch session.view {
+    /// Auto with several tabs open (as HCFR for Windows): the graphs of up to three of them — the
+    /// table shown and the last used — in the order of the tabs, without repeating a graph.
+    private var autoGraphs: [InfoGraph] {
+        let recent = Array(session.tabUse.filter { session.openTabs.contains($0) }.prefix(3))
+        var out: [InfoGraph] = []
+        for v in session.openTabs where recent.contains(v) {
+            let g = Self.autoGraph(for: v)
+            if !out.contains(g) { out.append(g) }
+        }
+        return out
+    }
+
+    private var autoGraph: InfoGraph { Self.autoGraph(for: session.view) }
+
+    /// Auto: the graph that goes with a table.
+    static func autoGraph(for view: MeasureView) -> InfoGraph {
+        switch view {
         case .grayScale: return .rgbLevels
         case .nearBlack, .nearWhite: return .nearBlackWhite
         case .freeMeasures: return .freeHistogram

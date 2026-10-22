@@ -2,6 +2,18 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.7
+
+- **Projects shared with HCFR for Windows (.chc)**: File → Open Project… opens Windows .chc files
+  (gray scale, near black / white, saturations, Color Checker, free measures, primaries and
+  secondaries, contrast and the reference settings). Saving writes the project in both formats
+  side by side, name.hcfrex and name.chc (General → "Also save in HCFR for Windows' format",
+  on by default), and Save As accepts a name ending in .chc. Spectra and lux values stay in the
+  .hcfrex only.
+- **Tabs as in HCFR for Windows**: every table you open or measure (gray scale, primaries,
+  saturations…) stays open as a tab above the table, with a close button. With the graph in
+  **Auto**, the information panel shows the graphs of up to three open tabs side by side.
+
 ## 1.3.6
 
 - **Reference project** (HCFR for Windows' "Set as reference"): File → Set as Reference Project

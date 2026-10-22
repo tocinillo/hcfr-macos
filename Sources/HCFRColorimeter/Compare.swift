@@ -29,10 +29,7 @@ struct ReferenceData {
     var colorWhiteY: Double { colors[.white]?.Y ?? gray[100]?.Y ?? baseWhiteY }
 
     static func load(_ url: URL) throws -> ReferenceData {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let file = try decoder.decode(ProjectFile.self, from: Data(contentsOf: url))
-        guard ProjectFile.acceptedFormats.contains(file.format) else { throw CocoaError(.fileReadCorruptFile) }
+        let file = try Session.readProjectFile(url)
         var d = ReferenceData(name: url.deletingPathExtension().lastPathComponent)
         d.grayCount = file.grayCount ?? Reference.defaultGrayCount
         for (k, v) in file.measurements where v.count == 3 {
@@ -86,7 +83,7 @@ extension Session {
     func chooseReferenceProject() {
         let panel = NSOpenPanel()
         panel.title = "Compare with project"
-        panel.allowedContentTypes = [.hcfrProject, .json]
+        panel.allowedContentTypes = [.hcfrProject, .hcfrWindows, .json]
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             refData = try ReferenceData.load(url)

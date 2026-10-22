@@ -62,6 +62,35 @@ private struct Panel<Content: View>: View {
     }
 }
 
+/// HCFR for Windows' tabs: the tables opened (by choosing them or measuring them), each with a
+/// close button. In Auto, the information panel shows the graphs of up to three of them.
+struct TableTabs: View {
+    @ObservedObject var session: Session
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(session.openTabs) { v in
+                let on = v == session.view
+                HStack(spacing: 4) {
+                    Text(tr(v.rawValue)).font(.callout).lineLimit(1)
+                    if session.openTabs.count > 1 {
+                        Button { session.closeTab(v) } label: { Image(systemName: "xmark").font(.system(size: 8, weight: .bold)) }
+                            .buttonStyle(.borderless)
+                            .help("Close tab")
+                    }
+                }
+                .padding(.horizontal, 10).padding(.vertical, 3)
+                .background(RoundedRectangle(cornerRadius: 5).fill(on ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.08)))
+                .overlay(RoundedRectangle(cornerRadius: 5).stroke(on ? Color.accentColor.opacity(0.6) : Color.clear))
+                .contentShape(Rectangle())
+                .onTapGesture { if session.activity != .measuring { session.view = v } }
+            }
+            Spacer()
+        }
+        .frame(height: 22)
+    }
+}
+
 struct ContentView: View {
     @ObservedObject var session: Session
     var autoConnect = true
@@ -75,6 +104,7 @@ struct ContentView: View {
             }
             .frame(height: 122)
 
+            TableTabs(session: session)
             switch session.view {
             case .grayScale: MeasuresGrid(session: session)
             case .primariesSecondaries: PrimariesGrid(session: session)

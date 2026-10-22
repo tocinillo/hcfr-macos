@@ -102,7 +102,7 @@ struct DocumentCommands: Commands {
             .keyboardShortcut("t")
             Button("Open Project in New Tab…") {
                 let panel = NSOpenPanel()
-                panel.allowedContentTypes = [.hcfrProject, .json]
+                panel.allowedContentTypes = [.hcfrProject, .hcfrWindows, .json]
                 let parent = NSApp.keyWindow
                 guard panel.runModal() == .OK, let url = panel.url else { return }
                 if let parent { ProjectTabs.prepare(parent); ProjectTabs.pendingParent = parent }
@@ -110,7 +110,7 @@ struct DocumentCommands: Commands {
             }
             Button("Open Project in New Window…") {
                 let panel = NSOpenPanel()
-                panel.allowedContentTypes = [.hcfrProject, .json]
+                panel.allowedContentTypes = [.hcfrProject, .hcfrWindows, .json]
                 guard panel.runModal() == .OK, let url = panel.url else { return }
                 openWindow(id: "document", value: DocumentRequest(path: url.path))
             }

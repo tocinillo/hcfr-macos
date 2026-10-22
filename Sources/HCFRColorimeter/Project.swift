@@ -66,13 +66,14 @@ extension Session {
         if copyTo == nil && (url == nil || saveAs) {
             let panel = NSSavePanel()
             panel.title = "Save project"
-            panel.allowedContentTypes = [.hcfrProject]
+            panel.allowedContentTypes = [.hcfrProject, .hcfrWindows]
             panel.nameFieldStringValue = projectURL?.lastPathComponent ?? defaultProjectName()
+            panel.message = tr("Type .chc at the end of the name to save it in HCFR for Windows' format.")
             guard panel.runModal() == .OK, let chosen = panel.url else { return }
             url = chosen
         }
         guard let url else { return }
-        let file = ProjectFile(
+        var file = ProjectFile(
             standard: standard.rawValue, white: white.rawValue, gamma: gamma, overrideBlack: overrideBlack,
             display: correction?.name, meter: meter?.name, meterSerial: meter?.serial, lastMeasure: lastMeasure,
             measurements: Dictionary(uniqueKeysWithValues: measurements.map { (Self.levelKey($0.key), [$0.value.X, $0.value.Y, $0.value.Z]) }),
@@ -90,11 +91,16 @@ extension Session {
             contrast: contrastMeasurements.isEmpty ? nil : Dictionary(uniqueKeysWithValues: contrastMeasurements.map { ($0.key.rawValue, [$0.value.X, $0.value.Y, $0.value.Z]) }),
             spectra: spectra.isEmpty ? nil : spectra,
             lux: luxValues.isEmpty ? nil : luxValues)
+        if let c = file.colorChecker, c == ColorCheckerSet.user.rawValue, userCCRows.isEmpty { file.colorChecker = nil }
         do {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            encoder.dateEncodingStrategy = .iso8601
-            try encoder.encode(file).write(to: url, options: .atomic)
+            let isChc = url.pathExtension.lowercased() == "chc"
+            try Self.projectData(file, windows: isChc).write(to: url, options: .atomic)
+            // Both formats side by side (General → "Also save in HCFR for Windows' format"), so the
+            // project opens on Windows and on the Mac
+            if copyTo == nil && appPrefs.saveBothFormats {
+                let other = url.deletingPathExtension().appendingPathExtension(isChc ? Self.projectExtension : "chc")
+                try? Self.projectData(file, windows: !isChc).write(to: other, options: .atomic)
+            }
             if copyTo != nil { return }   // a copy (Duplicate): this window keeps its own file
             projectURL = url
             isDirty = false
@@ -105,12 +111,34 @@ extension Session {
         }
     }
 
+    /// The project file's bytes: this app's JSON, or HCFR for Windows' .chc.
+    nonisolated static func projectData(_ file: ProjectFile, windows: Bool) throws -> Data {
+        if windows { return ChcFile.write(file) }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        return try encoder.encode(file)
+    }
+
+    /// Reads a project: this app's .hcfrex (JSON) or HCFR for Windows' .chc.
+    nonisolated static func readProjectFile(_ url: URL) throws -> ProjectFile {
+        let data = try Data(contentsOf: url)
+        if url.pathExtension.lowercased() == "chc" || data.starts(with: [0x43, 0x4F, 0x4C, 0x4F, 0x52, 0x48, 0x43, 0x46]) {
+            return try ChcFile.read(data)
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let file = try decoder.decode(ProjectFile.self, from: data)
+        guard ProjectFile.acceptedFormats.contains(file.format) else { throw CocoaError(.fileReadCorruptFile) }
+        return file
+    }
+
     /// Open project: shows the file dialog (warns first if there are unsaved measurements).
     func openProjectDialog() {
         guard activity == .idle, confirmDiscardChanges() else { return }
         let panel = NSOpenPanel()
         panel.title = "Open project"
-        panel.allowedContentTypes = [.hcfrProject, .json]
+        panel.allowedContentTypes = [.hcfrProject, .hcfrWindows, .json]
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
         openProject(url)
@@ -119,12 +147,7 @@ extension Session {
     func openProject(_ url: URL) {
         guard activity == .idle else { return }
         do {
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            let file = try decoder.decode(ProjectFile.self, from: Data(contentsOf: url))
-            guard ProjectFile.acceptedFormats.contains(file.format) else {
-                throw CocoaError(.fileReadCorruptFile)
-            }
+            let file = try Self.readProjectFile(url)
             if let s = ColorStandard(rawValue: file.standard) { standard = s }
             if let w = WhitePoint(rawValue: file.white) { white = w }
             gamma = file.gamma
@@ -169,6 +192,15 @@ extension Session {
             spectra = file.spectra ?? [:]
             luxValues = file.lux ?? [:]
             selectedIndex = 0
+            // Tabs: the tables that have measures (as HCFR for Windows opens them)
+            var tabs: [MeasureView] = []
+            if !m.isEmpty { tabs.append(.grayScale) }
+            if !c.isEmpty { tabs.append(.primariesSecondaries) }
+            tabs += MeasureView.allCases.filter { !(series[$0]?.isEmpty ?? true) }
+            if !con.isEmpty { tabs.append(.contrast) }
+            if !freeMeasurements.isEmpty { tabs.append(.freeMeasures) }
+            openTabs = tabs.isEmpty ? [.grayScale] : tabs
+            tabUse = openTabs
             if !m.isEmpty { view = .grayScale }
             else if !c.isEmpty { view = .primariesSecondaries }
             else if let v = MeasureView.allCases.first(where: { !(series[$0]?.isEmpty ?? true) }) { view = v }
@@ -191,6 +223,8 @@ extension Session {
                 }
             }
             status = msg
+        } catch let e as ChcError {
+            errorMessage = "Could not open \(url.lastPathComponent). " + (e.errorDescription ?? "")
         } catch {
             errorMessage = "Could not open \(url.lastPathComponent). It is not an HCFR Colorimeter project."
         }

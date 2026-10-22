@@ -808,3 +808,11 @@
 "Update Reference Project" = "Referenzprojekt aktualisieren";
 "Clear Reference Project" = "Referenzprojekt entfernen";
 "The reference project could not be read." = "Das Referenzprojekt konnte nicht gelesen werden.";
+
+/* 1.3.7 */
+"Close tab" = "Tab schließen";
+"Also save in HCFR for Windows' format (.chc)" = "Auch im Format von HCFR für Windows speichern (.chc)";
+"Save Project writes the project twice, side by side: name.hcfrex for this app and name.chc for HCFR for Windows. Windows .chc files open here too (File → Open Project…)." = "Projekt sichern schreibt das Projekt zweimal nebeneinander: name.hcfrex für diese App und name.chc für HCFR für Windows. .chc-Dateien von Windows lassen sich hier ebenfalls öffnen (Ablage → Projekt öffnen…).";
+"Type .chc at the end of the name to save it in HCFR for Windows' format." = "Geben Sie .chc am Ende des Namens ein, um im Format von HCFR für Windows zu speichern.";
+"It is not an HCFR measures file (.chc)." = "Es ist keine HCFR-Messdatei (.chc).";
+"The file is incomplete or damaged." = "Die Datei ist unvollständig oder beschädigt.";

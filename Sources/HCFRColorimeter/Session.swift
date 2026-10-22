@@ -175,7 +175,24 @@ final class Session: ObservableObject {
     @Published var valueMode: ValueMode = .xyY { didSet { defaults.set(valueMode.rawValue, forKey: "valueMode") } }
     /// Table shown (HCFR's "View" selector).
     @Published var view: MeasureView = .grayScale {
-        didSet { if selectedIndex >= columnCount(view) { selectedIndex = 0 } }
+        didSet {
+            if selectedIndex >= columnCount(view) { selectedIndex = 0 }
+            // HCFR for Windows' tabs: every table shown or measured stays open as a tab
+            if !openTabs.contains(view) { openTabs.append(view) }
+            tabUse.removeAll { $0 == view }
+            tabUse.insert(view, at: 0)
+        }
+    }
+    /// Tables open as tabs (in the order they were opened) and the order they were last used.
+    @Published var openTabs: [MeasureView] = [.grayScale]
+    var tabUse: [MeasureView] = [.grayScale]
+
+    /// Closes a tab (the last one stays).
+    func closeTab(_ v: MeasureView) {
+        guard openTabs.count > 1, let i = openTabs.firstIndex(of: v) else { return }
+        openTabs.remove(at: i)
+        tabUse.removeAll { $0 == v }
+        if view == v { view = tabUse.first ?? openTabs[max(0, i - 1)] }
     }
     /// Graph of the Information panel (HCFR's graph views).
     @Published var infoGraph: InfoGraph = .rgbLevels { didSet { defaults.set(infoGraph.rawValue, forKey: "infoGraph") } }

@@ -141,6 +141,8 @@ struct AppPrefs: Codable, Equatable {
     // General → Application / User measures (HCFR's General preferences)
     /// "Check for updates" when the app starts.
     var checkUpdates = false
+    /// "Also save in HCFR for Windows' format": Save writes name.hcfrex and name.chc together.
+    var saveBothFormats = true
     /// "Continuous measuring": Measure → Free measure keeps reading (as Start) instead of one reading.
     var continuousFreeMeasures = false
     /// "Detect gray/primary colors during user measures": a free measure close (Δxy < 0.03) to a

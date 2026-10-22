@@ -239,6 +239,8 @@ struct GeneralPage: View {
         Form {
             Section("Application") {
                 Toggle("Check for updates", isOn: $session.appPrefs.checkUpdates)
+                Toggle("Also save in HCFR for Windows' format (.chc)", isOn: $session.appPrefs.saveBothFormats)
+                    .help("Save Project writes the project twice, side by side: name.hcfrex for this app and name.chc for HCFR for Windows. Windows .chc files open here too (File → Open Project…).")
                 Text("When the app starts, looks for a newer version (Help → Updates → Check for new software).")
                     .font(.caption).foregroundStyle(.secondary)
             }
