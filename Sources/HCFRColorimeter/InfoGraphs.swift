@@ -34,10 +34,14 @@ struct InformationPanel: View {
             }
             if session.infoGraph == .auto && autoGraphs.count > 1 {
                 HStack(spacing: 8) {
-                    ForEach(autoGraphs, id: \.self) { g in graph(g).frame(maxWidth: .infinity) }
+                    ForEach(autoGraphs, id: \.self) { g in
+                        graph(g).frame(maxWidth: .infinity)
+                            .contextMenu { graphMenu(g) }
+                    }
                 }
             } else {
                 graph(shownGraph)
+                    .contextMenu { graphMenu(shownGraph) }
             }
         }
         .padding(8)
@@ -50,6 +54,13 @@ struct InformationPanel: View {
     }
 
     private var shownGraph: InfoGraph { session.infoGraph == .auto ? autoGraph : session.infoGraph }
+
+    /// HCFR's right-click menu of a graph: its options and Save….
+    @ViewBuilder private func graphMenu(_ g: InfoGraph) -> some View {
+        GraphOptionsItems(session: session, graph: g)
+        Divider()
+        Button("Save…") { GraphExport.save(graph(g), name: g.rawValue, session: session) }
+    }
 
     /// Auto with several tabs open (as HCFR for Windows): the graphs of up to three of them — the
     /// table shown and the last used — in the order of the tabs, without repeating a graph.
@@ -168,6 +179,27 @@ private func levelAxis(step: Int = 10) -> some AxisContent {
     }
 }
 
+/// HCFR's Red / Green / Blue curves: each channel of the gray scale relative to the same channel
+/// of white (1 = white), from the RGB rows of the table.
+@MainActor
+func channelCurves(_ session: Session) -> [(name: String, color: Color, values: [(level: Double, rel: Double)])] {
+    let o = session.graphOptions
+    guard let white = session.results.first(where: { $0.level == 100 })?.rgb else { return [] }
+    var out: [(String, Color, [(Double, Double)])] = []
+    for (c, on, name, color) in [(0, o.curveR, "Red", Color.red), (1, o.curveG, "Green", Color.green), (2, o.curveB, "Blue", Color.blue)] where on {
+        guard white[c] > 0 else { continue }
+        let v = session.results.compactMap { r -> (Double, Double)? in r.rgb.map { (r.level, $0[c] / white[c]) } }
+        out.append((name, color, v))
+    }
+    return out.map { (name: $0.0, color: $0.1, values: $0.2.map { (level: $0.0, rel: $0.1) }) }
+}
+
+/// Measured curve style (Graphs parameters: thickness and dots).
+@MainActor
+func measuredStroke(_ session: Session) -> StrokeStyle { StrokeStyle(lineWidth: session.graphOptions.lineWidth) }
+@MainActor
+func dotSize(_ session: Session, _ size: CGFloat = 24) -> CGFloat { session.graphOptions.showDots ? size : 0 }
+
 private struct LevelPoint: Identifiable {
     let level: Double
     let value: Double
@@ -200,12 +232,17 @@ struct LuminanceChart: View {
         // "Display two separate luminance curves": the luxmeter's as a second curve
         let luxCurve: [LevelPoint] = luxMode == .both
             ? lux.keys.sorted().map { LevelPoint(level: $0, value: shown(lux[$0]!), series: "Luxmeter") } : []
-        let target = stride(from: 0.0, through: 100, by: 2.5).map {
+        let o = session.graphOptions
+        let target = !o.showReference ? [] : stride(from: 0.0, through: 100, by: 2.5).map {
             LevelPoint(level: $0, value: shown(session.targetRelative(level: $0)), series: "Reference")
         }
-        let compared: [LevelPoint] = session.refData.map { d in
+        let compared: [LevelPoint] = (o.showRefMeasure ? session.refData : nil).map { d in
             d.gray.keys.sorted().compactMap { l in d.gray[l].map { LevelPoint(level: l, value: shown($0.Y / d.whiteY), series: "Compared") } }
         } ?? []
+        let channels = channelCurves(session).map { c in
+            (c.color, c.values.map { LevelPoint(level: $0.level, value: shown($0.rel), series: c.name) })
+        }
+        let measuredY = o.curveY ? measured : []
         let top: Double = mode == .absolute ? max(w, measured.map(\.value).max() ?? 0) * 1.05 : mode == .log ? 2.05 : 105
         let bottom: Double = mode == .log ? -2 : 0
         DarkGraph(title: mode == .relative ? "Luminance" : "Luminance — \(mode.rawValue)" + (mode == .absolute ? " (cd/m²)" : "")) {
@@ -222,10 +259,16 @@ struct LuminanceChart: View {
                     LineMark(x: .value("Level", p.level), y: .value("%", p.value), series: .value("S", p.series))
                         .foregroundStyle(.orange).lineStyle(StrokeStyle(lineWidth: 2, dash: [6, 3]))
                 }
-                ForEach(measured) { p in
+                ForEach(Array(channels.enumerated()), id: \.offset) { _, ch in
+                    ForEach(ch.1) { p in
+                        LineMark(x: .value("Level", p.level), y: .value("%", p.value), series: .value("S", p.series))
+                            .foregroundStyle(ch.0).lineStyle(measuredStroke(session))
+                    }
+                }
+                ForEach(measuredY) { p in
                     LineMark(x: .value("Level", p.level), y: .value("%", p.value), series: .value("S", p.series))
-                        .foregroundStyle(ChartInk.accent).lineStyle(StrokeStyle(lineWidth: 2))
-                    PointMark(x: .value("Level", p.level), y: .value("%", p.value)).foregroundStyle(ChartInk.accent).symbolSize(24)
+                        .foregroundStyle(ChartInk.accent).lineStyle(measuredStroke(session))
+                    PointMark(x: .value("Level", p.level), y: .value("%", p.value)).foregroundStyle(ChartInk.accent).symbolSize(dotSize(session))
                 }
             }
             .chartXScale(domain: 0...100)
@@ -272,11 +315,27 @@ struct GammaChart: View {
     @ObservedObject var session: Session
 
     var body: some View {
-        let measured = session.results.compactMap { r in r.gamma.map { LevelPoint(level: r.level, value: $0, series: "Measured") } }
-        let target = session.allLevels.compactMap { l -> LevelPoint? in
+        let o = session.graphOptions
+        let measured = !o.curveY ? [] : session.results.compactMap { r in r.gamma.map { LevelPoint(level: r.level, value: $0, series: "Measured") } }
+        let channels = channelCurves(session).map { c in
+            (c.color, c.values.compactMap { v -> LevelPoint? in
+                let x = session.ref.offsetSignal(Reference.grayProp(v.level))
+                guard v.rel > 0, x > 0, x < 1, v.level >= 5 else { return nil }
+                return LevelPoint(level: v.level, value: log(v.rel) / log(x), series: c.name)
+            })
+        }
+        let compared: [LevelPoint] = (o.showRefMeasure ? session.refData : nil).map { d in
+            d.gray.keys.sorted().compactMap { l -> LevelPoint? in
+                guard let c = d.gray[l], l >= 5, l < 100 else { return nil }
+                let rel = c.Y / d.whiteY, x = session.ref.offsetSignal(Reference.grayProp(l))
+                guard rel > 0, x > 0, x < 1 else { return nil }
+                return LevelPoint(level: l, value: log(rel) / log(x), series: "Compared")
+            }
+        } ?? []
+        let target = !o.showReference ? [] : session.allLevels.compactMap { l -> LevelPoint? in
             let v = Reference.grayProp(l), t = session.targetRelative(level: l)
             guard t > 0, v > 0, v < 1 else { return nil }
-            return LevelPoint(level: l, value: log(t) / log(v), series: "Reference")
+            return LevelPoint(level: l, value: log(t) / log(session.ref.offsetSignal(v)), series: "Reference")
         }
         let values = measured.map(\.value) + target.map(\.value)
         let lo = min(1.1, (values.min() ?? 2) - 0.1), hi = max(2.9, (values.max() ?? 2.4) + 0.1)
@@ -293,10 +352,20 @@ struct GammaChart: View {
                         RuleMark(y: .value("Average", avg))
                             .foregroundStyle(.yellow.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 1, dash: [6, 4]))
                     }
+                    ForEach(compared) { p in
+                        LineMark(x: .value("Level", p.level), y: .value("Gamma", p.value), series: .value("S", p.series))
+                            .foregroundStyle(.cyan.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
+                    }
+                    ForEach(Array(channels.enumerated()), id: \.offset) { _, ch in
+                        ForEach(ch.1) { p in
+                            LineMark(x: .value("Level", p.level), y: .value("Gamma", p.value), series: .value("S", p.series))
+                                .foregroundStyle(ch.0).lineStyle(measuredStroke(session))
+                        }
+                    }
                     ForEach(measured) { p in
                         LineMark(x: .value("Level", p.level), y: .value("Gamma", p.value), series: .value("S", p.series))
-                            .foregroundStyle(ChartInk.accent).lineStyle(StrokeStyle(lineWidth: 2))
-                        PointMark(x: .value("Level", p.level), y: .value("Gamma", p.value)).foregroundStyle(ChartInk.accent).symbolSize(24)
+                            .foregroundStyle(ChartInk.accent).lineStyle(measuredStroke(session))
+                        PointMark(x: .value("Level", p.level), y: .value("Gamma", p.value)).foregroundStyle(ChartInk.accent).symbolSize(dotSize(session))
                     }
                 }
                 .chartXScale(domain: 0...100)
@@ -332,19 +401,21 @@ struct ColorTempChart: View {
         let values = measured.map(\.value) + [refK]
         let (lo, hi) = Self.range(values: values, refK: refK, scale: session.graphOptions.tempScale)
         let shown = measured.map { LevelPoint(level: $0.level, value: min(max($0.value, lo), hi), series: $0.series) }
-        let compared: [LevelPoint] = session.refData.map { d in
+        let compared: [LevelPoint] = (session.graphOptions.showRefMeasure ? session.refData : nil).map { d in
             d.gray.keys.sorted().filter { $0 > 0 }.compactMap { l in d.gray[l].flatMap(ColorMath.cct).map { LevelPoint(level: l, value: min(max($0, lo), hi), series: "Compared") } }
         } ?? []
         DarkGraph(title: "Color temperature (K)") {
             Chart {
-                RuleMark(y: .value("Ref", refK)).foregroundStyle(ChartInk.ink.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                if session.graphOptions.showReference {
+                    RuleMark(y: .value("Ref", refK)).foregroundStyle(ChartInk.ink.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                }
                 ForEach(compared) { p in
                     LineMark(x: .value("Level", p.level), y: .value("K", p.value), series: .value("S", p.series))
                         .foregroundStyle(.cyan.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
                 }
                 ForEach(shown) { p in
-                    LineMark(x: .value("Level", p.level), y: .value("K", p.value), series: .value("S", "Measured")).foregroundStyle(.orange).lineStyle(StrokeStyle(lineWidth: 2))
-                    PointMark(x: .value("Level", p.level), y: .value("K", p.value)).foregroundStyle(.orange).symbolSize(24)
+                    LineMark(x: .value("Level", p.level), y: .value("K", p.value), series: .value("S", "Measured")).foregroundStyle(.orange).lineStyle(measuredStroke(session))
+                    PointMark(x: .value("Level", p.level), y: .value("K", p.value)).foregroundStyle(.orange).symbolSize(dotSize(session))
                 }
             }
             .chartXScale(domain: 0...100)
@@ -457,13 +528,37 @@ struct NearScaleChart: View {
     @ObservedObject var session: Session
     let view: MeasureView
 
+    /// HCFR's modes: Absolute Y (cd/m²), luminance % of white or L*; "Logarithmic mode" on top.
+    static func shown(_ y: Double, white: Double, options o: GraphOptions) -> Double {
+        var v: Double
+        switch o.nearMode {
+        case .absolute: v = y
+        case .relative: v = y / white * 100
+        case .lStar: v = LuminanceChart.value(y / white, mode: .lStar, white: white)
+        }
+        if o.nearLog { v = log10(max(v, 1e-4)) }
+        return v
+    }
+
     var body: some View {
+        let o = session.graphOptions
         let results = session.seriesResults(view)
         let levels = results.indices.map { session.seriesLevel(view, $0) }
-        let measured = zip(levels, results).compactMap { l, r in r.xyz.map { LevelPoint(level: l, value: $0.Y, series: "Measured") } }
-        let target = zip(levels, results).compactMap { l, r in r.targetY.map { LevelPoint(level: l, value: $0, series: "Reference") } }
+        let white = session.whiteY ?? 1
+        let shown: (Double) -> Double = { Self.shown($0, white: white, options: o) }
+        let measured = !o.curveY ? [] : zip(levels, results).compactMap { l, r in r.xyz.map { LevelPoint(level: l, value: shown($0.Y), series: "Measured") } }
+        let target = !o.showReference ? [] : zip(levels, results).compactMap { l, r in r.targetY.map { LevelPoint(level: l, value: shown($0), series: "Reference") } }
+        // Red / Green / Blue: each channel's share of the measure, as luminance of that channel
+        let whiteRGB = session.results.first { $0.level == 100 }?.rgb
+        let channels: [(Color, [LevelPoint])] = [(0, o.curveR, Color.red), (1, o.curveG, Color.green), (2, o.curveB, Color.blue)].compactMap { c, on, color in
+            guard on, let w = whiteRGB, w[c] > 0 else { return nil }
+            return (color, zip(levels, results).compactMap { l, r in r.rgb.map { LevelPoint(level: l, value: shown($0[c] / w[c] * white), series: "C\(c)") } })
+        }
         let lo = levels.first ?? 0, hi = max(levels.last ?? 1, lo + 1)
-        DarkGraph(title: view == .nearBlack ? "Near Black (cd/m²)" : "Near White (cd/m²)") {
+        let unit = o.nearLog ? "log " : ""
+        let title = (view == .nearBlack ? "Near Black" : "Near White") + " — " + unit
+            + (o.nearMode == .absolute ? "cd/m²" : o.nearMode == .relative ? "%" : "L*")
+        DarkGraph(title: title) {
             Chart {
                 ForEach(target) { p in
                     LineMark(x: .value("Level", p.level), y: .value("Y", p.value), series: .value("S", p.series))
@@ -471,10 +566,16 @@ struct NearScaleChart: View {
                     PointMark(x: .value("Level", p.level), y: .value("Y", p.value))
                         .foregroundStyle(ChartInk.ink.opacity(0.8)).symbol(.square).symbolSize(20)
                 }
+                ForEach(Array(channels.enumerated()), id: \.offset) { _, ch in
+                    ForEach(ch.1) { p in
+                        LineMark(x: .value("Level", p.level), y: .value("Y", p.value), series: .value("S", p.series))
+                            .foregroundStyle(ch.0).lineStyle(measuredStroke(session))
+                    }
+                }
                 ForEach(measured) { p in
                     LineMark(x: .value("Level", p.level), y: .value("Y", p.value), series: .value("S", p.series))
-                        .foregroundStyle(ChartInk.accent).lineStyle(StrokeStyle(lineWidth: 2))
-                    PointMark(x: .value("Level", p.level), y: .value("Y", p.value)).foregroundStyle(ChartInk.accent).symbolSize(24)
+                        .foregroundStyle(ChartInk.accent).lineStyle(measuredStroke(session))
+                    PointMark(x: .value("Level", p.level), y: .value("Y", p.value)).foregroundStyle(ChartInk.accent).symbolSize(dotSize(session))
                 }
             }
             .chartXScale(domain: lo...hi)
@@ -487,7 +588,7 @@ struct NearScaleChart: View {
                 AxisValueLabel { Text(String(format: "%.3g", v.as(Double.self) ?? 0)).foregroundStyle(ChartInk.ink) }
             } }
             .chartPlotStyle { $0.background(grayRamp) }
-            .overlay(alignment: .topLeading) { legend(measured.isEmpty ? "Measure → \(view == .nearBlack ? "Near black" : "Near white")" : nil) }
+            .overlay(alignment: .topLeading) { legend(measured.isEmpty && channels.isEmpty ? "Measure → \(view == .nearBlack ? "Near black" : "Near white")" : nil) }
         }
     }
 }
@@ -501,10 +602,14 @@ struct SaturationChart: View {
     let shift: Bool
 
     var body: some View {
+        let o = session.graphOptions
         let points: [LevelPoint] = MeasureView.saturations.flatMap { v -> [LevelPoint] in
             let results = session.seriesResults(v)
             let n = results.count
             guard n > 1, let color = v.saturationColor else { return [] }
+            // HCFR's "Primary colors" / "Secondary colors" (luminance graph) and color list (shifts graph)
+            let primary = [PatchColor.red, .green, .blue].contains(color)
+            if shift ? o.satHidden.contains(color.rawValue) : (primary ? !o.satPrimaries : !o.satSecondaries) { return [] }
             let full = session.ref.rgbToXYZ.apply(color.rgb)
             let end = XYZ(X: full[0], Y: full[1], Z: full[2])
             let w = session.ref.white
@@ -525,13 +630,15 @@ struct SaturationChart: View {
         let maxAbs = max(5, (points.map { abs($0.value) }.max() ?? 0) * 1.1)
         DarkGraph(title: shift ? "Saturation shift (%)" : "Saturation luminance (delta %)") {
             Chart {
-                RuleMark(y: .value("Ref", 0)).foregroundStyle(ChartInk.ink.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                if o.showReference {
+                    RuleMark(y: .value("Ref", 0)).foregroundStyle(ChartInk.ink.opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                }
                 ForEach(points) { p in
                     LineMark(x: .value("Sat", p.level), y: .value("%", p.value), series: .value("Color", p.series))
                         .foregroundStyle(CIEChart.markerColor(PatchColor(rawValue: p.series) ?? .white))
-                        .lineStyle(StrokeStyle(lineWidth: 2))
+                        .lineStyle(measuredStroke(session))
                     PointMark(x: .value("Sat", p.level), y: .value("%", p.value))
-                        .foregroundStyle(CIEChart.markerColor(PatchColor(rawValue: p.series) ?? .white)).symbolSize(20)
+                        .foregroundStyle(CIEChart.markerColor(PatchColor(rawValue: p.series) ?? .white)).symbolSize(dotSize(session, 20))
                 }
             }
             .chartXScale(domain: 0...100)
@@ -557,20 +664,29 @@ struct FreeMeasuresChart: View {
     @ObservedObject var session: Session
 
     var body: some View {
-        let m = session.freeMeasurements
+        let o = session.graphOptions
+        let all = session.seriesResults(.freeMeasures)
+        // HCFR's "10 / 20 / 50 measure points": the last ones only
+        let shownResults = o.freePoints > 0 ? Array(all.suffix(o.freePoints)) : all
+        let first = shownResults.first?.index ?? 0
+        let m = shownResults.compactMap { r in r.xyz.map { (r.index, $0, r) } }
         VStack(spacing: 6) {
-            series("Y (cd/m²)", m.map(\.Y), .yellow)
-            series("x", m.map(\.x), .pink)
-            series("y", m.map(\.y), .green)
+            if o.freeLuminance { series("Y (cd/m²)", m.map { ($0.0, $0.1.Y) }, .yellow, start: first) }
+            if o.freeXY {
+                series("x", m.map { ($0.0, $0.1.x) }, .pink, start: first)
+                series("y", m.map { ($0.0, $0.1.y) }, .green, start: first)
+            }
+            if o.freeDeltaE { series("Delta E", m.compactMap { r in r.2.deltaE.map { (r.0, $0) } }, .red, start: first) }
+            if o.freeTemperature { series("Color temperature (K)", m.compactMap { r in r.2.cct.map { (r.0, $0) } }, .orange, start: first) }
         }
     }
 
-    private func series(_ title: String, _ values: [Double], _ color: Color) -> some View {
+    private func series(_ title: String, _ values: [(Int, Double)], _ color: Color, start: Int) -> some View {
         DarkGraph(title: title) {
             Chart {
-                ForEach(Array(values.enumerated()), id: \.offset) { i, v in
-                    LineMark(x: .value("#", i + 1), y: .value(title, v)).foregroundStyle(color)
-                    PointMark(x: .value("#", i + 1), y: .value(title, v)).foregroundStyle(color).symbolSize(14)
+                ForEach(values, id: \.0) { i, v in
+                    LineMark(x: .value("#", i + 1), y: .value(title, v)).foregroundStyle(color).lineStyle(measuredStroke(session))
+                    PointMark(x: .value("#", i + 1), y: .value(title, v)).foregroundStyle(color).symbolSize(dotSize(session, 14))
                 }
             }
             .chartYScale(domain: .automatic(includesZero: false))
@@ -590,8 +706,26 @@ struct FreeMeasuresChart: View {
 
 // MARK: - Graph options and saving (HCFR's graph right-click menus)
 
-/// Scale / display options of the graph shown.
+/// Scale / display options of the graph shown (the menu button and the graph's right-click menu,
+/// as HCFR's graph menus).
 struct GraphOptionsMenu: View {
+    @ObservedObject var session: Session
+    let graph: InfoGraph
+
+    var body: some View {
+        Menu {
+            GraphOptionsItems(session: session, graph: graph)
+        } label: {
+            Image(systemName: "slider.horizontal.3")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Graph scales and options")
+    }
+}
+
+/// The items of a graph's menu.
+struct GraphOptionsItems: View {
     @ObservedObject var session: Session
     let graph: InfoGraph
 
@@ -608,77 +742,172 @@ struct GraphOptionsMenu: View {
 
     var body: some View {
         let o = $session.graphOptions
-        Menu {
-            switch graph {
-            case .luminanceGamma:
-                Picker("Luminance", selection: o.luminance) {
-                    ForEach(LuminanceMode.allCases) { Text(tr($0.rawValue)).tag($0) }
-                }
-            case .rgbLevels, .rgbGamma, .targetRGBGamma, .auto:
-                Toggle("w/Gamma", isOn: Binding(
-                    get: { session.prefs.grayDeltaE == GrayDeltaEMode.absoluteYWithGamma.rawValue },
-                    set: { session.prefs.grayDeltaE = ($0 ? GrayDeltaEMode.absoluteYWithGamma : .absoluteYWithoutGamma).rawValue }))
-                    .help("As HCFR's RGB graph \"w/Gamma\": the channels against the target luminance (shows the gamma error too) instead of the measured luminance. It is the same as Preferences → References → dE gray: Absolute Y w/gamma.")
-                Toggle("Delta E curve", isOn: o.showDeltaECurve)
-                Toggle("Display reference measure", isOn: o.showRefMeasure)
-                Picker("RGB scale", selection: o.rgbScale) {
-                    Text("0-200%").tag(0); Text("60-140%").tag(1); Text("50-150%").tag(2); Text("80-120%").tag(3)
-                }
-                Picker("Delta E scale", selection: o.deltaEMax) {
-                    Text("0-5").tag(5.0); Text("0-10").tag(10.0); Text("0-20").tag(20.0)
-                }
-            case .colorTemperature:
-                Picker("Temperature scale", selection: o.tempScale) {
-                    Text("Auto-adjust").tag(0); Text("2000K-10000K").tag(1); Text("4000K-8000K").tag(2)
-                }
-            case .cie, .targetCIE:
-                Toggle("Display saturations, color checker and free measures", isOn: o.cieAllSeries)
-                Toggle("Display grays", isOn: $session.cieShowGrays)
-                Toggle("Display references", isOn: $session.cieShowReferences)
-                Toggle("CIE u'v' mode", isOn: $session.cieUV)
-            case .saturationShift, .nearBlackWhite, .freeHistogram, .summary, .spectrum:
-                Text("No options for this graph")
+        switch graph {
+        case .luminanceGamma:
+            Toggle("Display reference", isOn: o.showReference)
+            Toggle("Display reference measure", isOn: o.showRefMeasure)
+            Toggle("Display average gamma", isOn: o.showAverage)
+            Divider()
+            channelToggles
+            Divider()
+            Picker("Luminance", selection: o.luminance) {
+                ForEach(LuminanceMode.allCases) { Text(tr($0.rawValue)).tag($0) }
             }
-            if graph == .luminanceGamma {
+        case .rgbLevels, .rgbGamma, .targetRGBGamma, .auto:
+            Toggle("w/Gamma", isOn: Binding(
+                get: { session.prefs.grayDeltaE == GrayDeltaEMode.absoluteYWithGamma.rawValue },
+                set: { session.prefs.grayDeltaE = ($0 ? GrayDeltaEMode.absoluteYWithGamma : .absoluteYWithoutGamma).rawValue }))
+                .help("As HCFR's RGB graph \"w/Gamma\": the channels against the target luminance (shows the gamma error too) instead of the measured luminance. It is the same as Preferences → References → dE gray: Absolute Y w/gamma.")
+            Toggle("Delta E curve", isOn: o.showDeltaECurve)
+            Toggle("Display reference measure", isOn: o.showRefMeasure)
+            if graph != .rgbLevels && graph != .auto {
+                Toggle("Display reference", isOn: o.showReference)
                 Toggle("Display average gamma", isOn: o.showAverage)
+                Menu("Gamma curves") { channelToggles }
             }
-            ForEach(scaleKeys, id: \.self) { key in
-                Menu(tr("Scale") + " — " + tr(GraphScaleMenu.titles[key] ?? key)) { GraphScaleMenu(session: session, key: key) }
+            Picker("RGB scale", selection: o.rgbScale) {
+                Text("0-200%").tag(0); Text("60-140%").tag(1); Text("50-150%").tag(2); Text("80-120%").tag(3)
             }
-        } label: {
-            Image(systemName: "slider.horizontal.3")
+            Picker("Delta E scale", selection: o.deltaEMax) {
+                Text("0-5").tag(5.0); Text("0-10").tag(10.0); Text("0-20").tag(20.0)
+            }
+        case .colorTemperature:
+            Toggle("Display reference", isOn: o.showReference)
+            Toggle("Display reference measure", isOn: o.showRefMeasure)
+            Picker("Temperature scale", selection: o.tempScale) {
+                Text("Auto-adjust").tag(0); Text("2000K-10000K").tag(1); Text("4000K-8000K").tag(2)
+            }
+        case .cie, .targetCIE:
+            Toggle("Display saturations, color checker and free measures", isOn: o.cieAllSeries)
+            Toggle("Display grays", isOn: $session.cieShowGrays)
+            Toggle("Display references", isOn: $session.cieShowReferences)
+            Toggle("Display Delta E = 3 and 10", isOn: o.cieDeltaE)
+            Toggle("Worst 10%", isOn: o.cieWorst10)
+            Toggle("CIE u'v' mode", isOn: $session.cieUV)
+            Toggle("CIE a*b* mode", isOn: o.cieAB)
+        case .nearBlackWhite:
+            Toggle("Display reference", isOn: o.showReference)
+            Toggle("Logarithmic mode", isOn: o.nearLog)
+            Divider()
+            channelToggles
+            Divider()
+            Picker("Luminance", selection: o.nearMode) {
+                ForEach(NearMode.allCases) { Text(tr($0.rawValue)).tag($0) }
+            }
+        case .saturationShift:
+            Toggle("Display reference", isOn: o.showReference)
+            Toggle("Primary colors", isOn: o.satPrimaries)
+            Toggle("Secondary colors", isOn: o.satSecondaries)
+            Menu("Saturation shifts") {
+                ForEach([PatchColor.red, .green, .blue, .yellow, .cyan, .magenta]) { c in
+                    Toggle(tr(c.rawValue), isOn: Binding(
+                        get: { !session.graphOptions.satHidden.contains(c.rawValue) },
+                        set: { on in
+                            session.graphOptions.satHidden.removeAll { $0 == c.rawValue }
+                            if !on { session.graphOptions.satHidden.append(c.rawValue) }
+                        }))
+                }
+            }
+        case .freeHistogram:
+            Toggle("Display luminance", isOn: o.freeLuminance)
+            Toggle("Display x, y", isOn: o.freeXY)
+            Toggle("Display Delta E", isOn: o.freeDeltaE)
+            Toggle("Display color temperature", isOn: o.freeTemperature)
+            Picker("Measure points", selection: o.freePoints) {
+                Text("All").tag(0); Text("10 measure points").tag(10); Text("20 measure points").tag(20); Text("50 measure points").tag(50)
+            }
+        case .summary, .spectrum:
+            Text("No options for this graph")
         }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-        .help("Graph scales and options")
+        ForEach(scaleKeys, id: \.self) { key in
+            Menu(tr("Scale") + " — " + tr(GraphScaleMenu.titles[key] ?? key)) { GraphScaleMenu(session: session, key: key) }
+        }
+        Divider()
+        Menu("Parameters") {
+            Picker("Thickness", selection: o.lineWidth) {
+                Text("1").tag(1.0); Text("2").tag(2.0); Text("3").tag(3.0); Text("4").tag(4.0)
+            }
+            Toggle("Display dots", isOn: o.showDots)
+            Toggle("Display charts with a white background", isOn: $session.appPrefs.whiteCharts)
+        }
+    }
+
+    @ViewBuilder private var channelToggles: some View {
+        let o = $session.graphOptions
+        Toggle("Luminance", isOn: o.curveY)
+        Toggle("Red", isOn: o.curveR)
+        Toggle("Green", isOn: o.curveG)
+        Toggle("Blue", isOn: o.curveB)
     }
 }
 
 @MainActor
 enum GraphExport {
+    /// HCFR's Save graph dialog: the file format and the image size.
+    static let formats: [(id: String, title: String)] = [("png", "PNG"), ("jpeg", "JPEG"), ("bmp", "BMP")]
+    static let sizes: [(w: CGFloat, h: CGFloat)] = [(1400, 800), (1920, 1080), (1280, 720), (1024, 768), (800, 600), (640, 480)]
+
     static func save<V: View>(_ view: V, name: String, session: Session) {
+        let panel = NSSavePanel()
+        panel.title = tr("Save graph")
+        // Format and size, remembered between saves
+        let format = NSPopUpButton(frame: .zero, pullsDown: false)
+        format.addItems(withTitles: formats.map(\.title))
+        format.selectItem(at: max(formats.firstIndex { $0.id == session.graphOptions.saveFormat } ?? 0, 0))
+        let size = NSPopUpButton(frame: .zero, pullsDown: false)
+        size.addItems(withTitles: sizes.map { "\(Int($0.w)) × \(Int($0.h))" })
+        size.selectItem(at: min(max(session.graphOptions.saveSize, 0), sizes.count - 1))
+        let row = NSStackView(views: [NSTextField(labelWithString: tr("Format:")), format,
+                                      NSTextField(labelWithString: tr("Size:")), size])
+        row.spacing = 8
+        row.edgeInsets = NSEdgeInsets(top: 8, left: 12, bottom: 8, right: 12)
+        row.frame = NSRect(x: 0, y: 0, width: 420, height: 40)
+        panel.accessoryView = row
+        func applyType() {
+            let id = formats[max(format.indexOfSelectedItem, 0)].id
+            let type: UTType = id == "jpeg" ? .jpeg : id == "bmp" ? .bmp : .png
+            panel.allowedContentTypes = [type]
+            let base = (panel.nameFieldStringValue as NSString).deletingPathExtension
+            panel.nameFieldStringValue = base + "." + (type.preferredFilenameExtension ?? id)
+        }
+        panel.nameFieldStringValue = "\(session.projectName) - \(tr(name))"
+        applyType()
+        let target = FormatTarget(apply: applyType)
+        format.target = target
+        format.action = #selector(FormatTarget.changed)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        _ = target
+        let fi = max(format.indexOfSelectedItem, 0), si = max(size.indexOfSelectedItem, 0)
+        session.graphOptions.saveFormat = formats[fi].id
+        session.graphOptions.saveSize = si
+        let dim = sizes[si]
+
         // Appearance → "Save chart files with a white background"
         ChartInk.forced = session.appPrefs.saveChartsWhite
         defer { ChartInk.forced = nil }
-        let content = view.frame(width: 1400, height: 800).padding(8).background(ChartInk.paper)
+        let content = view.frame(width: dim.w - 16, height: dim.h - 16).padding(8).background(ChartInk.paper)
         let renderer = ImageRenderer(content: content)
-        renderer.scale = 2
+        renderer.scale = 1
+        let fileType: NSBitmapImageRep.FileType = formats[fi].id == "jpeg" ? .jpeg : formats[fi].id == "bmp" ? .bmp : .png
+        let props: [NSBitmapImageRep.PropertyKey: Any] = fileType == .jpeg ? [.compressionFactor: 0.92] : [:]
         guard let img = renderer.nsImage, let tiff = img.tiffRepresentation,
-              let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else {
+              let data = NSBitmapImageRep(data: tiff)?.representation(using: fileType, properties: props) else {
             session.errorMessage = "Could not render the graph."
             return
         }
-        let panel = NSSavePanel()
-        panel.title = "Save graph"
-        panel.allowedContentTypes = [.png]
-        panel.nameFieldStringValue = "\(session.projectName) - \(name).png"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            try png.write(to: url)
-            session.status = "Graph saved: \(url.lastPathComponent)"
+            try data.write(to: url)
+            session.status = tr("Graph saved: ") + url.lastPathComponent
         } catch {
             session.errorMessage = "Could not save the graph: \(error.localizedDescription)"
         }
+    }
+
+    /// Target of the format menu (changes the file extension).
+    final class FormatTarget: NSObject {
+        let apply: () -> Void
+        init(apply: @escaping () -> Void) { self.apply = apply }
+        @objc func changed() { apply() }
     }
 }
 

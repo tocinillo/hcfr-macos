@@ -49,6 +49,11 @@ enum IntegrationTime: Int, CaseIterable, Identifiable, Codable {
 }
 
 /// Luminance graph modes (HCFR's Luminance graph menu: relative, Absolute Y, log(Y), L*).
+enum NearMode: String, CaseIterable, Identifiable, Codable {
+    case absolute = "Absolute Y", relative = "Luminance %", lStar = "L*"
+    var id: String { rawValue }
+}
+
 enum LuminanceMode: String, CaseIterable, Identifiable, Codable {
     case relative = "Luminance %", absolute = "Absolute Y", log = "log(Y)", lStar = "L*"
     var id: String { rawValue }
@@ -80,6 +85,33 @@ struct GraphOptions: Codable, Equatable {
     /// RGB graph: HCFR's "Delta E curve" and "Display reference measure".
     var showDeltaECurve = true
     var showRefMeasure = true
+    /// HCFR's "Display reference" (the target curve or line) of every graph.
+    var showReference = true
+    /// Luminance and gamma graphs: HCFR's Luminance / Red / Green / Blue curves.
+    var curveY = true
+    var curveR = false
+    var curveG = false
+    var curveB = false
+    /// Near black / near white graphs: luminance as cd/m², % of white or L*, and "Logarithmic mode".
+    var nearMode = NearMode.absolute
+    var nearLog = false
+    /// Saturation graphs: "Primary colors" / "Secondary colors" and the colors of the shifts graph.
+    var satPrimaries = true
+    var satSecondaries = true
+    var satHidden: [String] = []
+    /// Free measures graph: "Display luminance", "Display Delta E", "Display color temperature"
+    /// (x, y too) and the last N measures (0 = all).
+    var freeLuminance = true
+    var freeXY = true
+    var freeDeltaE = false
+    var freeTemperature = false
+    var freePoints = 0
+    /// Graphs parameters: line thickness and dots of the measured curves.
+    var lineWidth = 2.0
+    var showDots = true
+    /// Graph saving: format and size (HCFR's graph Save… dialog).
+    var saveFormat = "png"
+    var saveSize = 0
 
     /// The Y range of a graph: the user's (zoomed, shifted or typed) or the graph's own.
     func y(_ key: String, _ automatic: ClosedRange<Double>) -> ClosedRange<Double> {
@@ -160,6 +192,16 @@ struct AppPrefs: Codable, Equatable {
     // General → Application / User measures (HCFR's General preferences)
     /// "Check for updates" when the app starts.
     var checkUpdates = true
+    /// Generator options of HCFR for Windows' generator page: "APL (video) level [%]" (background
+    /// that keeps the average picture level, 0 = black), "Pattern Intensity [%]" (color patches),
+    /// "Display Triplets" (R:G:B codes on the patch of this Mac's displays).
+    var aplPercent = 0.0
+    var patternIntensity = 100.0
+    var displayTriplets = false
+    /// General → "Add settling pattern to automatic measures": a gray ramp before each run.
+    var settlingPattern = false
+    /// General → "Display test color": clicking a column shows its pattern on the generator.
+    var displayTestColors = true
     /// Advanced → "Project file format" (a new key, so the new default applies to everyone).
     var projectFormat = ProjectSaveFormat.windows
     /// "Continuous measuring": Measure → Free measure keeps reading (as Start) instead of one reading.

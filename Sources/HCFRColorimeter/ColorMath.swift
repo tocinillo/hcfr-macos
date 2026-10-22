@@ -171,6 +171,10 @@ enum ColorStandard: String, CaseIterable, Identifiable {
 enum GammaMode: Int, CaseIterable, Identifiable {
     case powerLaw = 0
     case blackCompensation = 1
+    /// HCFR's "Camera Gamma (Standard Offset)": power law of (v + 0.099) / 1.099 (0.055 with sRGB).
+    case cameraStandard = 2
+    /// HCFR's "Camera Gamma, Manual Offset": the same with the offset typed in the preferences.
+    case cameraManual = 3
     case bt1886 = 4
     case lStar = 6
     case hlg = 7
@@ -181,6 +185,8 @@ enum GammaMode: Int, CaseIterable, Identifiable {
         switch self {
         case .powerLaw: return "Display Gamma (power law)"
         case .blackCompensation: return "Display Gamma (black compensation)"
+        case .cameraStandard: return "Camera Gamma (Standard Offset)"
+        case .cameraManual: return "Camera Gamma, Manual Offset"
         case .bt1886: return "ITU-R BT.1886"
         case .lStar: return "L*"
         case .hlg: return "BBC Hybrid Log-Gamma"
@@ -191,6 +197,7 @@ enum GammaMode: Int, CaseIterable, Identifiable {
         switch self {
         case .powerLaw: return "Power law"
         case .blackCompensation: return "Black compensation"
+        case .cameraStandard, .cameraManual: return "Camera gamma"
         case .bt1886: return "BT.1886"
         case .lStar: return "L*"
         case .hlg: return "HLG"
@@ -253,6 +260,8 @@ struct ReferencePrefs: Codable, Equatable {
     var gammaRel = 0.0
     var split = 100.0
     var useMeasuredGamma = false
+    /// "Camera Gamma, Manual Offset" (HCFR's default 0.099).
+    var cameraOffset = 0.099
     /// Black luminance used when Override black is on (HCFR "Override black … cd/m^2").
     var manualBlack = 0.0
     var customWhiteX = 0.3127, customWhiteY = 0.3290
@@ -301,6 +310,8 @@ struct CalReference: Equatable {
     var split: Double = 100
     /// "Use avg measured gamma": power law modes use this gamma instead of `gamma` when set.
     var measuredGamma: Double?
+    /// Manual offset of "Camera Gamma, Manual Offset".
+    var cameraOffset: Double = 0.099
     var hdr = HDRSettings()
     var deltaEFormula: DeltaEFormula = .cie2000
     var grayDeltaE: GrayDeltaEMode = .absoluteYWithoutGamma
@@ -309,11 +320,24 @@ struct CalReference: Equatable {
     static func == (a: CalReference, b: CalReference) -> Bool {
         a.standard == b.standard && a.white == b.white && a.gamma == b.gamma && a.gammaMode == b.gammaMode
             && a.gammaRel == b.gammaRel && a.split == b.split && a.measuredGamma == b.measuredGamma && a.hdr == b.hdr
+            && a.cameraOffset == b.cameraOffset
             && a.deltaEFormula == b.deltaEFormula && a.grayDeltaE == b.grayDeltaE && a.deltaEWeight == b.deltaEWeight
     }
 
     /// Gamma used by the power law modes ("Target Gamma in use").
     var gammaInUse: Double { measuredGamma ?? gamma }
+
+    /// Input offset of the camera gamma modes (HCFR's ComputeGammaAndOffset), 0 for the others.
+    var gammaOffset: Double {
+        switch gammaMode {
+        case .cameraStandard: return standard == .sRGB ? 0.055 : 0.099
+        case .cameraManual: return cameraOffset
+        default: return 0
+        }
+    }
+
+    /// Signal with the camera offset: (v + offset) / (1 + offset).
+    func offsetSignal(_ v: Double) -> Double { (v + gammaOffset) / (1 + gammaOffset) }
 
     /// Linear RGB -> XYZ matrix normalised so RGB(1,1,1) = white with Y = 1.
     var rgbToXYZ: Mat3 {
@@ -345,6 +369,8 @@ struct CalReference: Equatable {
         switch gammaMode {
         case .powerLaw:
             return whiteY * pow(v, gammaInUse)
+        case .cameraStandard, .cameraManual:
+            return whiteY * pow(offsetSignal(v), gammaInUse)
         case .blackCompensation:
             let b = blackY ?? 0
             return b + pow(v, gammaInUse) * (whiteY - b)
@@ -658,9 +684,10 @@ enum ColorMath {
     }
 
     /// Gamma puntual (log(Y/Yblanco) / log(nivel)).
-    static func pointGamma(_ c: XYZ, whiteY: Double, level: Double) -> Double? {
+    static func pointGamma(_ c: XYZ, whiteY: Double, level: Double, offset: Double = 0) -> Double? {
         guard level > 0, level < 100, whiteY > 0, c.Y > 0 else { return nil }
-        return log(c.Y / whiteY) / log(Reference.grayProp(level))
+        // Camera gamma modes: against (v + offset) / (1 + offset), as HCFR
+        return log(c.Y / whiteY) / log((Reference.grayProp(level) + offset) / (1 + offset))
     }
 
     /// Approximate color to paint the swatch (8-bit RGB, encoded with the reference gamma).

@@ -83,6 +83,10 @@ enum TestImages {
         ]),
     ]
 
+    static func find(_ file: String) -> TestImage? {
+        groups.flatMap(\.1).first { $0.file == file }
+    }
+
     /// Folder of the pattern images: the app's Resources, or <repo>/Resources while developing.
     static var folder: URL? {
         let fm = FileManager.default
@@ -197,6 +201,7 @@ extension Session {
     }
 
     func hideTestPattern() {
+        removeExtraKeys()
         guard testPatternShown != nil else { return }
         testPatternShown = nil
         patternWindow.close()

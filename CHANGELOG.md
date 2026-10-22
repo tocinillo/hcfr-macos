@@ -2,6 +2,27 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.13
+
+- **Patterns → Additional Patterns… (⌘⇧P)**, as HCFR for Windows: Black +, colors, dot patterns
+  (white / red / green / blue), horizontal and vertical lines, B&W and color shadings, black and
+  white level tests, color bars, convergence grid, geometry, and the picture sets (grid
+  analysis, test picture bench, iris & definition, ANSI 1 / ANSI 2 contrast, contrast boxes),
+  plus EIA 1956, SMPTE 75 % and the calibration picture. While a pattern is shown, + / − (or
+  Page Up / Down) change the level, number of dots or picture, * (or Home) resets it, Space
+  switches thin / thick dots and lines, ESC closes it.
+- **Right-click on any graph** opens its options, as in HCFR for Windows, plus Save…:
+  - Luminance and gamma: Luminance / Red / Green / Blue curves, display reference, display
+    reference measure, average gamma.
+  - Near black / near white: Absolute Y, luminance % or L*, logarithmic mode, R/G/B curves,
+    reference.
+  - Saturation shift: primary and secondary colors, each color on or off, reference.
+  - Color temperature: reference and reference measure.
+  - Free measures: luminance, x/y, ΔE and color temperature curves, and the last 10 / 20 / 50
+    measure points.
+- **Graph parameters**: line thickness (1–4) and display dots, in the graph menu.
+- **Save graph** now offers PNG, JPEG or BMP and the image size (up to 1920 × 1080).
+
 ## 1.3.12
 
 - **One project format for Mac and Windows: .chc is now the default.** Projects are saved in

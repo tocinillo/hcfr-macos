@@ -72,15 +72,17 @@ struct ReferencesPage: View {
 
             Section("Gamma calculation (SDR)") {
                 Picker("Target", selection: $session.prefs.gammaMode) {
-                    ForEach([GammaMode.powerLaw, .blackCompensation, .bt1886, .lStar]) { Text(tr($0.title)).tag($0.rawValue) }
+                    ForEach([GammaMode.powerLaw, .blackCompensation, .cameraStandard, .cameraManual, .bt1886, .lStar]) { Text(tr($0.title)).tag($0.rawValue) }
                 }
                 .pickerStyle(.radioGroup)
+                numberField("Camera gamma offset", $session.prefs.cameraOffset, digits: 3, width: 70)
+                    .disabled(session.prefs.mode != .cameraManual)
                 HStack(spacing: 18) {
                     numberField("Power Law Gamma", $session.gamma)
                     Toggle("Use avg measured gamma", isOn: $session.prefs.useMeasuredGamma)
                     Text("Target Gamma in use: \(String(format: "%.2f", session.ref.gammaInUse))").foregroundStyle(.secondary)
                 }
-                .disabled(!(session.prefs.mode == .powerLaw || session.prefs.mode == .blackCompensation))
+                .disabled(!([GammaMode.powerLaw, .blackCompensation, .cameraStandard, .cameraManual].contains(session.prefs.mode)))
                 HStack(spacing: 18) {
                     numberField("Effective @50% [0=Absolute]", $session.prefs.gammaRel)
                     numberField("% input offset", $session.prefs.split, digits: 0)

@@ -1028,10 +1028,10 @@ struct GrayScaleChart: View {
                 ForEach(balance) { p in
                     LineMark(x: .value("Level", p.level), y: .value("%", p.value), series: .value("Channel", p.channel))
                         .foregroundStyle(channelColors[p.channel])
-                        .lineStyle(StrokeStyle(lineWidth: 2))
+                        .lineStyle(measuredStroke(session))
                     PointMark(x: .value("Level", p.level), y: .value("%", p.value))
                         .foregroundStyle(channelColors[p.channel])
-                        .symbolSize(28)
+                        .symbolSize(dotSize(session, 28))
                 }
             }
             .chartXScale(domain: 0...100)
@@ -1047,8 +1047,8 @@ struct GrayScaleChart: View {
 
             Chart {
                 ForEach(de, id: \.0) { p in
-                    LineMark(x: .value("Level", p.0), y: .value("dE", p.1)).foregroundStyle(.pink).lineStyle(StrokeStyle(lineWidth: 2))
-                    PointMark(x: .value("Level", p.0), y: .value("dE", p.1)).foregroundStyle(.pink).symbolSize(28)
+                    LineMark(x: .value("Level", p.0), y: .value("dE", p.1)).foregroundStyle(.pink).lineStyle(measuredStroke(session))
+                    PointMark(x: .value("Level", p.0), y: .value("dE", p.1)).foregroundStyle(.pink).symbolSize(dotSize(session, 28))
                 }
             }
             .chartXScale(domain: 0...100)

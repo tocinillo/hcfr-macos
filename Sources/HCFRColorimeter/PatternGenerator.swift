@@ -107,6 +107,11 @@ final class PatternWindowController {
         var image: CGImage? { didSet { needsDisplay = true } }
         /// HCFR's moving bars: `rgb` = background, `bars` = the two bar levels, `phase` = position 0…1.
         var bars: [[Int]]? { didSet { needsDisplay = true } }
+        /// Drawn pattern of the Additional Patterns window (dots, lines, shadings…): draws in the
+        /// view's rectangle with display codes (0–255) turned into colors of the display.
+        var drawer: ((NSRect, ([Int]) -> NSColor) -> Void)? { didSet { needsDisplay = true } }
+        /// Pictures at their own size, centered (HCFR's not resized pictures), instead of fitted.
+        var imageNative = false { didSet { needsDisplay = true } }
         var phase: CGFloat = 0 { didSet { needsDisplay = true } }
 
         override func draw(_ dirtyRect: NSRect) {
@@ -116,9 +121,14 @@ final class PatternWindowController {
             }
             color(background).setFill()
             bounds.fill()
+            if let drawer {
+                drawer(bounds, color)
+                return
+            }
             if let image, let ctx = NSGraphicsContext.current?.cgContext {
                 let iw = CGFloat(image.width), ih = CGFloat(image.height)
-                let k = min(bounds.width / iw, bounds.height / ih)
+                let scale = window?.backingScaleFactor ?? 1
+                let k = imageNative ? 1 / scale : min(bounds.width / iw, bounds.height / ih)
                 let r = CGRect(x: bounds.midX - iw * k / 2, y: bounds.midY - ih * k / 2, width: iw * k, height: ih * k)
                 ctx.interpolationQuality = .high
                 ctx.draw(image, in: r)
@@ -152,8 +162,25 @@ final class PatternWindowController {
             color(rgb).setFill()
             let cx = min(max(bounds.midX + offset.x * bounds.width, w / 2), bounds.width - w / 2)
             let cy = min(max(bounds.midY - offset.y * bounds.height, h / 2), bounds.height - h / 2)
-            NSRect(x: cx - w / 2, y: cy - h / 2, width: w, height: h).fill()
+            let patch = NSRect(x: cx - w / 2, y: cy - h / 2, width: w, height: h)
+            patch.fill()
+            // HCFR's "Display Triplets": the R:G:B codes at the bottom of the patch
+            if triplets {
+                let text = "\(rgb[0]):\(rgb[1]):\(rgb[2])" as NSString
+                let attrs: [NSAttributedString.Key: Any] = [
+                    .font: NSFont.monospacedSystemFont(ofSize: max(12, min(28, h / 18)), weight: .regular),
+                    .foregroundColor: color([128, 128, 128]),
+                ]
+                let size = text.size(withAttributes: attrs)
+                let box = NSRect(x: patch.midX - size.width / 2 - 6, y: patch.minY + 4, width: size.width + 12, height: size.height + 2)
+                color([40, 40, 40]).setFill()
+                box.fill()
+                text.draw(at: NSPoint(x: box.minX + 6, y: box.minY + 1), withAttributes: attrs)
+            }
         }
+
+        /// Show the R:G:B codes on the patch.
+        var triplets = false { didSet { needsDisplay = true } }
     }
 
     /// Development check: draws a pattern off screen at 1x in device RGB (as the real window draws
@@ -185,6 +212,8 @@ final class PatternWindowController {
     /// Patch offset (share of the screen) and HCFR's "screen blanking": black on the other displays.
     var offset: CGPoint = .zero
     var blankOthers = false
+    /// HCFR's "Display Triplets": R:G:B codes drawn on the patch.
+    var triplets = false
     private var blanks: [NSWindow] = []
     var onEscape: (() -> Void)?
 
@@ -279,7 +308,10 @@ final class PatternWindowController {
         stopAnimation()
         view?.image = nil
         view?.bars = nil
+        view?.drawer = nil
+        view?.imageNative = false
         view?.offset = offset
+        view?.triplets = triplets
         view?.areaPercent = areaPercent
         view?.ansiInverted = ansiInverted
         view?.background = background
@@ -294,8 +326,15 @@ final class PatternWindowController {
         timer = nil
     }
 
-    /// Test image, full screen (aspect kept). `videoLevels` maps 0–255 to 16–235 as HCFR's "v" images.
-    func showImage(_ url: URL, videoLevels: Bool, on screen: NSScreen) -> Bool {
+    /// Drawn pattern (Additional Patterns window), full screen.
+    func showDrawn(background: [Int], on screen: NSScreen, _ drawer: @escaping (NSRect, ([Int]) -> NSColor) -> Void) {
+        show(rgb: background, background: background, areaPercent: 100, on: screen)
+        view?.drawer = drawer
+    }
+
+    /// Test image, full screen (aspect kept), or at its own size when `native`. `videoLevels` maps
+    /// 0–255 to 16–235 as HCFR's "v" images.
+    func showImage(_ url: URL, videoLevels: Bool, native: Bool = false, on screen: NSScreen) -> Bool {
         guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
               let img = CGImageSourceCreateImageAtIndex(src, 0, nil) else { return false }
         let space = screen.colorSpace?.cgColorSpace ?? CGColorSpaceCreateDeviceRGB()
@@ -314,6 +353,7 @@ final class PatternWindowController {
         let black = videoLevels ? 16 : 0
         show(rgb: [black, black, black], background: [black, black, black], areaPercent: 100, on: screen)
         view?.image = shown
+        view?.imageNative = native
         return true
     }
 

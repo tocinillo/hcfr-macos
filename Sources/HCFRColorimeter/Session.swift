@@ -58,7 +58,7 @@ struct StepResult: Identifiable, ColorReading {
         rgb = ColorMath.rgb(xyz, ref: ref)
         cct = ColorMath.cct(xyz)
         deltaxy = ColorMath.deltaxy(xyz, ref: ref)
-        gamma = whiteY.flatMap { ColorMath.pointGamma(xyz, whiteY: $0, level: level) }
+        gamma = whiteY.flatMap { ColorMath.pointGamma(xyz, whiteY: $0, level: level, offset: ref.gammaOffset) }
         deltaE = ColorMath.grayDeltaE(xyz, whiteY: baseY, targetY: target, ref: ref)
         let l = ColorMath.lab(xyz, whiteY: baseY, white: ref.white)
         lab = l
@@ -116,6 +116,8 @@ final class Session: ObservableObject {
     @Published var activeReadingType: ReadingType = .display
     /// Patterns shown since the run started (frame insertion every N patterns).
     var patternCounter = 0
+    /// The settling ramp is still to be shown in this run (General → settling pattern).
+    var settlingPending = true
     /// Override black (0 cd/m²): 0 IRE is not measured and black is taken as perfect.
     @Published var overrideBlack: Bool {
         didSet {
@@ -164,6 +166,8 @@ final class Session: ObservableObject {
     @Published var refData: ReferenceData?
     /// This window's project is the reference of the others (File → Set as Reference Project).
     @Published var isReferenceProject = false
+    /// Advanced → Patterns… (AdditionalPatterns.swift).
+    let extraPatterns = ExtraPatternState()
     /// File → Open Recent.
     @Published var recentProjects: [URL] = Session.recentList
     /// The open project windows (for the reference project).
@@ -439,7 +443,8 @@ final class Session: ObservableObject {
 
     var ref: CalReference {
         CalReference(standard: standard, white: white, gamma: gamma, gammaMode: prefs.mode, gammaRel: prefs.gammaRel,
-                     split: prefs.split, measuredGamma: prefs.useMeasuredGamma ? measuredAverageGamma : nil, hdr: prefs.hdr,
+                     split: prefs.split, measuredGamma: prefs.useMeasuredGamma ? measuredAverageGamma : nil,
+                     cameraOffset: prefs.cameraOffset, hdr: prefs.hdr,
                      deltaEFormula: DeltaEFormula(rawValue: prefs.deltaEFormula) ?? .cie2000,
                      grayDeltaE: GrayDeltaEMode(rawValue: prefs.grayDeltaE) ?? .absoluteYWithoutGamma,
                      deltaEWeight: DeltaEWeight(rawValue: prefs.deltaEWeight) ?? .standard)
@@ -448,8 +453,19 @@ final class Session: ObservableObject {
     /// Average point gamma of the measurements, 10–80% (HCFR's GammaAvg), for "Use avg measured gamma".
     var measuredAverageGamma: Double? {
         guard let w = whiteY else { return nil }
-        let g = measurements.filter { $0.key >= 10 && $0.key <= 80 }.compactMap { ColorMath.pointGamma($0.value, whiteY: w, level: $0.key) }
+        let g = measurements.filter { $0.key >= 10 && $0.key <= 80 }.compactMap {
+            ColorMath.pointGamma($0.value, whiteY: w, level: $0.key, offset: cameraOffsetInUse)
+        }
         return g.isEmpty ? nil : g.reduce(0, +) / Double(g.count)
+    }
+
+    /// Camera gamma offset of the current reference (without the measured gamma, to avoid a loop).
+    var cameraOffsetInUse: Double {
+        switch prefs.mode {
+        case .cameraStandard: return standard == .sRGB ? 0.055 : 0.099
+        case .cameraManual: return prefs.cameraOffset
+        default: return 0
+        }
     }
 
     /// "Power law 2.30", "BT.1886", "ST2084 (BT.2390)"… for the info lines.
@@ -459,6 +475,7 @@ final class Session: ObservableObject {
         switch r.gammaMode {
         case .powerLaw: return String(format: "Power law w/gamma = %.2f", r.gammaInUse)
         case .blackCompensation: return String(format: "Power law w/gamma = %.2f (black compensation)", r.gammaInUse)
+        case .cameraStandard, .cameraManual: return String(format: "Camera gamma = %.2f, offset %.3f", r.gammaInUse, r.gammaOffset)
         case .bt1886: return r.gammaRel == 0 ? "BT.1886" : String(format: "BT.1886 (effective %.2f @50%%)", r.gammaRel)
         case .lStar: return "L*"
         case .hlg: return String(format: "HLG (system gamma %.2f)", r.hdr.hlgSystemGamma)
@@ -954,6 +971,7 @@ final class Session: ObservableObject {
         guard task == nil else { return }
         activity = kind
         patternCounter = 0
+        settlingPending = true
         testPatternShown = nil
         task = Task {
             defer { closePattern() }
@@ -1000,71 +1018,93 @@ final class Session: ObservableObject {
     /// Shows the pattern on the generator display (if one is selected) and waits `settleSeconds`
     /// when it changed.
     func showIfGenerator(_ pattern: TestPattern, force: Bool = false) async throws {
-        if patternSource == .chromecast {
-            guard force || pattern != shownPattern else { return }
-            try Task.checkCancellation()
+        guard automaticGenerator else { return }
+        let local = patternScreen != nil || patternSource == .window
+        guard force || pattern != shownPattern || (local && !patternWindow.isShowing) else { return }
+        try Task.checkCancellation()
+        let windowNew = patternSource == .window && !patternWindow.isShowing
+        let ansi = pattern.ansiInverted
+        let area = ansi != nil ? 100 : patternArea
+        let (fg, bg) = generatorLevels(pattern, area: area)
+        if patternSource == .raspberryPi && shownPattern == nil { try await ensurePiMode() }
+        if patternSource != .madVR && patternSource != .chromecast {
+            try await insertFrameIfDue(screen: patternScreen)
+        }
+        // HCFR's "Add settling pattern to automatic measures": a gray ramp before the first patch
+        if appPrefs.settlingPattern && settlingPending && ansi == nil {
+            settlingPending = false
+            for j in stride(from: 0, to: 255, by: 3) {
+                try Task.checkCancellation()
+                let v = Double(j) / 255
+                try await sendPattern(fg: [v, v, v], bg: bg, area: area, ansi: nil)
+                try await Task.sleep(for: .milliseconds(55))
+            }
+        }
+        try await sendPattern(fg: fg, bg: bg, area: area, ansi: ansi)
+        shownPattern = pattern
+        // A newly opened measurement window must first be placed under the meter
+        if windowNew {
+            Chime.request()
+            try await ask("Measurement window",
+                          "Move the measurement window to the screen you are measuring (and resize it if you want), "
+                          + "place the meter on it, then press Continue to start measuring.",
+                          style: .continueCancel)
+        }
+        try await latencyWait()
+    }
+
+    /// Signal levels sent for a pattern, with HCFR's generator options: "Pattern Intensity" scales
+    /// the color patches (primaries, secondaries, saturations, Color Checker), and "APL (video)
+    /// level" fills the background around a window so the average picture level stays at that
+    /// value (GDIGenerator: background = (APL − patch × area) / (1 − area)).
+    func generatorLevels(_ pattern: TestPattern, area: Double) -> (fg: [Double], bg: [Double]) {
+        var fg = pattern.rgb
+        let scaled: Bool
+        switch pattern {
+        case .color(let p): scaled = p != .white
+        case .custom: scaled = true
+        default: scaled = false
+        }
+        let k = min(max(appPrefs.patternIntensity, 1), 100) / 100
+        if scaled && k < 1 { fg = fg.map { $0 * k } }
+        var bg = [0.0, 0, 0]
+        let apl = appPrefs.aplPercent / 100, a = min(max(area, 1), 100) / 100
+        if apl > 0 && a < 1 {
+            bg = fg.map { min(max((apl - $0 * a) / (1 - a), 0), 1) }
+        }
+        return (fg, bg)
+    }
+
+    /// Sends one patch (signal levels 0…1) to the generator in use.
+    private func sendPattern(fg: [Double], bg: [Double], area: Double, ansi: Bool?) async throws {
+        switch patternSource {
+        case .chromecast:
             // No ANSI checkerboard on the Chromecast: full field of the bright part
-            let ansi = pattern.ansiInverted != nil
-            let levels = ansi ? [1.0, 1, 1] : pattern.rgb
-            let rgb = levels.map { Double(videoLevels.code($0)) / 255 }
-            let black = Double(videoLevels.code(0)) / 255
-            let area = ansi ? 100 : patternArea
+            let rgb = (ansi != nil ? [1.0, 1, 1] : fg).map { Double(videoLevels.code($0)) / 255 }
+            let back = Double(videoLevels.code(bg.reduce(0, +) / 3)) / 255
             let offset = CGPoint(x: patchOffsetX / 100, y: patchOffsetY / 100)
-            try await chromecastSend { try await $0.show(rgb: rgb, background: black, areaPercent: area, offset: offset) }
-            shownPattern = pattern
-            try await latencyWait()
-            return
-        }
-        if patternSource == .madVR {
-            guard force || pattern != shownPattern else { return }
-            try Task.checkCancellation()
-            // madTPG has no ANSI checkerboard: full field of the bright part
-            let ansi = pattern.ansiInverted != nil
-            let rgb = ansi ? [1.0, 1, 1] : pattern.rgb
-            let area = ansi ? 100 : patternArea
-            try await madVRSend { try await $0.show(rgb: rgb, background: 0, areaPercent: area) }
-            shownPattern = pattern
-            try await latencyWait()
-            return
-        }
-        if patternSource == .raspberryPi {
-            guard force || pattern != shownPattern else { return }
-            try Task.checkCancellation()
-            if shownPattern == nil { try await ensurePiMode() }
-            try await insertFrameIfDue()
-            if let inverted = pattern.ansiInverted {
+            try await chromecastSend { try await $0.show(rgb: rgb, background: back, areaPercent: area, offset: offset) }
+        case .madVR:
+            // madTPG has no ANSI checkerboard: full field of the bright part; it keeps the APL itself
+            let rgb = ansi != nil ? [1.0, 1, 1] : fg
+            let apl = appPrefs.aplPercent / 100
+            try await madVRSend { try await $0.show(rgb: rgb, background: apl, areaPercent: area) }
+        case .raspberryPi:
+            if let inverted = ansi {
                 try await piSend { $0.ansiMessage(inverted: inverted) }
             } else {
-                try await piShow(levels: pattern.rgb)
+                try await piShow(levels: fg, background: bg)
             }
-            shownPattern = pattern
-            try await latencyWait()
-            return
-        }
-        guard patternScreen != nil || patternSource == .window else { return }
-        let screen = patternScreen
-        if force || pattern != shownPattern || !patternWindow.isShowing {
-            try await insertFrameIfDue(screen: screen)
-            let black = videoLevels.code(0)
-            let ansi = pattern.ansiInverted
-            let rgb = (ansi != nil ? [1.0, 1, 1] : pattern.rgb).map { videoLevels.code($0) }
-            let area = ansi != nil ? 100 : patternArea
-            if let screen {
-                patternWindow.show(rgb: rgb, background: [black, black, black], areaPercent: area, ansiInverted: ansi, on: screen)
+        default:
+            guard patternScreen != nil || patternSource == .window else { return }
+            let rgb = (ansi != nil ? [1.0, 1, 1] : fg).map { videoLevels.code($0) }
+            let back = bg.map { videoLevels.code($0) }
+            patternWindow.triplets = appPrefs.displayTriplets
+            if let screen = patternScreen {
+                patternWindow.show(rgb: rgb, background: back, areaPercent: area, ansiInverted: ansi, on: screen)
             } else {
-                let opening = !patternWindow.isShowing
-                patternWindow.showWindowed(rgb: rgb, background: [black, black, black], areaPercent: area, ansiInverted: ansi)
-                // A newly opened measurement window must first be placed under the meter
-                if opening {
-                    Chime.request()
-                    try await ask("Measurement window",
-                                  "Move the measurement window to the screen you are measuring (and resize it if you want), "
-                                  + "place the meter on it, then press Continue to start measuring.",
-                                  style: .continueCancel)
-                }
+                patternWindow.showWindowed(rgb: rgb, background: back, areaPercent: area, ansiInverted: ansi)
             }
-            shownPattern = pattern
-            try await latencyWait()
         }
     }
 
@@ -1105,7 +1145,7 @@ final class Session: ObservableObject {
     // MARK: - Raspberry Pi (PGenerator)
 
     /// Sends a patch to the Raspberry Pi; if the connection was lost (Pi restarted…), reconnects once.
-    private func piShow(levels: [Double]) async throws {
+    private func piShow(levels: [Double], background: [Double] = [0, 0, 0]) async throws {
         let area = patternArea
         if (piCurrentOutput ?? piOutput).bitDepth == 10 {
             // 10-bit codes (video 64–940 or full 0–1023); PGenerator takes 10-bit backgrounds only in RGB
@@ -1114,12 +1154,12 @@ final class Session: ObservableObject {
             }
             let rgb = levels.map(code10)
             let rgbFormat = (piCurrentOutput ?? piOutput).colorFormat == 0
-            let bg = rgbFormat ? code10(0) : videoLevels.code(0)
-            try await piSend { $0.rectangleMessage10(rgb: rgb, background: [bg, bg, bg], areaPercent: area) }
+            let bg = background.map { rgbFormat ? code10($0) : videoLevels.code($0) }
+            try await piSend { $0.rectangleMessage10(rgb: rgb, background: bg, areaPercent: area) }
         } else {
-            let black = videoLevels.code(0)
+            let bg = background.map { videoLevels.code($0) }
             let rgb = levels.map { videoLevels.code($0) }
-            try await piSend { $0.rectangleMessage(rgb: rgb, background: [black, black, black], areaPercent: area) }
+            try await piSend { $0.rectangleMessage(rgb: rgb, background: bg, areaPercent: area) }
         }
     }
 

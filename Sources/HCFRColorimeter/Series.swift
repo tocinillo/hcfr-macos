@@ -333,6 +333,7 @@ extension CalReference {
         }
         switch gammaMode {
         case .powerLaw, .blackCompensation: return pow(q, gammaInUse)
+        case .cameraStandard, .cameraManual: return pow(offsetSignal(q), gammaInUse)
         case .bt1886, .lStar: return whiteY > 0 ? targetY(signal: q, whiteY: whiteY, blackY: blackY) / whiteY : pow(q, 2.4)
         case .st2084:
             // Absolute: relative to the diffuse white (HCFR: 50% PQ, 94.37844 nits by default)
