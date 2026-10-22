@@ -15,8 +15,29 @@ struct ColorimeterApp: App {
     /// The project of the window in front (the menus act on it); the main window's otherwise.
     @FocusedValue(\.activeSession) private var focusedSession
     private var s: Session { focusedSession ?? session }
+    @Environment(\.openWindow) private var openWindow
 
     init() { Snapshot.runIfRequested() }
+
+    /// Opens a project. Several projects can be open at once (as HCFR for Windows): if the window in
+    /// front already holds a project, this opens the new one in its own window instead of replacing it.
+    private func openProjectKeepingOthers(_ url: URL) {
+        if s.hasMeasurements || s.projectURL != nil {
+            openWindow(id: "document", value: DocumentRequest(path: url.path))
+        } else {
+            s.openProject(url)
+        }
+    }
+
+    private func openProjectDialogKeepingOthers() {
+        guard s.activity == .idle else { return }
+        let panel = NSOpenPanel()
+        panel.title = tr("Open project")
+        panel.allowedContentTypes = [.hcfrProject, .hcfrWindows, .json]
+        panel.allowsMultipleSelection = true
+        guard panel.runModal() == .OK else { return }
+        for url in panel.urls { openProjectKeepingOthers(url) }
+    }
 
     var body: some Scene {
         Window("HCFR for macOS", id: "main") {
@@ -24,6 +45,7 @@ struct ColorimeterApp: App {
                 .frame(minWidth: 1180, minHeight: 680)
                 .onAppear { AppDelegate.session = session }
                 .background(WindowCloseGuard(session: session))
+                .background(OpenWindowCapture())
         }
         .defaultSize(width: 1400, height: 860)
         .commands {
@@ -39,11 +61,11 @@ struct ColorimeterApp: App {
             CommandGroup(replacing: .newItem) {
                 Button("New Project") { s.confirmNewProject = true }
                     .keyboardShortcut("n")
-                Button("Open Project…") { s.openProjectDialog() }
+                Button("Open Project…") { openProjectDialogKeepingOthers() }
                     .keyboardShortcut("o")
                 Menu("Open Recent") {
                     ForEach(s.recentProjects, id: \.self) { url in
-                        Button(url.lastPathComponent) { s.openRecent(url) }
+                        Button(url.lastPathComponent) { openProjectKeepingOthers(url) }
                     }
                     if !s.recentProjects.isEmpty { Divider() }
                     Button("Clear Menu") { Session.clearRecent() }
@@ -131,7 +153,7 @@ struct ColorimeterApp: App {
 
 enum AboutPanel {
     /// The app's version (Info.plist, from the VERSION file); the fallback is for `swift run`.
-    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.22"
+    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.23"
     /// Public repository with this program's complete source code (GPL v2 requirement).
     static let sourceURL = "https://github.com/tocinillo/hcfr-macos"
 
@@ -183,6 +205,16 @@ enum AboutPanel {
 /// Asks "Save the current measurements?" when the window is closed (red button or ⌘W), before it
 /// closes. Cancel keeps the window open. Without this the window closed first and, on Cancel, the
 /// windowless app asked again in a loop.
+/// Captures SwiftUI's openWindow so Finder-opened projects can open in their own window.
+private struct OpenWindowCapture: View {
+    @Environment(\.openWindow) private var openWindow
+    var body: some View {
+        Color.clear.onAppear {
+            AppDelegate.openDocument = { req in openWindow(id: "document", value: req) }
+        }
+    }
+}
+
 private struct WindowCloseGuard: NSViewRepresentable {
     let session: Session
 
@@ -232,23 +264,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The user already answered the save question when closing the window.
     @MainActor static var alreadyConfirmedQuit = false
 
-    /// Double-clicking a .hcfrex file in Finder.
+    /// Opens a project window from Finder / another scene (set by the main window).
+    @MainActor static var openDocument: ((DocumentRequest) -> Void)?
+
+    /// Double-clicking .hcfrex / .chc files in Finder (several projects open as separate windows).
     func application(_ application: NSApplication, open urls: [URL]) {
         Task { @MainActor in
-            guard let url = urls.first else { return }
+            let files = urls.filter { $0.scheme != "hcfr" }
             // hcfr:// links from other programs (PCG's autocalibration): Automation.swift
-            if url.scheme == "hcfr" {
+            if let link = urls.first(where: { $0.scheme == "hcfr" }) {
                 var tries = 0
                 while AppDelegate.session == nil && tries < 30 { try? await Task.sleep(for: .milliseconds(200)); tries += 1 }
-                AppDelegate.session?.handleAutomation(url)
-                return
+                AppDelegate.session?.handleAutomation(link)
             }
-            if let session = AppDelegate.session {
-                if session.confirmDiscardChanges() { session.openProject(url) }
-            } else {
-                // Window not ready yet: open it as soon as it is
-                try? await Task.sleep(for: .seconds(1))
-                if let session = AppDelegate.session { session.openProject(url) }
+            guard !files.isEmpty else { return }
+            var tries = 0
+            while AppDelegate.session == nil && tries < 30 { try? await Task.sleep(for: .milliseconds(200)); tries += 1 }
+            guard let session = AppDelegate.session else { return }
+            for url in files {
+                // Keep any project already open: fill the front window if it is empty, else a new one
+                if session.hasMeasurements || session.projectURL != nil, let open = AppDelegate.openDocument {
+                    open(DocumentRequest(path: url.path))
+                } else if session.confirmDiscardChanges() {
+                    session.openProject(url)
+                }
             }
         }
     }

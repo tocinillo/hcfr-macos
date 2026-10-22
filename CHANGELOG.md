@@ -2,6 +2,13 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.23
+
+- **Several projects open at once**: Open Project… (⌘O), Open Recent and double-clicking files in
+  Finder now keep any project already open — they fill the front window if it is empty, otherwise
+  they open the new project in its own window (Window menu lists them; File → New Window / New Tab
+  still work too). Opening a project no longer replaces the one you were working on.
+
 ## 1.3.22
 
 - **Hardened the .chc reader** (in the spirit of HCFR 4.1's MATH-001/002): array lengths read from
