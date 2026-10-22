@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Copyright (C) 2026 Jorge Velázquez
 // Reference document comparison added in 2026 after HCFR for Windows' "data reference"
 // (MainView.cpp: "dE / ref" and "xy / ref" rows), GNU GPL.
@@ -89,7 +89,7 @@ extension Session {
             refData = try ReferenceData.load(url)
             status = "Comparing with \(url.lastPathComponent): rows dE / ref and xy / ref"
         } catch {
-            errorMessage = "Could not open \(url.lastPathComponent). It is not an HCFR Colorimeter project."
+            errorMessage = "Could not open \(url.lastPathComponent). It is not an HCFR for macOS project."
         }
     }
 
@@ -278,7 +278,7 @@ enum MeterCorrectionFile {
             CCMX
 
             DESCRIPTOR "\(display.isEmpty ? "Meter correction" : display)"
-            ORIGINATOR "HCFR Colorimeter for macOS"
+            ORIGINATOR "HCFR for macOS"
             CREATED "\(f.string(from: Date()))"
             KEYWORD "INSTRUMENT"
             INSTRUMENT "\(meter)"

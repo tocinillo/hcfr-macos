@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Copyright (C) 2026 Jorge Velázquez
 // Excel export added in 2026 (HCFR for Windows: Advanced → Export → Measures to xls file).
 //

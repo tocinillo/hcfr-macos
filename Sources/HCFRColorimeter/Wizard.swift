@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Copyright (C) 2026 Jorge Velázquez
 // Calibration wizard added in 2026: a guided workflow (in the style of commercial calibration
 // software) over HCFR's own measures, targets and generators.
@@ -152,7 +152,7 @@ private struct WizardSidebar: View {
                 Image(systemName: "wand.and.stars").font(.title2).foregroundStyle(.tint)
                 VStack(alignment: .leading, spacing: 0) {
                     Text("Calibration Wizard").font(.headline)
-                    Text("HCFR Colorimeter").font(.caption).foregroundStyle(.secondary)
+                    Text("HCFR for macOS").font(.caption).foregroundStyle(.secondary)
                 }
             }
             .padding(.bottom, 14)

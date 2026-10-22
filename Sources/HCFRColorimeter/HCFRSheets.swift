@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Copyright (C) 2026 Jorge Velázquez
 // HCFR's CSV export (CExport::SaveSheets, Export.cpp of HCFR for Windows, GNU GPL): five files
 // <name>.GeneralSheet.csv, .GrayScaleSheet.csv, .PrimariesSheet.csv, .CCSheet.csv and

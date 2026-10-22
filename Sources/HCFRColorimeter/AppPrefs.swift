@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Copyright (C) 2026 Jorge Velázquez
 // General / Advanced / sensor options added in 2026 after HCFR for Windows (GeneralPropPage.cpp,
 // AdvancedPropPage.cpp, Sensors/ArgyllSensor.cpp, Sensors/Sensor.cpp), GNU GPL.

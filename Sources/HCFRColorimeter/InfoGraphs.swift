@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Copyright (C) 2026 Jorge Velázquez
 // Information panel graphs added in 2026, after HCFR's graph views (Views/LuminanceHistoView.cpp,
 // GammaHistoView.cpp, ColorTempHistoView.cpp, RGBHistoView.cpp, CIEChartView.cpp).
@@ -460,58 +460,79 @@ struct SummaryView: View {
     @ObservedObject var session: Session
 
     var body: some View {
-        let white = session.measurements[100]
-        let black = session.overrideBlack ? nil : session.measurements[0]
-        let colorDE = session.colorDeltaEs
         VStack {
             HStack(alignment: .top, spacing: 30) {
-                section("Gray scale", [
-                    ("Points measured", "\(session.results.filter { $0.xyz != nil }.count) of \(session.allLevels.count)"),
-                    ("White Y", white.map { String(format: "%.3f cd/m² (%.2f ftL)", $0.Y, $0.Y * 0.291864) } ?? "—"),
-                    ("White x, y", white.map { String(format: "%.4f, %.4f", $0.x, $0.y) } ?? "—"),
-                    ("White CCT", white.flatMap { ColorMath.cct($0) }.map { String(format: "%.0f K", $0) } ?? "—"),
-                    ("Black Y", black.map { String(format: "%.4f cd/m²", $0.Y) } ?? (session.overrideBlack ? "Override black (0)" : "—")),
-                    ("Contrast", session.contrast.map { $0.isInfinite ? "Infinity:1" : String(format: "%.0f:1", $0) } ?? "—"),
-                    ("Average gamma", session.averageGamma.map { String(format: "%.2f", $0) } ?? "—"),
-                    ("Average ΔE", session.averageDeltaE.map { String(format: "%.2f", $0) } ?? "—"),
-                    ("Max ΔE", session.maxDeltaE.map { String(format: "%.2f", $0) } ?? "—"),
-                ])
-                section("Colors", PatchColor.allCases.map { p in
-                    let r = session.patchResults.first { $0.patch == p }
-                    return (p.rawValue, r?.deltaE.map { String(format: "ΔE %.2f   x %.4f  y %.4f", $0, r?.xyz?.x ?? 0, r?.xyz?.y ?? 0) } ?? "—")
-                } + [
-                    ("Average ΔE", colorDE.isEmpty ? "—" : String(format: "%.2f", colorDE.reduce(0, +) / Double(colorDE.count))),
-                    ("Max ΔE", colorDE.max().map { String(format: "%.2f", $0) } ?? "—"),
-                    ("Gamut (xy area)", session.gamutCoverage.map { String(format: "%.1f %% of %@", $0 * 100, session.standard.shortName) } ?? "—"),
-                ])
-                section("Reference", [
-                    ("Standard", session.standard.rawValue),
-                    ("White", session.white.label),
-                    ("Gamma", session.gammaDescription),
-                    ("Delta E", "\(session.ref.deltaEFormula.title), gray \(session.ref.grayDeltaE.title)"),
-                    ("Gray steps", "\(session.grayCount)"),
-                    ("Display (meter)", session.correction?.name ?? "—"),
-                ])
+                section("Gray scale", grayRows)
+                section("Colors", colorRows)
+                section("Reference", referenceRows)
             }
             .padding(6)
             .frame(maxWidth: .infinity, alignment: .leading)
+            commentsBox
+        }
+    }
 
-            // Editable notes, as HCFR for Windows' Summary tab (saved in the project)
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Comments").font(.headline)
-                TextEditor(text: $session.projectComments)
-                    .font(.callout)
-                    .frame(minHeight: 48, maxHeight: 120)
-                    .overlay(RoundedRectangle(cornerRadius: 5).stroke(.separator))
-                    .overlay(alignment: .topLeading) {
-                        if session.projectComments.isEmpty {
-                            Text("Notes about this calibration (saved with the project)…")
-                                .font(.callout).foregroundStyle(.tertiary).padding(.horizontal, 5).padding(.vertical, 8)
-                                .allowsHitTesting(false)
-                        }
-                    }
-            }
-            .padding(.horizontal, 6).padding(.bottom, 6)
+    // Row data built outside the view builder, so the body stays cheap to type-check.
+    private var grayRows: [(String, String)] {
+        let white = session.measurements[100]
+        let black = session.overrideBlack ? nil : session.measurements[0]
+        var rows: [(String, String)] = []
+        rows.append(("Points measured", "\(session.results.filter { $0.xyz != nil }.count) of \(session.allLevels.count)"))
+        rows.append(("White Y", white.map { String(format: "%.3f cd/m² (%.2f ftL)", $0.Y, $0.Y * 0.291864) } ?? "—"))
+        rows.append(("White x, y", white.map { String(format: "%.4f, %.4f", $0.x, $0.y) } ?? "—"))
+        rows.append(("White CCT", white.flatMap { ColorMath.cct($0) }.map { String(format: "%.0f K", $0) } ?? "—"))
+        rows.append(("Black Y", black.map { String(format: "%.4f cd/m²", $0.Y) } ?? (session.overrideBlack ? "Override black (0)" : "—")))
+        rows.append(("Contrast", session.contrast.map { $0.isInfinite ? "Infinity:1" : String(format: "%.0f:1", $0) } ?? "—"))
+        rows.append(("Average gamma", session.averageGamma.map { String(format: "%.2f", $0) } ?? "—"))
+        rows.append(("Average ΔE", session.averageDeltaE.map { String(format: "%.2f", $0) } ?? "—"))
+        rows.append(("Max ΔE", session.maxDeltaE.map { String(format: "%.2f", $0) } ?? "—"))
+        return rows
+    }
+
+    private var colorRows: [(String, String)] {
+        let colorDE = session.colorDeltaEs
+        var rows: [(String, String)] = PatchColor.allCases.map { p in
+            let r = session.patchResults.first { $0.patch == p }
+            let v: String
+            if let r, let dE = r.deltaE {
+                v = String(format: "ΔE %.2f   x %.4f  y %.4f", dE, r.xyz?.x ?? 0, r.xyz?.y ?? 0)
+            } else { v = "—" }
+            return (p.rawValue, v)
+        }
+        let avg = colorDE.isEmpty ? "—" : String(format: "%.2f", colorDE.reduce(0, +) / Double(colorDE.count))
+        rows.append(("Average ΔE", avg))
+        rows.append(("Max ΔE", colorDE.max().map { String(format: "%.2f", $0) } ?? "—"))
+        rows.append(("Gamut (xy area)", session.gamutCoverage.map { String(format: "%.1f %% of %@", $0 * 100, session.standard.shortName) } ?? "—"))
+        return rows
+    }
+
+    private var referenceRows: [(String, String)] {
+        [("Standard", session.standard.rawValue),
+         ("White", session.white.label),
+         ("Gamma", session.gammaDescription),
+         ("Delta E", "\(session.ref.deltaEFormula.title), gray \(session.ref.grayDeltaE.title)"),
+         ("Gray steps", "\(session.grayCount)"),
+         ("Display (meter)", session.correction?.name ?? "—")]
+    }
+
+    // Editable notes, as HCFR for Windows' Summary tab (saved in the project)
+    private var commentsBox: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("Comments").font(.headline)
+            TextEditor(text: $session.projectComments)
+                .font(.callout)
+                .frame(minHeight: 48, maxHeight: 120)
+                .overlay(RoundedRectangle(cornerRadius: 5).stroke(.separator))
+                .overlay(alignment: .topLeading) { commentsPlaceholder }
+        }
+        .padding(.horizontal, 6).padding(.bottom, 6)
+    }
+
+    @ViewBuilder private var commentsPlaceholder: some View {
+        if session.projectComments.isEmpty {
+            Text("Notes about this calibration (saved with the project)…")
+                .font(.callout).foregroundStyle(.tertiary).padding(.horizontal, 5).padding(.vertical, 8)
+                .allowsHitTesting(false)
         }
     }
 

@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Copyright (C) 2026 Jorge Velázquez
 // Help menu added in 2026 after HCFR for Windows' Help menu (MainFrm.cpp: OnHelpInstall,
 // OnHelpSupport, OnUpdateSoft), GNU GPL.
@@ -68,7 +68,7 @@ enum UpdateCheck {
             let alert = NSAlert()
             if let rel, isNewer(rel.version, than: AboutPanel.version) {
                 alert.messageText = tr("A new version is available")
-                var info = tr("HCFR Colorimeter %@ is available (you have %@).", rel.version, AboutPanel.version)
+                var info = tr("HCFR for macOS %@ is available (you have %@).", rel.version, AboutPanel.version)
                 let notes = rel.notes.components(separatedBy: "\n---").first?
                     .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 if !notes.isEmpty { info += "\n\n" + String(notes.prefix(900)) }
@@ -91,7 +91,7 @@ enum UpdateCheck {
                     alert.addButton(withTitle: tr("Open project page"))
                     if alert.runModal() == .alertSecondButtonReturn { HelpLinks.open(HelpLinks.releases) }
                 } else {
-                    alert.messageText = tr("HCFR Colorimeter is up to date")
+                    alert.messageText = tr("HCFR for macOS is up to date")
                     alert.informativeText = tr("You have the latest version (%@).", AboutPanel.version)
                     alert.runModal()
                 }
@@ -116,7 +116,7 @@ enum AutoUpdate {
 
     @MainActor
     static func install(_ dmg: URL, version: String) {
-        let panel = UpdateProgress.show(tr("Downloading HCFR Colorimeter %@…", version))
+        let panel = UpdateProgress.show(tr("Downloading HCFR for macOS %@…", version))
         Task.detached {
             do {
                 let staged = try await prepare(dmg)
@@ -218,7 +218,7 @@ enum UpdateProgress {
     @MainActor
     static func show(_ text: String) -> NSPanel {
         let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 360, height: 90), styleMask: [.titled], backing: .buffered, defer: false)
-        panel.title = "HCFR Colorimeter"
+        panel.title = "HCFR for macOS"
         let spinner = NSProgressIndicator(frame: NSRect(x: 20, y: 33, width: 24, height: 24))
         spinner.style = .spinning
         spinner.startAnimation(nil)

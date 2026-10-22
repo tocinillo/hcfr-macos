@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Copyright (C) 2026 Jorge Velázquez
 // HCFR for Windows features added in 2026: Undo of measures, the Luminance window, the tab menu,
 // Duplicate with a choice of data, Excel append, Page Setup and reset of the preferences.

@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Copyright (C) 2026 Jorge Velázquez
 // Preferences window added in 2026, after HCFR's preference pages (GeneralPropPage.cpp,
 // ReferencesPropPage.cpp, AdvancedPropPage.cpp, Sensors/Argyllsensorproppage.cpp, SensorPropPage.cpp).

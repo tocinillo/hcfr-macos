@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Copyright (C) 2026 Jorge Velázquez
 // madVR Envy / madTPG pattern generator support added in 2026.
 //
@@ -197,7 +197,7 @@ final class MadVRClient: @unchecked Sendable {
         let user = ProcessInfo.processInfo.userName
         let os = ProcessInfo.processInfo.operatingSystemVersionString
         return [("computerName", computer), ("userName", user), ("os", "macOS \(os)"),
-                ("exeFile", "HCFR Colorimeter"), ("exeVersion", AboutPanel.version), ("exeDescr", "HCFR Colorimeter for macOS"),
+                ("exeFile", "HCFR for macOS"), ("exeVersion", AboutPanel.version), ("exeDescr", "HCFR for macOS"),
                 ("exeIcon", "")]
             .map { "\($0.0)=\($0.1)\t" }.joined()
     }

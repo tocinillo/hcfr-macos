@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Copyright (C) 2026 Jorge Velázquez
 // Automation added in 2026: other programs (PCG's JVC autocalibration) ask HCFR for readings
 // with hcfr:// links and get the results as files.

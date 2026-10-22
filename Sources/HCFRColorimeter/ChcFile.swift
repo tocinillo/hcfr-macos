@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Copyright (C) 2026 Jorge Velázquez
 // Windows HCFR project files (.chc) added in 2026.
 //
@@ -299,7 +299,7 @@ enum ChcFile {
         }
         for (i, item) in [ContrastPatch.black, .white, .ansi1, .ansi2].enumerated() { put(contrast[item.rawValue], "contrast:\(i)") }
         put(colors[PatchColor.white.rawValue], "patch:White")
-        w.string("Calibration by: \r\nDisplay: \(f.display ?? "")\r\nNote: Saved by HCFR Colorimeter for macOS \(AboutPanel.version)\r\n")
+        w.string("Calibration by: \r\nDisplay: \(f.display ?? "")\r\nNote: Saved by HCFR for macOS \(AboutPanel.version)\r\n")
         w.bool(false)   // IRE scale mode
     }
 

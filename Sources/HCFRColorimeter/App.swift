@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Copyright (C) 2026 Jorge Velázquez
 //
 // This program is free software; you can redistribute it and/or modify it under the terms of
@@ -19,7 +19,7 @@ struct ColorimeterApp: App {
     init() { Snapshot.runIfRequested() }
 
     var body: some Scene {
-        Window("HCFR Colorimeter", id: "main") {
+        Window("HCFR for macOS", id: "main") {
             ContentView(session: session)
                 .frame(minWidth: 1180, minHeight: 680)
                 .onAppear { AppDelegate.session = session }
@@ -28,7 +28,7 @@ struct ColorimeterApp: App {
         .defaultSize(width: 1400, height: 860)
         .commands {
             CommandGroup(replacing: .appInfo) {
-                Button("About HCFR Colorimeter") { AboutPanel.show() }
+                Button("About HCFR for macOS") { AboutPanel.show() }
                 Button("Check for Updates…") { UpdateCheck.run(quiet: false) }
             }
             CommandGroup(before: .newItem) {
@@ -118,7 +118,7 @@ struct ColorimeterApp: App {
             DocumentCommands(main: session)
         }
 
-        WindowGroup("HCFR Colorimeter", id: "document", for: DocumentRequest.self) { $request in
+        WindowGroup("HCFR for macOS", id: "document", for: DocumentRequest.self) { $request in
             DocumentWindow(request: request)
         }
         .defaultSize(width: 1400, height: 860)
@@ -131,7 +131,7 @@ struct ColorimeterApp: App {
 
 enum AboutPanel {
     /// The app's version (Info.plist, from the VERSION file); the fallback is for `swift run`.
-    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.19"
+    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.20"
     /// Public repository with this program's complete source code (GPL v2 requirement).
     static let sourceURL = "https://github.com/tocinillo/hcfr-macos"
 
@@ -150,7 +150,7 @@ enum AboutPanel {
             credits.append(NSAttributedString(string: text, attributes: attrs))
         }
         add("Unofficial macOS port of HCFR, not affiliated with the HCFR project.\n\n", font: bold)
-        add("Built from the source code of HCFR Colorimeter for Windows (version 3.5.4.4), "
+        add("Built from the source code of HCFR for Windows (version 3.5.4.4), "
             + "a free and open-source display calibration program created by the HCFR community "
             + "(homecinema-fr.com). The color calculations follow HCFR's own formulas, and the "
             + "colorimeter drivers and CCSS corrections are the ones included in HCFR.\n\n")
@@ -172,7 +172,7 @@ enum AboutPanel {
 
         NSApp.activate(ignoringOtherApps: true)
         NSApp.orderFrontStandardAboutPanel(options: [
-            .applicationName: "HCFR Colorimeter",
+            .applicationName: "HCFR for macOS",
             .applicationVersion: version,
             .version: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "",
             .credits: credits,

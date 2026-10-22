@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Copyright (C) 2026 Jorge Velázquez
 // Spectra, spectral samples (CCSS), luxmeter and simultaneous measures added in 2026 after HCFR for
 // Windows (Views/SpectrumView, SpectralSampleDlg.cpp, ColorHCFR.cpp LuxMeterThreadFunc /
@@ -297,7 +297,7 @@ extension Session {
         let names = (0..<s.values.count).map { "SPEC_\(Int(s.wavelength($0).rounded()))" }
         var lines = [
             "CCSS   ", "",
-            "ORIGINATOR \"HCFR Colorimeter for macOS\"",
+            "ORIGINATOR \"HCFR for macOS\"",
             "CREATED \"\(f.string(from: Date()))\"",
             "KEYWORD \"DISPLAY\"", "DISPLAY \"\(display)\"",
             "KEYWORD \"TECHNOLOGY\"", "TECHNOLOGY \"\(display)\"",
@@ -307,7 +307,7 @@ extension Session {
             "KEYWORD \"SPECTRAL_START_NM\"", String(format: "SPECTRAL_START_NM \"%.6f\"", s.start),
             "KEYWORD \"SPECTRAL_END_NM\"", String(format: "SPECTRAL_END_NM \"%.6f\"", s.end),
             "KEYWORD \"SPECTRAL_NORM\"", "SPECTRAL_NORM \"1.000000\"",
-            "DESCRIPTOR \"Made with HCFR Colorimeter for macOS\"", "",
+            "DESCRIPTOR \"Made with HCFR for macOS\"", "",
         ]
         lines += names.map { "KEYWORD \"\($0)\"" }
         lines += ["NUMBER_OF_FIELDS \(s.values.count + 1)", "BEGIN_DATA_FORMAT", "SAMPLE_ID " + names.joined(separator: " "),

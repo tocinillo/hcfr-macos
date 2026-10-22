@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Copyright (C) 2026 Jorge Velázquez
 //
 // This program is free software; you can redistribute it and/or modify it under the terms of
@@ -9,10 +9,11 @@
 import AppKit
 import UniformTypeIdentifiers
 
-/// HCFR Colorimeter project file (.hcfrex): JSON with the settings and the measurements.
+/// HCFR for macOS project file (.hcfrex): JSON with the settings and the measurements.
 struct ProjectFile: Codable {
+    /// On-disk format marker. Kept stable regardless of the app's display name, so files stay
+    /// compatible between versions.
     var format = "HCFR Colorimeter project"
-    /// Older files were written as "HCFR Colorimeter project".
     static let acceptedFormats: Set<String> = ["HCFR Colorimeter project", "HCFR Colorimeter Express project"]
     var formatVersion = 1
     var appVersion = AboutPanel.version
@@ -227,7 +228,7 @@ extension Session {
     func openRecent(_ url: URL) {
         guard activity == .idle else { return }
         guard FileManager.default.fileExists(atPath: url.path) else {
-            errorMessage = "Could not open \(url.lastPathComponent). It is not an HCFR Colorimeter project."
+            errorMessage = "Could not open \(url.lastPathComponent). It is not an HCFR for macOS project."
             Session.recentList = Session.recentList.filter { $0 != url }
             return
         }
@@ -329,7 +330,7 @@ extension Session {
         } catch let e as ChcError {
             errorMessage = "Could not open \(url.lastPathComponent). " + (e.errorDescription ?? "")
         } catch {
-            errorMessage = "Could not open \(url.lastPathComponent). It is not an HCFR Colorimeter project."
+            errorMessage = "Could not open \(url.lastPathComponent). It is not an HCFR for macOS project."
         }
     }
 

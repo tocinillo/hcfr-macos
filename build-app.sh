@@ -1,7 +1,7 @@
 #!/bin/bash
-# HCFR Colorimeter for macOS — Copyright (C) 2026 Jorge Velázquez — GNU GPL v2 (see LICENSE)
+# HCFR for macOS — Copyright (C) 2026 Jorge Velázquez — GNU GPL v2 (see LICENSE)
 #
-# Builds everything and creates "HCFR Colorimeter.app" (universal, macOS 14+) in this folder.
+# Builds everything and creates "HCFR for macOS.app" (universal, macOS 14+) in this folder.
 set -e
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
@@ -11,7 +11,7 @@ SWIFT_FLAGS=(-c release --arch arm64 --arch x86_64)
 swift build "${SWIFT_FLAGS[@]}"
 # Where the binary ends up depends on the Swift toolchain (.build/release, .build/apple/Products/Release, …)
 BIN_DIR="$(swift build "${SWIFT_FLAGS[@]}" --show-bin-path)"
-APP="$ROOT/HCFR Colorimeter.app"
+APP="$ROOT/HCFR for macOS.app"
 # Version: the VERSION file (e.g. 1.3.1.1); build number: number of commits (1 outside git)
 VERSION="$(tr -d ' \n' < "$ROOT/VERSION")"
 BUILD="$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null || echo 1)"
@@ -32,8 +32,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>CFBundleName</key><string>HCFR Colorimeter</string>
-  <key>CFBundleDisplayName</key><string>HCFR Colorimeter</string>
+  <key>CFBundleName</key><string>HCFR for macOS</string>
+  <key>CFBundleDisplayName</key><string>HCFR for macOS</string>
   <key>CFBundleIdentifier</key><string>org.hcfr.colorimeterexpress</string>
   <key>CFBundleExecutable</key><string>HCFRColorimeter</string>
   <key>CFBundlePackageType</key><string>APPL</string>
@@ -45,12 +45,12 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleVersion</key><string>$BUILD</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>NSHighResolutionCapable</key><true/>
-  <key>NSLocalNetworkUsageDescription</key><string>HCFR Colorimeter looks for and connects to the pattern generator on your local network (Raspberry Pi with PGenerator, madVR Envy / madTPG or Chromecast) to show the test patterns.</string>
+  <key>NSLocalNetworkUsageDescription</key><string>HCFR for macOS looks for and connects to the pattern generator on your local network (Raspberry Pi with PGenerator, madVR Envy / madTPG or Chromecast) to show the test patterns.</string>
   <key>NSBonjourServices</key><array><string>_googlecast._tcp</string></array>
   <key>NSPrincipalClass</key><string>NSApplication</string>
   <key>UTExportedTypeDeclarations</key><array><dict>
     <key>UTTypeIdentifier</key><string>org.hcfr.colorimeterexpress.project</string>
-    <key>UTTypeDescription</key><string>HCFR Colorimeter Project</string>
+    <key>UTTypeDescription</key><string>HCFR for macOS Project</string>
     <key>UTTypeConformsTo</key><array><string>public.json</string></array>
     <key>UTTypeIconFile</key><string>AppIcon</string>
     <key>UTTypeTagSpecification</key><dict>
@@ -62,7 +62,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleURLSchemes</key><array><string>hcfr</string></array>
   </dict></array>
   <key>CFBundleDocumentTypes</key><array><dict>
-    <key>CFBundleTypeName</key><string>HCFR Colorimeter Project</string>
+    <key>CFBundleTypeName</key><string>HCFR for macOS Project</string>
     <key>CFBundleTypeRole</key><string>Editor</string>
     <key>LSHandlerRank</key><string>Owner</string>
     <key>LSItemContentTypes</key><array><string>org.hcfr.colorimeterexpress.project</string></array>

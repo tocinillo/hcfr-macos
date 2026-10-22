@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Copyright (C) 2026 Jorge Velázquez
 // View modes added in 2026 after HCFR for Windows (Views/MainView.cpp display modes, Measure.cpp
 // MeasureNearBlackScale / MeasureNearWhiteScale / Measure…SatScale / MeasureCC24SatScale /

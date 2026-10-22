@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Copyright (C) 2026 Jorge Velázquez
 // Near black / near white / saturation / Color Checker / free measures / contrast views, added in
 // 2026 after HCFR for Windows (Measure.cpp), Copyright (c) Association Homecinema Francophone and

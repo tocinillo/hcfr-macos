@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Copyright (C) 2026 Jorge Velázquez
 // Several projects open at once (HCFR for Windows' multiple documents, Window menu and
 // File → Duplicate) added in 2026.

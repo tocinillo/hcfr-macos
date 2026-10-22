@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Copyright (C) 2026 Jorge Velázquez
 // Test patterns added in 2026 after HCFR for Windows' Advanced → Targets\Images\Patterns menu and
 // its pattern images (res/patterns, Generators/FullScreenWindow.cpp), GNU GPL.

@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Copyright (C) 2026 Jorge Velázquez
 // Additional Patterns window added in 2026 after HCFR for Windows' Advanced → Patterns… dialog
 // (PatternDisplay.cpp) and its drawing (Generators/FullScreenWindow.cpp OnPaint), GNU GPL.

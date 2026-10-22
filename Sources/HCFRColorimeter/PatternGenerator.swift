@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Copyright (C) 2026 Jorge Velázquez
 //
 // This program is free software; you can redistribute it and/or modify it under the terms of
@@ -260,7 +260,7 @@ final class PatternWindowController {
                                width: size.width, height: size.height)
             let w = PatternWindow(contentRect: frame, styleMask: [.titled, .closable, .resizable, .miniaturizable],
                                   backing: .buffered, defer: false)
-            w.title = tr("HCFR Colorimeter — Measurement window (place the meter here)")
+            w.title = tr("HCFR for macOS — Measurement window (place the meter here)")
             w.level = .floating
             w.minSize = NSSize(width: 160, height: 120)
             install(w, screen: screen, background: background)

@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Copyright (C) 2026 Jorge Velázquez
 // CIE diagram added in 2026: a port of HCFR's CIE chart (Tools/CIEChartImage.cpp by Georges
 // Gallerand and Views/CIEChartView.cpp), Copyright (c) 2005-2011 Association Homecinema

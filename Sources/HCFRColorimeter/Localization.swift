@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Copyright (C) 2026 Jorge Velázquez
 // Interface languages added in 2026 (HCFR for Windows: Language… English, Français, Deutsch,
 // Español, Italiano). English texts are the keys of Resources/<lang>.lproj/Localizable.strings.
@@ -166,7 +166,7 @@ enum MessageRules {
         ("(\\d+) rows of (.+) copied", "$1 filas de $2 copiadas"),
         ("Could not open (.+)\\. (It is not an HCFR measures file \\(\\.chc\\)\\.|The file is incomplete or damaged\\.)", "No se pudo abrir $1. $2"),
         ("Could not open (.+)\\. The file was saved by a newer HCFR \\(format (\\d+)\\) that this version cannot read\\.", "No se pudo abrir $1. El archivo es de un HCFR más reciente (formato $2) que esta versión no puede leer."),
-        ("Could not open (.+)\\. It is not an HCFR Colorimeter project\\.", "No se pudo abrir $1. No es un proyecto de HCFR Colorimeter."),
+        ("Could not open (.+)\\. It is not an HCFR for macOS project\\.", "No se pudo abrir $1. No es un proyecto de HCFR for macOS."),
         ("(.+) is not a meter correction file \\(\\.ccmx or \\.thc with a 3×3 matrix\\)\\.",
          "$1 no es un archivo de corrección de sonda (.ccmx o .thc con una matriz 3×3)."),
         ("Could not save the report: (.+)", "No se pudo guardar el informe: $1"),
@@ -247,7 +247,7 @@ enum MessageRules {
         ("(\\d+) rows of (.+) copied", "$1 Zeilen von $2 kopiert", "$1 lignes de $2 copiées", "$1 righe di $2 copiate"),
         ("Could not open (.+)\\. (It is not an HCFR measures file \\(\\.chc\\)\\.|The file is incomplete or damaged\\.)", "$1 konnte nicht geöffnet werden. $2", "Impossible d'ouvrir $1. $2", "Impossibile aprire $1. $2"),
         ("Could not open (.+)\\. The file was saved by a newer HCFR \\(format (\\d+)\\) that this version cannot read\\.", "$1 konnte nicht geöffnet werden. Die Datei stammt aus einem neueren HCFR (Format $2), das diese Version nicht lesen kann.", "Impossible d'ouvrir $1. Le fichier vient d'un HCFR plus récent (format $2) que cette version ne sait pas lire.", "Impossibile aprire $1. Il file è di un HCFR più recente (formato $2) che questa versione non sa leggere."),
-        ("Could not open (.+)\\. It is not an HCFR Colorimeter project\\.", "$1 konnte nicht geöffnet werden. Es ist kein HCFR-Colorimeter-Projekt.", "Impossible d'ouvrir $1. Ce n'est pas un projet HCFR Colorimeter.", "Impossibile aprire $1. Non è un progetto di HCFR Colorimeter."),
+        ("Could not open (.+)\\. It is not an HCFR for macOS project\\.", "$1 konnte nicht geöffnet werden. Es ist kein HCFR-Colorimeter-Projekt.", "Impossible d'ouvrir $1. Ce n'est pas un projet HCFR for macOS.", "Impossibile aprire $1. Non è un progetto di HCFR for macOS."),
         ("(.+) is not a meter correction file \\(\\.ccmx or \\.thc with a 3×3 matrix\\)\\.", "$1 ist keine Korrekturdatei für Messgeräte (.ccmx oder .thc mit 3×3-Matrix).", "$1 n'est pas un fichier de correction de sonde (.ccmx ou .thc avec une matrice 3×3).", "$1 non è un file di correzione della sonda (.ccmx o .thc con una matrice 3×3)."),
         ("Could not save the report: (.+)", "Der Bericht konnte nicht gesichert werden: $1", "Impossible d'enregistrer le rapport : $1", "Impossibile salvare il report: $1"),
         ("Could not save the spectral sample: (.+)", "Die Spektralprobe konnte nicht gesichert werden: $1", "Impossible d'enregistrer l'échantillon spectral : $1", "Impossibile salvare il campione spettrale: $1"),

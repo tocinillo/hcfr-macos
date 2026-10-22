@@ -2,6 +2,11 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.20
+
+- **Renamed to "HCFR for macOS"** (window titles, About, reports and the app name). The project
+  files, settings and imported ArgyllCMS data are unchanged, so existing projects keep working.
+
 ## 1.3.19
 
 - **Opens older .hcfrex projects again**: the reader is now tolerant — it loads the measurements

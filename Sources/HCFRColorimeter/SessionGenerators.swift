@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Copyright (C) 2026 Jorge Velázquez
 // PGenerator output control and madVR Envy / madTPG generator added in 2026.
 //
@@ -117,7 +117,7 @@ extension Session {
             self.status = "Connecting to madVR at \(host)…"
             let c = MadVRClient(host: host)
             try await c.connect()
-            try? await c.osd("HCFR Colorimeter for macOS")
+            try? await c.osd("HCFR for macOS")
             await c.applyOptions(disable3DLUT: self.madVRDisable3DLUT, disableCalibration: self.madVRDisableCalibration,
                                  hdr: self.madVRHDR, osd: self.madVROSD)
             return c

@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Copyright (C) 2026 Jorge Velázquez
 //
 // This program is free software; you can redistribute it and/or modify it under the terms of
@@ -1200,7 +1200,7 @@ final class Session: ObservableObject {
             let c = PGeneratorClient(host: host)
             try await c.connect()
             try? await c.send(PGeneratorClient.textMessage(
-                "HCFR Colorimeter for macOS connected - PGenerator at \(host) Res [\(c.width)x\(c.height)]"))
+                "HCFR for macOS connected - PGenerator at \(host) Res [\(c.width)x\(c.height)]"))
             return c
         }
         piConnecting = t

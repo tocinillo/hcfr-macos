@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Copyright (C) 2026 Jorge Velázquez
 //
 // This program is free software; you can redistribute it and/or modify it under the terms of
@@ -28,7 +28,7 @@ enum Report {
             session.errorMessage = "Could not start printing."
             return
         }
-        op.jobTitle = "HCFR Colorimeter — \(session.projectName)"
+        op.jobTitle = "HCFR for macOS — \(session.projectName)"
         op.showsPrintPanel = true
         op.showsProgressPanel = true
         op.run()
@@ -81,7 +81,7 @@ private struct ReportView: View {
             }
             if !session.freeMeasurements.isEmpty { seriesSection(.freeMeasures) }
             if !session.contrastMeasurements.isEmpty { contrastSection }
-            Text("HCFR Colorimeter \(AboutPanel.version) for macOS — Mac version by Jorge Velázquez, Mazatlán, México. Unofficial port of HCFR (github.com/arthur-liberman/hcfr-code). GNU GPL v2. Source: \(AboutPanel.sourceURL.replacingOccurrences(of: "https://", with: ""))")
+            Text("HCFR for macOS \(AboutPanel.version) for macOS — Mac version by Jorge Velázquez, Mazatlán, México. Unofficial port of HCFR (github.com/arthur-liberman/hcfr-code). GNU GPL v2. Source: \(AboutPanel.sourceURL.replacingOccurrences(of: "https://", with: ""))")
                 .font(.system(size: 8)).foregroundStyle(.secondary)
         }
         .padding(20)
@@ -108,7 +108,7 @@ private struct ReportView: View {
         if let c = session.correction { info.append(("Display", c.name)) }
         if let d = session.lastMeasure { info.append(("Last measure", d.formatted(date: .abbreviated, time: .standard))) }
         return VStack(alignment: .leading, spacing: 6) {
-            Text("HCFR Colorimeter — Calibration report").font(.system(size: 18, weight: .bold))
+            Text("HCFR for macOS — Calibration report").font(.system(size: 18, weight: .bold))
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 2) {
                 ForEach(Array(stride(from: 0, to: info.count, by: 2)), id: \.self) { i in
                     GridRow {

@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Copyright (C) 2026 Jorge Velázquez
 // CSV export added in 2026 (HCFR for Windows: File → Export, Export.cpp).
 //
@@ -20,7 +20,7 @@ extension Session {
         func q(_ s: String) -> String { s.contains(",") || s.contains("\"") ? "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\"" : s }
         let r = ref
         var lines = [
-            "# HCFR Colorimeter \(AboutPanel.version) for macOS",
+            "# HCFR for macOS \(AboutPanel.version) for macOS",
             "# Project,\(q(projectName))",
             "# Color space,\(q(r.standard.rawValue)),White point,\(r.white.rawValue),EOTF,\(q(gammaDescription))",
             "# Delta E,\(q(r.deltaEFormula.title)),Gray,\(q(r.grayDeltaE.title))",

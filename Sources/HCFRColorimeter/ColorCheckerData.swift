@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Color Checker pattern sets that HCFR for Windows reads from CSV files (Install/data/*.csv of
 // HCFR, Copyright (c) Association Homecinema Francophone and HCFR contributors, GNU GPL):
 // 8-bit video codes (16-235) R, G, B and the patch name.

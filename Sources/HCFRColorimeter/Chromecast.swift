@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Copyright (C) 2026 Jorge Velázquez
 // Chromecast pattern generator (HCFR for Windows' "ccast" display mode, from ArgyllCMS's
 // libccast) added in 2026.

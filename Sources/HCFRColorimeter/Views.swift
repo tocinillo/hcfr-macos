@@ -1,4 +1,4 @@
-// HCFR Colorimeter for macOS
+// HCFR for macOS
 // Copyright (C) 2026 Jorge Velázquez
 //
 // This program is free software; you can redistribute it and/or modify it under the terms of
@@ -166,7 +166,7 @@ struct ContentView: View {
             DispatchQueue.main.async { NSApp.keyWindow?.makeFirstResponder(nil) }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { NSApp.keyWindow?.makeFirstResponder(nil) }
         }
-        .navigationTitle("HCFR Colorimeter — \(session.projectName)\(session.isDirty ? " (edited)" : "")")
+        .navigationTitle("HCFR for macOS — \(session.projectName)\(session.isDirty ? " (edited)" : "")")
         .focusedSceneValue(\.activeSession, session)
     }
 }
