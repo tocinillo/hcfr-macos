@@ -1,6 +1,6 @@
-# HCFR Colorimeter for macOS
+# HCFR for macOS
 
-A native macOS version of **HCFR Colorimeter**, focused on calibrating TVs and monitors (especially
+A native macOS version of HCFR for macOS, focused on calibrating TVs and monitors (especially
 CRT TVs) with a colorimeter and a calibration DVD / external pattern generator.
 
 > **Unofficial port.** This project is not affiliated with or endorsed by the HCFR project. It is
@@ -111,7 +111,7 @@ curve is ST.2084 and to SDR otherwise.
 
 ## Installing
 
-Download `HCFR Colorimeter <version>.dmg` from the Releases page, open it and drag
+Download `HCFR for macOS <version>.dmg` from the Releases page, open it and drag
 **HCFR Colorimeter.app** onto the Applications folder next to it. The app is not signed with an Apple Developer ID, so
 the first time macOS will block it: right-click the app → **Open** → **Open** (or allow it in
 System Settings → Privacy & Security). The source code of each release is in this repository
@@ -126,11 +126,11 @@ Requirements: macOS 14 or later and Xcode or the Command Line Tools (`xcode-sele
 ```
 
 This builds the colorimeter drivers and the `hcfr-meter` helper (`build-meter.sh`), then the
-SwiftUI app, and creates **`HCFR Colorimeter.app`** in this folder (universal arm64 + x86_64,
+SwiftUI app, and creates **`HCFR for macOS.app`** in this folder (universal arm64 + x86_64,
 ad-hoc signed). To make the installer:
 
 ```bash
-./make-dmg.sh            # builds and creates "HCFR Colorimeter <version>.dmg"
+./make-dmg.sh            # builds and creates "HCFR for macOS <version>.dmg"
 ./make-dmg.sh --no-build # packs the app already built
 ```
 
@@ -147,7 +147,7 @@ ad-hoc signed). To make the installer:
 
 ## Credits and license
 
-- **HCFR Colorimeter** — Copyright Association Homecinema Francophone and HCFR contributors.
+- **HCFR** — Copyright Association Homecinema Francophone and HCFR contributors.
   https://github.com/arthur-liberman/hcfr-code · https://sourceforge.net/projects/hcfr/
 - **ArgyllCMS** instrument drivers — Copyright Graeme W. Gill. https://www.argyllcms.com
 - **macOS version** — Copyright (C) 2026 Jorge Velázquez.
