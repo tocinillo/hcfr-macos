@@ -2,6 +2,13 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.28
+
+- **The meter search can no longer hang.** When another program holds the colorimeter (a virtual
+  machine such as VMware Fusion, Calman, another copy of HCFR) the USB enumeration could block
+  forever, leaving Search and Connect greyed out. The search now gives up after 20 s, ends the
+  helper and says what is probably holding the meter.
+
 ## 1.3.27
 
 - **Updates now refresh the Dock / Finder icon and name.** After installing an update, the app

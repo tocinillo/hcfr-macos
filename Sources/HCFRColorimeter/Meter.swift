@@ -221,10 +221,17 @@ final class MeterHelper: @unchecked Sendable {
         killReason = reason
         lock.unlock()
         if process.isRunning { process.terminate() }
+        // A driver blocked in a USB call may ignore SIGTERM: make sure it ends
+        let pid = process.processIdentifier, p = process
+        DispatchQueue.global().asyncAfter(deadline: .now() + 1.5) {
+            if p.isRunning { _ = Darwin.kill(pid, SIGKILL) }
+        }
     }
 
     deinit { stop() }
 }
+
+let listTimeoutMessage = "The colorimeter search got no answer in 20 s. Another program may be holding the meter (a virtual machine such as VMware Fusion or Parallels, Calman, or another copy of HCFR): release it there, unplug and plug the meter in, and press Search again."
 
 final class ArgyllMeter {
     private let helper: MeterHelper
@@ -267,7 +274,16 @@ final class ArgyllMeter {
     static func listPorts(identifyIfSeveral: Bool = true, knownSerials: [String: String] = [:],
                           skipIdentify: Set<String> = []) async throws -> [MeterPort] {
         let helper = try MeterHelper()
-        defer { helper.stop() }
+        // The USB enumeration can block forever when another program holds the meter (a virtual
+        // machine, Calman, another copy of HCFR): never leave the search hanging
+        let watchdog = Task {
+            try? await Task.sleep(nanoseconds: 20_000_000_000)
+            if !Task.isCancelled { helper.kill(reason: listTimeoutMessage) }
+        }
+        defer {
+            watchdog.cancel()
+            helper.stop()
+        }
         _ = try await helper.nextLine() // READY
         helper.send("list")
         var ports: [MeterPort] = []

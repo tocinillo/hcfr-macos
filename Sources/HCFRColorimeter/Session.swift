@@ -660,6 +660,8 @@ final class Session: ObservableObject {
                     status = "\(found.count) colorimeters found."
                 }
             } catch {
+                let hung = error.localizedDescription.contains("20 s")
+                if hung { status = "The colorimeter search is not answering — is another program (a virtual machine, Calman) holding the meter?" }
                 if !quiet { errorMessage = error.localizedDescription }
             }
         }
