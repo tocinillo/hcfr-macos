@@ -175,6 +175,10 @@ enum AutoUpdate {
         fi
         /usr/bin/xattr -dr com.apple.quarantine "$APP" 2>/dev/null
         rm -rf "$(dirname "$NEW")"
+        # Refresh the Dock / Finder icon and name cache so a new icon or name shows up
+        /usr/bin/touch "$APP"
+        LSR=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+        [ -x "$LSR" ] && "$LSR" -f "$APP" 2>/dev/null
         /usr/bin/open "$APP"
         """
         let scriptURL = staged.deletingLastPathComponent().appendingPathComponent("install.sh")
