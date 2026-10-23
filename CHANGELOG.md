@@ -2,6 +2,18 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.25
+
+- **Fixed the level coordination (1.3.24 was wrong).** Only one place in the chain may limit the
+  range: PGenerator set to Limited already compresses to 16–235, so the patterns must then be Full
+  (PC). The only invalid pair is Video patterns + Limited PGenerator (double scaling) — PC+Full,
+  PC+Limited and Video+Full are all valid. Changing one setting now only moves the other to avoid
+  that double scaling.
+- **Fixed a spurious "Not connected to the Raspberry Pi" error** when opening/closing the PGenerator
+  output sheet: querying the resolution list is now best-effort and silent (older PGenerator versions
+  that don't answer no longer trigger an error or drop a working connection). The resolution list is
+  read when you press "Read from the Pi".
+
 ## 1.3.24
 
 - **PGenerator output: resolution control and Reboot** (ported from HCFR 4.1). The output sheet now

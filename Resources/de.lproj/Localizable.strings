@@ -973,3 +973,6 @@
 "Setting the PGenerator resolution…" = "PGenerator-Auflösung wird eingestellt…";
 "PGenerator resolution set" = "PGenerator-Auflösung eingestellt";
 "Rebooting the Raspberry Pi — it will be back in a minute" = "Raspberry Pi wird neu gestartet — in einer Minute wieder da";
+
+/* 1.3.25 */
+"Range and the Generator-menu Levels: only one place may limit the range. PC levels go with Full on both. For a limited-range display set exactly one of the two to Limited — PGenerator Limited (then send PC/Full patterns) or Video patterns (then PGenerator Full) — never both, or the signal is scaled twice. In HDR10 the patterns are sent in 10 bits. Applying restarts PGenerator (a few seconds)." = "Bereich und die Levels im Generator-Menü: nur eine Stelle der Kette darf den Bereich begrenzen. PC-Pegel gehen mit Full auf beiden. Für ein Display im begrenzten Bereich genau eines der beiden auf Limited stellen — PGenerator Limited (dann PC/Full-Muster senden) oder Video-Muster (dann PGenerator Full) — niemals beide, sonst wird das Signal doppelt skaliert. In HDR10 werden die Muster in 10 Bit gesendet. Anwenden startet PGenerator neu (ein paar Sekunden).";

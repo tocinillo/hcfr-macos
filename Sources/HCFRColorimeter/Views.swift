@@ -1558,7 +1558,7 @@ struct PiOutputSheet: View {
                 }
             }
             .formStyle(.grouped)
-            Text("Video levels in the Generator menu must match the range: Limited with Video (16–235), Full with PC (0–255). In HDR10 the patterns are sent in 10 bits. Applying restarts PGenerator (a few seconds).")
+            Text("Range and the Generator-menu Levels: only one place may limit the range. PC levels go with Full on both. For a limited-range display set exactly one of the two to Limited — PGenerator Limited (then send PC/Full patterns) or Video patterns (then PGenerator Full) — never both, or the signal is scaled twice. In HDR10 the patterns are sent in 10 bits. Applying restarts PGenerator (a few seconds).")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack {
                 Button("Read from the Pi") { session.readPiOutput(); session.readPiModes() }
@@ -1580,7 +1580,6 @@ struct PiOutputSheet: View {
         }
         .padding(20)
         .frame(width: 520)
-        .onAppear { session.readPiModes() }
         .alert("Reboot the Raspberry Pi?", isPresented: $session.confirmRebootPi) {
             Button("Reboot", role: .destructive) { session.rebootPi() }
             Button("Cancel", role: .cancel) {}

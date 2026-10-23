@@ -92,16 +92,15 @@ extension Session {
         }
     }
 
-    /// Reads the Pi's video modes (resolutions) for the output sheet.
+    /// Reads the Pi's video modes (resolutions) for the output sheet. Best-effort and silent: some
+    /// PGenerator versions don't answer GET_MODES_AVAILABLE, and that must not pop up an error or
+    /// disturb a working connection — the resolution picker simply stays hidden.
     func readPiModes() {
         Task {
-            do {
-                let c = try await piClient()
-                let (current, list) = try await c.modes()
+            guard let c = try? await piClient() else { return }
+            if let (current, list) = try? await c.modes() {
                 piModes = list
                 piCurrentMode = current
-            } catch {
-                errorMessage = error.localizedDescription
             }
         }
     }
@@ -136,17 +135,18 @@ extension Session {
         }
     }
 
-    /// Coordinates the pattern Levels with the PGenerator range (feature request): the range and the
-    /// Generator-menu Levels must agree — Limited with Video (16–235), Full with PC (0–255). Changing
-    /// one moves the other to the matching value (still overridable).
-    func coordinateLevels(withLimited limited: Bool) {
-        let want: VideoLevels = limited ? .video : .full
-        if videoLevels != want { videoLevels = want }
+    /// Coordinates the pattern Levels with the PGenerator range (feature request). Only one place in
+    /// the chain may limit the range, or the signal is scaled twice: PGenerator set to Limited already
+    /// compresses the output to 16–235, so the patterns must then be sent Full (PC, 0–255). The only
+    /// invalid pair is Video patterns + Limited PGenerator (double scaling); the others are all valid
+    /// (PC + Full for a full-range display, PC + Limited or Video + Full for a limited-range display).
+    /// Changing one setting only moves the other when needed to avoid that double scaling.
+    func coordinateLevels(withLimited pgenLimited: Bool) {   // the PGenerator range changed
+        if pgenLimited && videoLevels == .video { videoLevels = .full }
     }
 
-    func coordinateRange(withLevels levels: VideoLevels) {
-        let want = levels == .video
-        if piOutput.limited != want { piOutput.limited = want }
+    func coordinateRange(withLevels levels: VideoLevels) {   // the Generator-menu Levels changed
+        if levels == .video && piOutput.limited { piOutput.limited = false }
     }
 
     // MARK: - madVR Envy / madTPG
