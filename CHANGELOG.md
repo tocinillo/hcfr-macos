@@ -2,6 +2,13 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.27
+
+- **Updates now refresh the Dock / Finder icon and name.** After installing an update, the app
+  re-registers with Launch Services, so a new icon or name shows up without clearing caches by hand.
+  (A rename done by an in-place update still keeps the old .app filename — a clean install from the
+  DMG is the way to also change the name shown in the Dock.)
+
 ## 1.3.26
 
 - **New app icon**: a modern take on HCFR's classic three RGB bars — the same red / green / blue
