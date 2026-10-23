@@ -2,6 +2,12 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.26
+
+- **New app icon**: a modern take on HCFR's classic three RGB bars — the same red / green / blue
+  level bars (green tallest) in a dark macOS-style rounded icon, with soft emissive glow and a
+  reflection.
+
 ## 1.3.25
 
 - **Fixed the level coordination (1.3.24 was wrong).** Only one place in the chain may limit the
