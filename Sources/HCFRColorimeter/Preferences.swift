@@ -13,14 +13,15 @@ import SwiftUI
 /// Preferences (⌘,), with HCFR's pages.
 struct PreferencesView: View {
     @ObservedObject var session: Session
+    @AppStorage("prefsTab") private var tab = 0
 
     var body: some View {
-        TabView {
-            GeneralPage(session: session).tabItem { Label("General", systemImage: "gearshape") }
-            ReferencesPage(session: session).tabItem { Label("References", systemImage: "scope") }
-            AppearancePage(session: session).tabItem { Label("Appearance", systemImage: "paintpalette") }
-            AdvancedPage(session: session).tabItem { Label("Advanced", systemImage: "gearshape.2") }
-            SensorPage(session: session).tabItem { Label("Sensor", systemImage: "camera.metering.center.weighted") }
+        TabView(selection: $tab) {
+            GeneralPage(session: session).tabItem { Label("General", systemImage: "gearshape") }.tag(0)
+            ReferencesPage(session: session).tabItem { Label("References", systemImage: "scope") }.tag(1)
+            AppearancePage(session: session).tabItem { Label("Appearance", systemImage: "paintpalette") }.tag(2)
+            AdvancedPage(session: session).tabItem { Label("Advanced", systemImage: "gearshape.2") }.tag(3)
+            SensorPage(session: session).tabItem { Label("Sensor", systemImage: "camera.metering.center.weighted") }.tag(4)
         }
         .frame(width: 680)
         .safeAreaInset(edge: .bottom) {

@@ -2,6 +2,23 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.29
+
+- **Fixed "Not connected to the Raspberry Pi" after Apply / Read from the Pi** (and the repeated
+  message in the Wizard while the generator showed as connected). When a command to the Pi failed
+  (PGenerator restarting after Apply, a network drop) the connection closed itself but the app kept
+  using it. Now a closed connection is detected before use and every command with an answer
+  reconnects once, like the patterns.
+- **The sensor no longer stays green when it is unplugged**: a reading that fails because the meter
+  is gone shows it as disconnected, and it is detected again when plugged in.
+- **Evaluation images**: closing the pattern with ESC now also clears the "ESC or Patterns → Hide
+  pattern" message at the bottom.
+- **New shortcuts** (as HCFR for Windows' Go / Clear / References): Measure → *Go: Measure Current
+  Series* (⌘G), *Clear Current Series…* (⌘⌫) and *References…* (⌥⌘R, opens Preferences on
+  References).
+- **"Do not show again"** on the Measurement window and "Calibration complete" messages
+  (Preferences → Reset to Defaults shows them again).
+
 ## 1.3.28
 
 - **The meter search can no longer hang.** When another program holds the colorimeter (a virtual

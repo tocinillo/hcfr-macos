@@ -37,15 +37,15 @@ extension Session {
     func applyPiOutput(_ o: PiOutput) async throws {
         piApplying = true
         defer { piApplying = false }
-        let c = try await piClient()
+        _ = try await piClient()
         status = "Setting PGenerator output: \(o.summary)…"
         for cmd in o.setCommands {
-            let r = try await c.get(cmd)
+            let r = try await piGet(cmd)
             if !r.hasPrefix("OK") {
                 throw PGeneratorError.communication("PGenerator did not accept \"\(cmd)\" (answer: \"\(r)\").")
             }
         }
-        _ = try? await c.get("RESTARTPGENERATOR:")
+        _ = try? await piGet("RESTARTPGENERATOR:")
         status = "Restarting PGenerator with the new output…"
         dropPi()
         // PGenerator takes a few seconds to come back
@@ -66,6 +66,17 @@ extension Session {
         status = "PGenerator output: \((piCurrentOutput ?? o).summary)"
     }
 
+    /// A command that expects an answer; if the connection was lost (PGenerator restarting, a
+    /// network drop) it reconnects once, as the patterns do.
+    func piGet(_ command: String) async throws -> String {
+        do {
+            return try await piClient().get(command)
+        } catch PGeneratorError.communication {
+            dropPi()
+            return try await piClient().get(command)
+        }
+    }
+
     /// Generator → PGenerator output… → Apply.
     func applyPiOutputNow() {
         Task {
@@ -77,8 +88,7 @@ extension Session {
     func readPiOutput() {
         Task {
             do {
-                let c = try await piClient()
-                let a = try await c.get(PiOutput.readCommand)
+                let a = try await piGet(PiOutput.readCommand)
                 guard let o = PiOutput.parse(a) else {
                     errorMessage = tr("This PGenerator did not report its output settings (it may be an old version).")
                     return

@@ -384,8 +384,53 @@ extension Session {
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         appPrefs = AppPrefs()
         prefs = ReferencePrefs()
+        // The messages turned off with "Do not show again" are shown again
+        for k in defaults.dictionaryRepresentation().keys where k.hasPrefix("dontShow.") { defaults.removeObject(forKey: k) }
         graphOptions = GraphOptions()
         status = tr("Preferences reset to their default values")
+    }
+
+    /// Measure → "Go": measures the series of the current view (HCFR's Go button).
+    func measureCurrentSeries() {
+        guard meter != nil, activity == .idle else { return }
+        switch view {
+        case .grayScale: measure(.grayScale)
+        case .primariesSecondaries: measure(.primariesSecondaries)
+        case .nearBlack: measure(.nearBlack)
+        case .nearWhite: measure(.nearWhite)
+        case .colorChecker: measure(.colorChecker)
+        case .contrast: measure(.contrast)
+        case .freeMeasures: measure(.freeMeasure)
+        default:
+            if view.saturationColor != nil { measure(.saturation(view)) } else { measure(.grayScale) }
+        }
+    }
+
+    /// Measure → "Clear current series": erases the measures of the current view.
+    func clearCurrentSeries() {
+        guard activity == .idle else { return }
+        let alert = NSAlert()
+        alert.messageText = tr("Clear the measurements?")
+        alert.informativeText = tr("The measures of the current view (%@) are erased.", tr(view.rawValue))
+        alert.addButton(withTitle: tr("Clear"))
+        alert.addButton(withTitle: tr("Cancel"))
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        switch view {
+        case .grayScale: measurements.removeAll()
+        case .primariesSecondaries: colorMeasurements.removeAll()
+        case .contrast: contrastMeasurements.removeAll()
+        case .freeMeasures: freeMeasurements.removeAll()
+        default: seriesMeasurements[view] = nil
+        }
+        isDirty = true
+        status = "Measures of the current view cleared"
+    }
+
+    /// Opens the preferences on References (HCFR's Alt+P preferences).
+    static func openReferences() {
+        UserDefaults.standard.set(1, forKey: "prefsTab")
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
     }
 
     static func pageSetup() {

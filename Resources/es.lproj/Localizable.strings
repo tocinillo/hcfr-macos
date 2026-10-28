@@ -984,3 +984,12 @@
 /* meter search timeout */
 "The colorimeter search got no answer in 20 s. Another program may be holding the meter (a virtual machine such as VMware Fusion or Parallels, Calman, or another copy of HCFR): release it there, unplug and plug the meter in, and press Search again." = "La búsqueda de la sonda no obtuvo respuesta en 20 s. Puede que otro programa tenga la sonda ocupada (una máquina virtual como VMware Fusion o Parallels, Calman u otra copia de HCFR): libérala allí, desenchufa y vuelve a enchufar la sonda y pulsa Buscar otra vez.";
 "The colorimeter search is not answering — is another program (a virtual machine, Calman) holding the meter?" = "La búsqueda de la sonda no responde — ¿tiene otro programa (una máquina virtual, Calman) ocupada la sonda?";
+
+/* bug fixes: shortcuts, messages */
+"Do not show again" = "No volver a mostrar";
+"Go: Measure Current Series" = "Ir: medir la serie actual";
+"Clear Current Series…" = "Borrar la serie actual…";
+"References…" = "Referencias…";
+"The measures of the current view (%@) are erased." = "Se borran las medidas de la vista actual (%@).";
+"Measures of the current view cleared" = "Medidas de la vista actual borradas";
+"Colorimeter disconnected — plug it in again; it is detected automatically" = "Colorímetro desconectado — vuelve a enchufarlo; se detecta automáticamente";

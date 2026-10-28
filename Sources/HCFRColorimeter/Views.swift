@@ -174,6 +174,7 @@ struct ContentView: View {
 struct PromptSheet: View {
     let prompt: UserPrompt
     @ObservedObject var session: Session
+    @State private var dontShow = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
@@ -183,10 +184,16 @@ struct PromptSheet: View {
                 Text(trMessage(prompt.title)).font(.headline)
                 Text(trMessage(prompt.message)).fixedSize(horizontal: false, vertical: true)
                 HStack {
+                    if prompt.dontShowKey != nil {
+                        Toggle("Do not show again", isOn: $dontShow).toggleStyle(.checkbox)
+                    }
                     Spacer()
                     Button(prompt.style == .yesNo ? "No" : "Cancel") { session.answerPrompt(proceed: false) }
                         .keyboardShortcut(.cancelAction)
-                    Button(prompt.style == .yesNo ? "Yes" : prompt.style == .position ? "OK" : "Continue") { session.answerPrompt(proceed: true) }
+                    Button(prompt.style == .yesNo ? "Yes" : prompt.style == .position ? "OK" : "Continue") {
+                        if dontShow, let k = prompt.dontShowKey { session.defaults.set(true, forKey: "dontShow." + k) }
+                        session.answerPrompt(proceed: true)
+                    }
                         .keyboardShortcut(.defaultAction)
                 }
             }

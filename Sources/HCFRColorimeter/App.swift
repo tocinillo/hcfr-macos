@@ -153,7 +153,7 @@ struct ColorimeterApp: App {
 
 enum AboutPanel {
     /// The app's version (Info.plist, from the VERSION file); the fallback is for `swift run`.
-    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.28"
+    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.29"
     /// Public repository with this program's complete source code (GPL v2 requirement).
     static let sourceURL = "https://github.com/tocinillo/hcfr-macos"
 
@@ -348,6 +348,16 @@ struct MeasureCommands: Commands {
             Button("Continuous measurement") { s.activity == .continuous ? s.stop() : s.start() }
                 .keyboardShortcut(FKey.f8, modifiers: [])
                 .disabled(s.meter == nil || s.activity == .measuring)
+            Divider()
+            Button("Go: Measure Current Series") { s.measureCurrentSeries() }
+                .keyboardShortcut("g")
+                .disabled(s.meter == nil || s.activity != .idle)
+            Button("Clear Current Series…") { s.clearCurrentSeries() }
+                .keyboardShortcut(.delete, modifiers: [.command])
+                .disabled(s.activity != .idle)
+            Divider()
+            Button("References…") { Session.openReferences() }
+                .keyboardShortcut("r", modifiers: [.command, .option])
         }
         CommandGroup(replacing: .undoRedo) {
             Button(tr("Undo")) { Session.undoCommand(s, redo: false) }

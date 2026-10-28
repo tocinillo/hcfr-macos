@@ -74,6 +74,8 @@ struct UserPrompt: Identifiable {
     let title: String
     let message: String
     let style: Style
+    /// Messages that can be turned off ("Do not show again"): the preference key.
+    var dontShowKey: String?
     fileprivate let continuation: CheckedContinuation<Void, Error>
 }
 
@@ -401,6 +403,13 @@ final class Session: ObservableObject {
     }
 
     /// "Measure launch: Confirmation message" (Advanced preferences).
+    /// A reading error that means the meter is no longer there.
+    static func looksDisconnected(_ e: Error) -> Bool {
+        let t = e.localizedDescription.lowercased()
+        return ["communication", "usb", "unplugged", "disconnected", "no such device", "device not found",
+                "i/o error", "not responding", "process is not running", "process stopped"].contains { t.contains($0) }
+    }
+
     func confirmRun(_ message: String) async throws {
         if wizardSkipConfirm { wizardSkipConfirm = false; return }
         guard appPrefs.confirmMeasures else { return }
@@ -939,7 +948,10 @@ final class Session: ObservableObject {
     }
 
     func stop() {
-        testPatternShown = nil
+        if testPatternShown != nil {
+            testPatternShown = nil
+            status = "Pattern closed"
+        }
         task?.cancel()
         closePattern()
         // A reading in progress can't be interrupted; if it hasn't finished 5 s after Stop/Cancel/ESC
@@ -996,6 +1008,13 @@ final class Session: ObservableObject {
                 } else {
                     errorMessage = error.localizedDescription
                     status = "Measurement error"
+                }
+                // The meter was unplugged: show it as disconnected (it is found again when plugged in)
+                if !cancelled, let m = meter, m.isAlive, Self.looksDisconnected(error) {
+                    m.close()
+                    meter = nil
+                    connectedPortName = nil
+                    status = "Colorimeter disconnected — plug it in again; it is detected automatically"
                 }
                 // The meter helper died, or was stopped because it hung: reconnect automatically
                 if let m = meter, !m.isAlive {
@@ -1060,7 +1079,7 @@ final class Session: ObservableObject {
             try await ask("Measurement window",
                           "Move the measurement window to the screen you are measuring (and resize it if you want), "
                           + "place the meter on it, then press Continue to start measuring.",
-                          style: .continueCancel)
+                          style: .continueCancel, dontShowKey: "measurementWindow")
         }
         try await latencyWait()
     }
@@ -1189,7 +1208,12 @@ final class Session: ObservableObject {
 
     /// The connected Raspberry Pi, connecting first if needed (only one connection attempt at a time).
     func piClient() async throws -> PGeneratorClient {
-        if let pi { return pi }
+        // A connection that failed (Pi restarted, network drop) closes itself: reconnect instead of
+        // reporting "Not connected" while the generator still shows as connected
+        if let pi {
+            if pi.isConnected { return pi }
+            dropPi()
+        }
         if let piConnecting { return try await piConnecting.value }
         let address = piAddress
         let t = Task { @MainActor () throws -> PGeneratorClient in
@@ -1400,7 +1424,7 @@ final class Session: ObservableObject {
                 if needsPlacement {
                     try await ask("Calibration complete",
                                   "The device is now calibrated. If the device requires it, return it to the measurement position on the screen and press Continue.",
-                                  style: .continueCancel)
+                                  style: .continueCancel, dontShowKey: "calibrationComplete")
                 }
                 return
             } catch MeterError.needsCalibration(let c, let m) {
@@ -1409,7 +1433,9 @@ final class Session: ObservableObject {
         }
     }
 
-    func ask(_ title: String, _ message: String, style: UserPrompt.Style) async throws {
+    func ask(_ title: String, _ message: String, style: UserPrompt.Style, dontShowKey: String? = nil) async throws {
+        // "Do not show again" was ticked for this message: go on as if Continue / Yes was pressed
+        if let k = dontShowKey, defaults.bool(forKey: "dontShow." + k) { return }
         // A pattern covering the app's screen would hide the message
         if patternSource != .window, patternWindow.isShowing, let main = NSApp.mainWindow?.screen,
            patternWindow.screen == main {
@@ -1421,7 +1447,7 @@ final class Session: ObservableObject {
         let sinceClosed = Date().timeIntervalSince(promptClosedAt)
         if sinceClosed < 0.6 { try await Task.sleep(for: .seconds(0.6 - sinceClosed)) }
         try await withCheckedThrowingContinuation { (c: CheckedContinuation<Void, Error>) in
-            let p = UserPrompt(title: title, message: message, style: style, continuation: c)
+            let p = UserPrompt(title: title, message: message, style: style, dontShowKey: dontShowKey, continuation: c)
             pendingPrompt = p
             prompt = p
             // …and if it still did not appear, present it again.
