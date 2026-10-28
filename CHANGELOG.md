@@ -2,6 +2,23 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.30
+
+- **PGenerator no longer restarts before measuring** (the "No answer from the Raspberry Pi to
+  CMD:GET_RESOLUTION" / lost connection when pressing Measure, also in the Wizard). With the automatic
+  SDR/HDR mode, the app compared every field of the Pi's output (color format, range, colorimetry…)
+  with the output dialog, and any difference — including fields some PGenerator versions report
+  differently — restarted PGenerator before the run; while it restarts the Pi doesn't answer. Now
+  the automatic mode only switches SDR ↔ HDR10 (keeping the Pi's other settings), never restarts a
+  PGenerator that doesn't report its output, and waits up to a minute for it to come back after
+  Apply.
+- **Gray scale runs read 100 % first**, and a white read before the run is kept until the new one
+  replaces it: ΔE, gamma and targets are right during the run instead of only after the last reading.
+- **The status line says "Continuous reading stopped"** when a continuous reading ends (it kept the
+  "… Stop to finish" message).
+- **On-screen Go / Clear / References buttons** next to the view selector (HCFR for Windows' measures
+  toolbar), besides the ⌘G / ⌘⌫ / ⌥⌘R shortcuts.
+
 ## 1.3.29
 
 - **Fixed "Not connected to the Raspberry Pi" after Apply / Read from the Pi** (and the repeated

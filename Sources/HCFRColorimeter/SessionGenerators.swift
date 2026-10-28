@@ -27,10 +27,22 @@ extension Session {
     func ensurePiMode() async throws {
         guard piAutoMode else { return }
         let want = piWantedOutput
-        if let now = piCurrentOutput, now.matches(want) { return }
         if piCurrentOutput == nil { _ = try await piClient() }
-        if let now = piCurrentOutput, now.matches(want) { return }
-        try await applyPiOutput(want)
+        // A PGenerator that doesn't report its output can't be checked: never restart it blindly
+        guard let now = piCurrentOutput else { return }
+        // Automatic mode only switches SDR / HDR10 (10 bits in HDR). Other differences with the
+        // output dialog (color format, range, colorimetry, or fields a PGenerator version reports
+        // differently) must not restart PGenerator before every run: they are applied only from
+        // Generator → PGenerator output… → Apply.
+        if now.hdr == want.hdr && (!want.hdr || now.bitDepth == 10) { return }
+        var o = now
+        o.hdr = want.hdr
+        if o.hdr {
+            o.bitDepth = 10
+            o.primaries = want.primaries; o.maxLuma = want.maxLuma; o.minLuma = want.minLuma
+            o.maxCLL = want.maxCLL; o.maxFALL = want.maxFALL
+        }
+        try await applyPiOutput(o)
     }
 
     /// Sends the output settings to PGenerator and restarts it so they take effect.
@@ -48,9 +60,10 @@ extension Session {
         _ = try? await piGet("RESTARTPGENERATOR:")
         status = "Restarting PGenerator with the new output…"
         dropPi()
-        // PGenerator takes a few seconds to come back
+        // PGenerator takes a few seconds to come back (up to about a minute on some Pi models
+        // when the video mode changes): keep trying while it restarts
         var lastError: Error?
-        for _ in 0..<10 {
+        for _ in 0..<30 {
             try await Task.sleep(for: .seconds(2))
             do {
                 _ = try await piClient()

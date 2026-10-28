@@ -993,3 +993,9 @@
 "The measures of the current view (%@) are erased." = "Se borran las medidas de la vista actual (%@).";
 "Measures of the current view cleared" = "Medidas de la vista actual borradas";
 "Colorimeter disconnected — plug it in again; it is detected automatically" = "Colorímetro desconectado — vuelve a enchufarlo; se detecta automáticamente";
+
+/* PGenerator restart, continuous status, on-screen shortcuts */
+"Continuous reading stopped" = "Lectura continua detenida";
+"Go: measure the series of this view (⌘G)" = "Ir: medir la serie de esta vista (⌘G)";
+"Clear the measures of this view (⌘⌫)" = "Borrar las medidas de esta vista (⌘⌫)";
+"References (⌥⌘R)" = "Referencias (⌥⌘R)";

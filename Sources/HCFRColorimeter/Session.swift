@@ -814,7 +814,10 @@ final class Session: ObservableObject {
                 """)
             self.isDirty = true
             if graySteps > 0 {
+                // Keep the white read before the run until the new one replaces it (it is read first)
+                let white = self.measurements[100]
                 self.measurements.removeAll()
+                if let white { self.measurements[100] = white }
                 try await self.measureGrayLevels()
             }
             if !patches.isEmpty {
@@ -834,7 +837,10 @@ final class Session: ObservableObject {
 
     /// Grey scale: 10%–100% (0% too without Override black), asking for each pattern.
     func measureGrayLevels() async throws {
-        for level in levels {
+        // 100 % first: the white is the reference of every other level (ΔE, gamma, targets), so the
+        // values are right while the run goes on instead of only after the last reading
+        let ordered = levels.contains(100) ? [100] + levels.filter { $0 != 100 } : levels
+        for level in ordered {
             try Task.checkCancellation()
             if appPrefs.realTimeDisplay { selectedLevel = level }
             try await present(.gray(level))
@@ -1001,10 +1007,11 @@ final class Session: ObservableObject {
             defer { closePattern() }
             do {
                 try await body()
+                if kind == .continuous { status = "Continuous reading stopped" }
             } catch {
                 let cancelled = Task.isCancelled || error is CancellationError
                 if cancelled {
-                    status = "Measurement stopped"
+                    status = kind == .continuous ? "Continuous reading stopped" : "Measurement stopped"
                 } else {
                     errorMessage = error.localizedDescription
                     status = "Measurement error"

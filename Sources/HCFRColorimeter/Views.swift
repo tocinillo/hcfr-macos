@@ -522,6 +522,19 @@ private struct ViewPanel: View {
                 .labelsHidden()
                 .fixedSize()
                 .help("Values shown in the first three rows of the table, as HCFR's xyY / XYZ / RGB / xyz views")
+                // HCFR for Windows' measures toolbar: Go, Clear, References
+                HStack(spacing: 2) {
+                    Button { session.measureCurrentSeries() } label: { Image(systemName: "play.circle.fill").foregroundStyle(.green) }
+                        .disabled(session.meter == nil || session.activity != .idle)
+                        .help("Go: measure the series of this view (⌘G)")
+                    Button { session.clearCurrentSeries() } label: { Image(systemName: "trash") }
+                        .disabled(session.activity != .idle)
+                        .help("Clear the measures of this view (⌘⌫)")
+                    Button { Session.openReferences() } label: { Image(systemName: "scope") }
+                        .help("References (⌥⌘R)")
+                }
+                .buttonStyle(.borderless)
+                .font(.system(size: 15))
                 Text(infoLine).font(.system(.caption, design: .monospaced)).lineLimit(2)
             }
             HStack(spacing: 14) {
