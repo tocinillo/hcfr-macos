@@ -2,6 +2,23 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.31
+
+- **Raspberry Pi (PGenerator) connection after closing the PGenerator output dialog, and in the
+  Wizard** ("No answer from the Raspberry Pi to CMD:GET_RESOLUTION" with the Pi connected).
+  PGenerator closes HCFR's connection when it restarts (Apply in the output dialog, a resolution
+  change, a reboot, or PGenerator+ restarting its renderer), but the app still took the old
+  connection as open: the next pattern went into a dead socket, and the reconnection tried only once
+  while PGenerator was still starting, so it failed. Now:
+  - a connection the Pi has closed is detected before a command is sent (and TCP keepalive notices it
+    while idle), so the app reconnects instead of failing;
+  - connecting tries up to 4 times over about 15 s, and waits up to 12 s for the Pi's first answer
+    (PGenerator+ answers late while its renderer starts);
+  - a late answer to a command that timed out is discarded before the next command, so answers can
+    no longer get out of step with their commands;
+  - reading the Pi's resolutions in the output dialog waits longer (some PGenerator versions are slow
+    to list them), instead of dropping the connection.
+
 ## 1.3.30
 
 - **PGenerator no longer restarts before measuring** (the "No answer from the Raspberry Pi to

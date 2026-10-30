@@ -60,7 +60,35 @@ final class PGeneratorClient: @unchecked Sendable {
     private let queue = DispatchQueue(label: "PGeneratorClient")
     private var fd: Int32 = -1
 
-    var isConnected: Bool { queue.sync { fd >= 0 } }
+    /// Connected and the Pi hasn't closed the connection from its side (PGenerator restarted,
+    /// its output changed, the Pi rebooted): a closed socket is detected here, before a command is
+    /// sent into it, so the caller reconnects instead of failing.
+    var isConnected: Bool { queue.sync { fd >= 0 && socketAlive() } }
+
+    /// False when the Pi has closed the connection. Leftover bytes (a late answer) are fine.
+    private func socketAlive() -> Bool {
+        var p = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
+        guard poll(&p, 1, 0) > 0 else { return true }
+        if p.revents & Int16(POLLHUP | POLLERR | POLLNVAL) != 0 && p.revents & Int16(POLLIN) == 0 { return false }
+        var b: UInt8 = 0
+        let n = recv(fd, &b, 1, Int32(MSG_PEEK | MSG_DONTWAIT))
+        if n == 0 || (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+            _ = Self.closeSocket(fd); fd = -1
+            return false
+        }
+        return true
+    }
+
+    /// Throws away bytes waiting on the socket (an answer that arrived after its command timed
+    /// out), so the next answer read is the one to the next command.
+    private func drain() throws {
+        var buf = [UInt8](repeating: 0, count: 1024)
+        while Self.waitReadable(fd, seconds: 0) {
+            let n = recv(fd, &buf, buf.count, Int32(MSG_DONTWAIT))
+            if n == 0 { try fail("The Raspberry Pi closed the connection.") }
+            if n < 0 { break }
+        }
+    }
 
     init(host: String) { self.host = host }
     deinit { if fd >= 0 { _ = Self.closeSocket(fd) } }
@@ -152,13 +180,13 @@ final class PGeneratorClient: @unchecked Sendable {
     /// HCFR's resolution list: the Pi's current mode id and the available modes (CMD:GET_MODE and
     /// CMD:GET_MODES_AVAILABLE, whose body is base64 of "<id>[<description>]" entries).
     func modes() async throws -> (current: Int, list: [PiMode]) {
-        let cur = try await run { try self.exchange("CMD:GET_MODE") }
+        let cur = try await run { try self.exchange("CMD:GET_MODE", timeout: 10) }
         var curStr = cur
         if let t = curStr.firstIndex(of: ":") { curStr = String(curStr[curStr.index(after: t)...]) }
         if let b = curStr.firstIndex(of: "[") { curStr = String(curStr[..<b]) }
         let current = Int(curStr.trimmingCharacters(in: .whitespaces).prefix { $0 == "-" || $0.isNumber }) ?? -1
 
-        let raw = try await run { try self.exchange("CMD:GET_MODES_AVAILABLE") }
+        let raw = try await run { try self.exchange("CMD:GET_MODES_AVAILABLE", timeout: 15) }
         var body = raw
         if let r = body.range(of: "OK:") { body = String(body[r.upperBound...]) }
         body = body.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -232,9 +260,16 @@ final class PGeneratorClient: @unchecked Sendable {
         guard var addr = Self.sockaddrIn(host, port: Self.commandPort) else { throw PGeneratorError.badAddress(host) }
         let s = socket(AF_INET, Self.sockStream, 0)
         guard s >= 0 else { throw PGeneratorError.connectFailed(host, Self.errnoText()) }
-        #if canImport(Darwin)
         var on: Int32 = 1
+        #if canImport(Darwin)
         setsockopt(s, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
+        #endif
+        // TCP keepalive: a connection the Pi dropped (PGenerator restarted, network change) is
+        // noticed while idle instead of on the next pattern
+        setsockopt(s, SOL_SOCKET, SO_KEEPALIVE, &on, socklen_t(MemoryLayout<Int32>.size))
+        #if canImport(Darwin)
+        var idle: Int32 = 15
+        setsockopt(s, IPPROTO_TCP, TCP_KEEPALIVE, &idle, socklen_t(MemoryLayout<Int32>.size))
         #endif
         // Non-blocking connect, so an absent Pi fails after `timeout` instead of the system's ~75 s
         let fl = fcntl(s, F_GETFL, 0)
@@ -264,7 +299,8 @@ final class PGeneratorClient: @unchecked Sendable {
         fd = s
 
         // Resolution, "OK:1920x1080"
-        let res = try exchange("CMD:GET_RESOLUTION")
+        // PGenerator+ may take several seconds to answer while its renderer (re)starts
+        let res = try exchange("CMD:GET_RESOLUTION", timeout: 12)
         let parts = res.split(separator: ":", maxSplits: 1).map(String.init)
         guard parts.first == "OK", parts.count == 2 else {
             throw PGeneratorError.communication("Failed to get rPi resolution (answer: \"\(res)\").")
@@ -280,6 +316,7 @@ final class PGeneratorClient: @unchecked Sendable {
     /// Sends one message (+ 0x02 0x0D) and reads the answer up to its 0x02 0x0D.
     private func exchange(_ message: String, timeout: TimeInterval = 5) throws -> String {
         guard fd >= 0 else { throw PGeneratorError.communication("Not connected to the Raspberry Pi.") }
+        try drain()
         let out = Array(message.utf8) + Self.terminator
         var off = 0
         while off < out.count {

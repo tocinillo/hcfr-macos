@@ -1235,7 +1235,21 @@ final class Session: ObservableObject {
             }
             self.status = "Connecting to the Raspberry Pi at \(host)…"
             let c = PGeneratorClient(host: host)
-            try await c.connect()
+            // PGenerator may be restarting (its output was just changed, or it restarts its
+            // renderer): it accepts the connection but answers late, or refuses it for a moment.
+            // A few attempts over ~15 s before reporting an error.
+            var attempt = 0
+            while true {
+                do {
+                    try await c.connect()
+                    break
+                } catch {
+                    attempt += 1
+                    if attempt >= 4 || error is CancellationError { throw error }
+                    self.status = "The Raspberry Pi is not answering yet, trying again (\(attempt + 1)/4)…"
+                    try await Task.sleep(for: .seconds(2))
+                }
+            }
             try? await c.send(PGeneratorClient.textMessage(
                 "HCFR for macOS connected - PGenerator at \(host) Res [\(c.width)x\(c.height)]"))
             return c
