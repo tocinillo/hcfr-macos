@@ -180,13 +180,15 @@ final class PGeneratorClient: @unchecked Sendable {
     /// HCFR's resolution list: the Pi's current mode id and the available modes (CMD:GET_MODE and
     /// CMD:GET_MODES_AVAILABLE, whose body is base64 of "<id>[<description>]" entries).
     func modes() async throws -> (current: Int, list: [PiMode]) {
-        let cur = try await run { try self.exchange("CMD:GET_MODE", timeout: 10) }
+        guard let cur = await Self.query(host, "CMD:GET_MODE", timeout: 15) else {
+            throw PGeneratorError.communication("No answer to CMD:GET_MODE.")
+        }
         var curStr = cur
         if let t = curStr.firstIndex(of: ":") { curStr = String(curStr[curStr.index(after: t)...]) }
         if let b = curStr.firstIndex(of: "[") { curStr = String(curStr[..<b]) }
         let current = Int(curStr.trimmingCharacters(in: .whitespaces).prefix { $0 == "-" || $0.isNumber }) ?? -1
 
-        let raw = try await run { try self.exchange("CMD:GET_MODES_AVAILABLE", timeout: 15) }
+        guard let raw = await Self.query(host, "CMD:GET_MODES_AVAILABLE", timeout: 20) else { return (current, []) }
         var body = raw
         if let r = body.range(of: "OK:") { body = String(body[r.upperBound...]) }
         body = body.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -239,6 +241,25 @@ final class PGeneratorClient: @unchecked Sendable {
         return out
     }
 
+    /// A question on its own short connection (the Pi's output settings, its video modes). Some
+    /// PGenerator versions answer these slowly or not at all: asked on the pattern connection, a
+    /// timeout closed it and every pattern after that failed ("Not connected to the Raspberry Pi").
+    /// PGenerator serves several connections, so the pattern connection is never touched. Nil when
+    /// the Pi doesn't answer in time.
+    static func query(_ host: String, _ message: String, timeout: TimeInterval) async -> String? {
+        await withCheckedContinuation { c in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let q = PGeneratorClient(host: host)
+                var answer: String?
+                if (try? q.openSocket(timeout: 5)) != nil {
+                    answer = try? q.exchange(message, timeout: timeout)
+                    if q.fd >= 0 { _ = closeSocket(q.fd); q.fd = -1 }
+                }
+                c.resume(returning: answer)
+            }
+        }
+    }
+
     /// Says goodbye ("QUIT", as RB8PG_close) and closes the connection. Does not wait.
     func close() {
         queue.async {
@@ -256,6 +277,12 @@ final class PGeneratorClient: @unchecked Sendable {
     }
 
     private func connectBlocking(timeout: TimeInterval) throws {
+        try openSocket(timeout: timeout)
+        try handshake()
+    }
+
+    /// TCP connection to the command port (no command sent).
+    fileprivate func openSocket(timeout: TimeInterval) throws {
         if fd >= 0 { _ = Self.closeSocket(fd); fd = -1 }
         guard var addr = Self.sockaddrIn(host, port: Self.commandPort) else { throw PGeneratorError.badAddress(host) }
         let s = socket(AF_INET, Self.sockStream, 0)
@@ -297,6 +324,9 @@ final class PGeneratorClient: @unchecked Sendable {
         }
         _ = fcntl(s, F_SETFL, fl)
         fd = s
+    }
+
+    private func handshake() throws {
 
         // Resolution, "OK:1920x1080"
         // PGenerator+ may take several seconds to answer while its renderer (re)starts
@@ -314,7 +344,7 @@ final class PGeneratorClient: @unchecked Sendable {
     }
 
     /// Sends one message (+ 0x02 0x0D) and reads the answer up to its 0x02 0x0D.
-    private func exchange(_ message: String, timeout: TimeInterval = 5) throws -> String {
+    fileprivate func exchange(_ message: String, timeout: TimeInterval = 5) throws -> String {
         guard fd >= 0 else { throw PGeneratorError.communication("Not connected to the Raspberry Pi.") }
         try drain()
         let out = Array(message.utf8) + Self.terminator

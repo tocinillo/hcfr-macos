@@ -101,7 +101,10 @@ extension Session {
     func readPiOutput() {
         Task {
             do {
-                let a = try await piGet(PiOutput.readCommand)
+                let c = try await piClient()
+                guard let a = await PGeneratorClient.query(c.host, PiOutput.readCommand, timeout: 20) else {
+                    throw PGeneratorError.communication(tr("PGenerator did not answer the request for its output settings."))
+                }
                 guard let o = PiOutput.parse(a) else {
                     errorMessage = tr("This PGenerator did not report its output settings (it may be an old version).")
                     return

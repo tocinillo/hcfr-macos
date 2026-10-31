@@ -1260,7 +1260,8 @@ final class Session: ObservableObject {
             let c = try await t.value
             pi = c
             piStatus = "\(c.host) · \(c.width)×\(c.height)"
-            if let a = try? await c.get(PiOutput.readCommand), let o = PiOutput.parse(a) {
+            // On its own connection: a slow or missing answer must not break the pattern connection
+            if let a = await PGeneratorClient.query(c.host, PiOutput.readCommand, timeout: 20), let o = PiOutput.parse(a) {
                 piCurrentOutput = o
                 piStatus = "\(c.host) · \(c.width)×\(c.height) · \(o.summary)"
             }

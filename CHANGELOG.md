@@ -2,6 +2,18 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.32
+
+- **Raspberry Pi: "Error communicating with rPI — Not connected to the Raspberry Pi." in the Wizard
+  and after "Read from the Pi", with the Pi connected.** Right after connecting, the app asked
+  PGenerator for its output settings (and, in the output dialog, for its video modes) on the same
+  connection used for the patterns. Some PGenerator versions answer those requests very slowly or
+  not at all; the timeout closed the pattern connection, so the first pattern failed with "Not
+  connected", the app reconnected, asked again, and the loop repeated. Those questions now go on
+  their own short connection (PGenerator serves several at once), with a longer wait: if the Pi
+  doesn't answer them, only the output summary / resolution list is missing, and the pattern
+  connection is never touched.
+
 ## 1.3.31
 
 - **Raspberry Pi (PGenerator) connection after closing the PGenerator output dialog, and in the

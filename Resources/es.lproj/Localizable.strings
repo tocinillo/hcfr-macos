@@ -999,3 +999,4 @@
 "Go: measure the series of this view (⌘G)" = "Ir: medir la serie de esta vista (⌘G)";
 "Clear the measures of this view (⌘⌫)" = "Borrar las medidas de esta vista (⌘⌫)";
 "References (⌥⌘R)" = "Referencias (⌥⌘R)";
+"PGenerator did not answer the request for its output settings." = "PGenerator no respondió a la petición de sus ajustes de salida.";
