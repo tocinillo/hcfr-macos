@@ -1001,3 +1001,5 @@
 "References (⌥⌘R)" = "Referencias (⌥⌘R)";
 "PGenerator did not answer the request for its output settings." = "PGenerator no respondió a la petición de sus ajustes de salida.";
 "Waiting for PGenerator: it may be restarting its pattern renderer…" = "Esperando a PGenerator: puede estar reiniciando su generador de patrones…";
+"Gamut coverage: %@" = "Cobertura de gama: %@";
+"Share of DCI-P3 and BT.2020 covered by the measured red, green and blue. To see the panel's native gamut, measure the primaries of a wide container (BT.2020 / HDR10)." = "Parte de DCI-P3 y BT.2020 que cubren el rojo, verde y azul medidos. Para ver la gama nativa del panel, mide los primarios en un contenedor amplio (BT.2020 / HDR10).";

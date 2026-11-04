@@ -2,6 +2,12 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.34
+
+- **Gamut coverage.** Under the CIE diagram: the share of DCI-P3 and BT.2020 covered by the measured
+  red, green and blue, in CIE xy and CIE u'v'. To see the panel's native gamut, measure the primaries
+  of a wide container (BT.2020 / HDR10).
+
 ## 1.3.33
 
 - **Raspberry Pi: endless "The Raspberry Pi is not answering yet, trying again (n/4)…" and "Not

@@ -655,6 +655,12 @@ struct CIEChart: View {
             GeometryReader { geo in
                 if session.graphOptions.cieAB { LabChart(session: session) } else { chart(size: geo.size) }
             }
+            // Gamut coverage of the measured primaries (DCI-P3 and BT.2020, in xy and u'v')
+            if !compact, let s = GamutCoverage.summary(red: session.colorMeasurements[.red], green: session.colorMeasurements[.green],
+                                                       blue: session.colorMeasurements[.blue]) {
+                Text(tr("Gamut coverage: %@", s)).font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                    .help("Share of DCI-P3 and BT.2020 covered by the measured red, green and blue. To see the panel's native gamut, measure the primaries of a wide container (BT.2020 / HDR10).")
+            }
         }
     }
 
