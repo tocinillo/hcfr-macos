@@ -1203,6 +1203,12 @@ final class Session: ObservableObject {
 
     /// Sends a message built for the connected Pi; reconnects once if the connection was lost.
     func piSend(_ message: (PGeneratorClient) -> String) async throws {
+        // A pattern can take a while when PGenerator+ is (re)starting its renderer: say so
+        let slow = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(4))
+            if !Task.isCancelled { self.status = tr("Waiting for PGenerator: it may be restarting its pattern renderer…") }
+        }
+        defer { slow.cancel() }
         do {
             let c = try await piClient()
             try await c.send(message(c))

@@ -2,6 +2,18 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.33
+
+- **Raspberry Pi: endless "The Raspberry Pi is not answering yet, trying again (n/4)…" and "Not
+  connected to the Raspberry Pi" at the Wizard's "Measure now" (and after "Read from the Pi"), while
+  the Pi shows as connected and its web page still works.** PGenerator+ serves all its clients in a
+  single loop and, when its pattern renderer is not running, (re)starts it inside the pattern command
+  — up to four tries, which can take 10–20 s on some Pi / display combinations. The app waited only
+  5 s for the answer, then closed the connection and reconnected; the reconnection queued behind the
+  same restart and timed out too, so it looped forever. The app now waits up to 30 s for PGenerator's
+  answers (connecting included), keeps the connection, and shows "Waiting for PGenerator: it may be
+  restarting its pattern renderer…" while it waits.
+
 ## 1.3.32
 
 - **Raspberry Pi: "Error communicating with rPI — Not connected to the Raspberry Pi." in the Wizard

@@ -49,6 +49,12 @@ final class PGeneratorClient: @unchecked Sendable {
     static let discoveryPort: UInt16 = 1977
     static let commandPort: UInt16 = 85
     static let terminator: [UInt8] = [0x02, 0x0D]
+    /// How long an answer may take. PGenerator+ handles every client in one loop and, when its
+    /// pattern renderer is not running, (re)starts it inside the pattern command (up to four tries,
+    /// 10–20 s on some Pi / display combinations). With a short wait the app gave up, closed the
+    /// connection and reconnected, and the reconnection queued behind the same restart: an endless
+    /// "not answering, trying again" loop while the Pi itself (and its web page) stayed online.
+    static let answerTimeout: TimeInterval = 30
 
     let host: String
     /// Pi output resolution (CMD:GET_RESOLUTION), 1920×1080 until read (HCFR's default).
@@ -330,7 +336,7 @@ final class PGeneratorClient: @unchecked Sendable {
 
         // Resolution, "OK:1920x1080"
         // PGenerator+ may take several seconds to answer while its renderer (re)starts
-        let res = try exchange("CMD:GET_RESOLUTION", timeout: 12)
+        let res = try exchange("CMD:GET_RESOLUTION", timeout: Self.answerTimeout)
         let parts = res.split(separator: ":", maxSplits: 1).map(String.init)
         guard parts.first == "OK", parts.count == 2 else {
             throw PGeneratorError.communication("Failed to get rPi resolution (answer: \"\(res)\").")
@@ -344,7 +350,7 @@ final class PGeneratorClient: @unchecked Sendable {
     }
 
     /// Sends one message (+ 0x02 0x0D) and reads the answer up to its 0x02 0x0D.
-    fileprivate func exchange(_ message: String, timeout: TimeInterval = 5) throws -> String {
+    fileprivate func exchange(_ message: String, timeout: TimeInterval = PGeneratorClient.answerTimeout) throws -> String {
         guard fd >= 0 else { throw PGeneratorError.communication("Not connected to the Raspberry Pi.") }
         try drain()
         let out = Array(message.utf8) + Self.terminator

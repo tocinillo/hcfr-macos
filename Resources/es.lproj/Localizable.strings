@@ -1000,3 +1000,4 @@
 "Clear the measures of this view (⌘⌫)" = "Borrar las medidas de esta vista (⌘⌫)";
 "References (⌥⌘R)" = "Referencias (⌥⌘R)";
 "PGenerator did not answer the request for its output settings." = "PGenerator no respondió a la petición de sus ajustes de salida.";
+"Waiting for PGenerator: it may be restarting its pattern renderer…" = "Esperando a PGenerator: puede estar reiniciando su generador de patrones…";
