@@ -495,7 +495,7 @@ struct CIEPlane: Equatable {
 }
 
 /// Wavelength label of the background, in HCFR's 1400 × 1000 bitmap coordinates.
-private struct WavelengthLabel {
+struct WavelengthLabel {
     let nm: Int
     let lineFrom: CGPoint
     let lineTo: CGPoint
@@ -504,7 +504,7 @@ private struct WavelengthLabel {
 }
 
 @MainActor
-private enum CIEBackground {
+enum CIEBackground {
     static let bitmapSize = CGSize(width: 1400, height: 1000)
     private static var cache: [String: CGImage] = [:]
     private static var labelCache: [Bool: [WavelengthLabel]] = [:]

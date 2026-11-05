@@ -2,6 +2,15 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.38
+
+- **New PDF report, in the layout of calibration software (File → Create PDF Report…).** One A4 page
+  per measure: gray scale (gamma formula, average / maximum ΔE 2000, average CCT, minimum and maximum
+  luminance, total gamma; ΔE 2000 per level, RGB balance and EOTF charts) and color space (average /
+  maximum ΔE, gamut; ΔE 2000 per color and the CIE 1976 u'v' diagram with targets and readings), plus
+  the gamut coverage (BT.709, DCI-P3, BT.2020 in xy and u'v'). The classic HCFR report is still used
+  for Print.
+
 ## 1.3.37
 
 - **Gamut coverage: BT.709 too.** Under the CIE diagram the coverage of BT.709 is shown next to DCI-P3 and BT.2020; with an SDR reference DCI-P3 and BT.2020 show "--" (the primaries measured are the SDR space's).

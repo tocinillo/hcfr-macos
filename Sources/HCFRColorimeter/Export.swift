@@ -72,6 +72,13 @@ extension Session {
 extension Session {
     /// File → "Create PDF Report…" (HCFR's Export → Create PDF Report): the printed report as a PDF file.
     func exportPDFReport() {
+        // Calibration-software layout (CalReport): one page with the current measures
+        let page = CalReportPage(self, title: prefs.mode == .st2084 ? "HDR Measurements" : "SDR Measurements", device: projectName)
+        CalReport.save([page], name: projectName, session: self)
+    }
+
+    /// HCFR's classic report (tables), kept for printing.
+    func exportClassicPDFReport() {
         guard let pdf = Report.makePDF(self) else { errorMessage = "Could not create the report."; return }
         let panel = NSSavePanel()
         panel.title = "Create PDF Report"
