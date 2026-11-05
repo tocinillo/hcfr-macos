@@ -61,6 +61,8 @@
 #include "insttypes.h"
 #include "conv.h"
 #include "icoms.h"
+#include <signal.h>
+#include <unistd.h>
 #include "inst.h"
 #include "instappsup.h"
 #include "disptechs.h"
@@ -555,8 +557,21 @@ static int sim_command(const char *cmd, const char *line) {
 	return 0;
 }
 
+/* SIGTERM / SIGHUP / SIGINT (the app quitting or stopping a stuck helper): close the instrument so
+   the USB meter is released, instead of leaving it held until the Mac restarts. */
+static void on_signal(int sig) {
+	(void)sig;
+	if (g_it != NULL) { g_it->del(g_it); g_it = NULL; }
+	_exit(0);
+}
+
 int main(int argc, char *argv[]) {
 	char line[256];
+
+	signal(SIGTERM, on_signal);
+	signal(SIGHUP, on_signal);
+	signal(SIGINT, on_signal);
+	/* The app is gone (stdin closed) also ends the loop below and closes the instrument */
 
 	set_exe_path(argv[0]);
 	g_log->tag = "hcfr-meter";

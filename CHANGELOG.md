@@ -2,6 +2,15 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.36
+
+- **The colorimeter is no longer lost until the Mac restarts** ("Communications failure", "Unknown
+  instrument or not detected"). A meter helper left running after HCFR crashed or was force-quit kept
+  the USB meter open. Now orphaned helpers are ended before every search and connection; the helper
+  closes the meter when it is stopped (SIGTERM / SIGHUP / SIGINT), not only on a normal quit; a failed
+  connection is retried once and the error says where the meter is probably held (the other copy of
+  HCFR, a virtual machine, Calman, DisplayCAL, i1Profiler).
+
 ## 1.3.35
 
 - **Raspberry Pi without a display on HDMI: a clear message instead of "Not connected to the Raspberry

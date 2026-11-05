@@ -231,6 +231,56 @@ final class MeterHelper: @unchecked Sendable {
     deinit { stop() }
 }
 
+/// Other `hcfr-meter` helpers on this Mac. One whose app is gone (HCFR crashed or was force-quit)
+/// keeps the USB meter open, and every later search or connection fails ("Communications failure",
+/// "Unknown instrument or not detected") until the Mac restarts: those are ended. One that belongs to
+/// another running app (the other copy of HCFR) is reported, so the error can say where the meter is.
+enum MeterHelperGuard {
+    /// Ends orphaned helpers; returns the names of the other apps that have a helper running.
+    @discardableResult
+    static func cleanUp() -> [String] {
+        guard let out = run("/bin/ps", ["-axo", "pid=,ppid=,comm="]) else { return [] }
+        let me = getpid()
+        var owners: [String] = []
+        for line in out.split(separator: "\n") {
+            let f = line.split(separator: " ", maxSplits: 2, omittingEmptySubsequences: true)
+            guard f.count == 3, let pid = Int32(f[0]), let ppid = Int32(f[1]), f[2].hasSuffix("hcfr-meter"), ppid != me else { continue }
+            if ppid == 1 {
+                _ = Darwin.kill(pid, SIGTERM)
+                usleep(300_000)
+                _ = Darwin.kill(pid, SIGKILL)
+            } else if let p = run("/bin/ps", ["-o", "comm=", "-p", String(ppid)])?.trimmingCharacters(in: .whitespacesAndNewlines), !p.isEmpty {
+                // ".../HCFR for macOS with AutoCAL.app/Contents/MacOS/HCFRColorimeter" → the app name
+                let app = p.components(separatedBy: "/").first { $0.hasSuffix(".app") }.map { String($0.dropLast(4)) } ?? p
+                if !owners.contains(app) { owners.append(app) }
+            }
+        }
+        return owners
+    }
+
+    /// The error of a failed connection, with where the meter may be held.
+    static func explain(_ msg: String) -> String {
+        let owners = cleanUp()
+        guard !owners.isEmpty else {
+            return msg + "\n\n" + tr("If it keeps failing, unplug the meter and plug it in again. Another program may be holding it (a virtual machine such as VMware Fusion or Parallels, Calman, DisplayCAL or i1Profiler).")
+        }
+        return msg + "\n\n" + tr("The meter is probably open in “%@”: disconnect it there or close that app, then press Search again.", owners.joined(separator: ", "))
+    }
+
+    private static func run(_ path: String, _ args: [String]) -> String? {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: path)
+        p.arguments = args
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = FileHandle.nullDevice
+        do { try p.run() } catch { return nil }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        return String(decoding: data, as: UTF8.self)
+    }
+}
+
 let listTimeoutMessage = "The colorimeter search got no answer in 20 s. Another program may be holding the meter (a virtual machine such as VMware Fusion or Parallels, Calman, or another copy of HCFR): release it there, unplug and plug the meter in, and press Search again."
 
 final class ArgyllMeter {
@@ -273,6 +323,7 @@ final class ArgyllMeter {
     /// this app has open) is opened briefly to read its serial number.
     static func listPorts(identifyIfSeveral: Bool = true, knownSerials: [String: String] = [:],
                           skipIdentify: Set<String> = []) async throws -> [MeterPort] {
+        MeterHelperGuard.cleanUp()
         let helper = try MeterHelper()
         // The USB enumeration can block forever when another program holds the meter (a virtual
         // machine, Calman, another copy of HCFR): never leave the search hanging
@@ -315,12 +366,19 @@ final class ArgyllMeter {
 
     /// Opens the meter like HCFR for Windows: no forced mode; the Display (correction) is applied afterwards.
     static func open(port: MeterPort) async throws -> ArgyllMeter {
+        MeterHelperGuard.cleanUp()
         do {
             return try await openOnce(port: port)
-        } catch MeterError.failed(let msg) where msg.hasPrefix("Communication failed") {
-            // The device may still be held by a helper that is closing: try again once
+        } catch MeterError.failed(let msg) where msg.hasPrefix("Communication failed") || msg.hasPrefix("Unknown instrument")
+                                                || msg.hasPrefix("Initialisation failed") {
+            // The device may still be held by a helper that is closing (or an orphaned one, ended
+            // above): try again once, then say where the meter may be held
             try? await Task.sleep(nanoseconds: 1_500_000_000)
-            return try await openOnce(port: port)
+            do {
+                return try await openOnce(port: port)
+            } catch MeterError.failed(let again) {
+                throw MeterError.failed(MeterHelperGuard.explain(again))
+            }
         }
     }
 
