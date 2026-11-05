@@ -2,6 +2,10 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.37
+
+- **Gamut coverage: BT.709 too.** Under the CIE diagram the coverage of BT.709 is shown next to DCI-P3 and BT.2020; with an SDR reference DCI-P3 and BT.2020 show "--" (the primaries measured are the SDR space's).
+
 ## 1.3.36
 
 - **The colorimeter is no longer lost until the Mac restarts** ("Communications failure", "Unknown

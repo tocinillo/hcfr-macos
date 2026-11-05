@@ -13,11 +13,12 @@ import Foundation
 enum GamutCoverage {
     typealias P = (x: Double, y: Double)
 
+    static let bt709: [P] = [(0.640, 0.330), (0.300, 0.600), (0.150, 0.060)]
     static let dciP3: [P] = [(0.680, 0.320), (0.265, 0.690), (0.150, 0.060)]
     static let bt2020: [P] = [(0.708, 0.292), (0.170, 0.797), (0.131, 0.046)]
 
     struct Result {
-        var p3xy: Double, p3uv: Double, bt2020xy: Double, bt2020uv: Double
+        var bt709xy: Double, bt709uv: Double, p3xy: Double, p3uv: Double, bt2020xy: Double, bt2020uv: Double
     }
 
     static func uv(_ p: P) -> P {
@@ -79,14 +80,19 @@ enum GamutCoverage {
     static func result(red: XYZ?, green: XYZ?, blue: XYZ?) -> Result? {
         guard let r = red, let g = green, let b = blue, r.sum > 0, g.sum > 0, b.sum > 0 else { return nil }
         let m: [P] = [(r.x, r.y), (g.x, g.y), (b.x, b.y)]
-        return Result(p3xy: coverage(m, dciP3, uvPlane: false), p3uv: coverage(m, dciP3, uvPlane: true),
+        return Result(bt709xy: coverage(m, bt709, uvPlane: false), bt709uv: coverage(m, bt709, uvPlane: true),
+                      p3xy: coverage(m, dciP3, uvPlane: false), p3uv: coverage(m, dciP3, uvPlane: true),
                       bt2020xy: coverage(m, bt2020, uvPlane: false), bt2020uv: coverage(m, bt2020, uvPlane: true))
     }
 
-    /// "DCI-P3 98.1% xy · 99.0% u'v'   BT.2020 72.0% xy · 76.4% u'v'"
-    static func summary(red: XYZ?, green: XYZ?, blue: XYZ?) -> String? {
+    /// "BT.709 100.0% xy · 100.0% u'v'   DCI-P3 98.1% xy · …   BT.2020 72.0% xy · …". In SDR the
+    /// measured primaries are those of the SDR space, so DCI-P3 and BT.2020 are shown as "--".
+    static func summary(red: XYZ?, green: XYZ?, blue: XYZ?, sdr: Bool = false) -> String? {
         guard let c = result(red: red, green: green, blue: blue) else { return nil }
-        return String(format: "DCI-P3 %.1f%% xy · %.1f%% u'v'    BT.2020 %.1f%% xy · %.1f%% u'v'",
-                      c.p3xy * 100, c.p3uv * 100, c.bt2020xy * 100, c.bt2020uv * 100)
+        func pair(_ xy: Double, _ uv: Double) -> String {
+            sdr ? "-- xy · -- u'v'" : String(format: "%.1f%% xy · %.1f%% u'v'", xy * 100, uv * 100)
+        }
+        return String(format: "BT.709 %.1f%% xy · %.1f%% u'v'", c.bt709xy * 100, c.bt709uv * 100)
+            + "    DCI-P3 " + pair(c.p3xy, c.p3uv) + "    BT.2020 " + pair(c.bt2020xy, c.bt2020uv)
     }
 }
