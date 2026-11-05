@@ -61,20 +61,20 @@ struct CalReportPage {
             }
             return Gray(level: r.level, dE: r.deltaE, balance: r.balance, eotf: enc(r.xyz?.Y), eotfTarget: enc(r.targetY))
         }
-        gamut = (hdr ? "BT.2020 HDR" : "\(s.white.rawValue), \(s.standard.shortName)")
+        gamut = "\(s.white.rawValue), \(s.standard.shortName)" + (hdr ? " · HDR10" : "")
         white = (s.ref.white.x, s.ref.white.y)
-        // Colors: primaries / secondaries when measured, else the Color Checker
-        let pr = s.patchResults.filter { $0.xyz != nil }
+        // Colors: the Color Checker when measured (pre / post measures), else the primaries /
+        // secondaries. The R, G, B read only for the gamut coverage are not a color check.
         var list: [Patch] = []
-        if pr.count > 1 {
+        for r in s.seriesResults(.colorChecker) where r.xyz != nil {
+            list.append(Patch(id: r.index, name: r.name, dE: r.deltaE, swatch: Self.swatch(r.referenceRGB.map { Double($0) / 255 }),
+                              measured: r.xyz.map { ($0.x, $0.y) }, target: r.reference.map { ($0.x, $0.y) }))
+        }
+        let pr = s.patchResults.filter { $0.xyz != nil }
+        if list.isEmpty && pr.count > 1 {
             for (i, p) in pr.enumerated() {
                 list.append(Patch(id: i, name: tr(p.patch.rawValue), dE: p.deltaE, swatch: Self.swatch(p.patch.rgb),
                                   measured: p.xyz.map { ($0.x, $0.y) }, target: (p.reference.x, p.reference.y)))
-            }
-        } else {
-            for r in s.seriesResults(.colorChecker) where r.xyz != nil {
-                list.append(Patch(id: r.index, name: r.name, dE: r.deltaE, swatch: Self.swatch(r.referenceRGB.map { Double($0) / 255 }),
-                                  measured: r.xyz.map { ($0.x, $0.y) }, target: r.reference.map { ($0.x, $0.y) }))
             }
         }
         patches = list

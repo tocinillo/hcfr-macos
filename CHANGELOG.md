@@ -2,6 +2,14 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.39
+
+- **Calibration report: the Color Checker.** The Color Space page shows the 24 colors of the Color Checker
+  when they were measured; the red, green and blue read only for the gamut coverage no longer replace
+  them. The gamut line names the real target (e.g. "UHDTV P3 in Rec2020 · HDR10").
+- **Translations:** the "Save the current measurements?" dialog when closing (and the other dialogs)
+  are now in Spanish.
+
 ## 1.3.38
 
 - **New PDF report, in the layout of calibration software (File → Create PDF Report…).** One A4 page

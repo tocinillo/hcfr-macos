@@ -90,12 +90,48 @@ enum MessageRules {
 
     static let rules: [(NSRegularExpression, String)] = {
         let column = ["es": 0, "de": 1, "fr": 2, "it": 3][language ?? "es"] ?? 0
-        return table.compactMap { row in
+        return ((column == 0 ? esOnly : []) + table).compactMap { row in
             guard let re = try? NSRegularExpression(pattern: "^" + row.0 + "$") else { return nil }
             let t = column == 0 ? row.1 : (extra[row.0]?[column - 1] ?? row.1)
             return (re, t)
         }
     }()
+
+    /// Spanish only (the other languages keep the English text): AutoCAL status lines and notes.
+    static let esOnly: [(String, String)] = [
+        ("Measuring (.+) \\(gamut coverage\\)…", "Midiendo $1 (cobertura de gama)…"),
+        ("AutoCAL gamma (.+): (.+)…", "AutoCAL gamma $1: $2…"),
+        ("AutoCAL 2-point: (.+) at (.+)…", "AutoCAL 2 puntos: $1 al $2…"),
+        ("AutoCAL multipoint: (.+)…", "AutoCAL multipunto: $1…"),
+        ("AutoCAL 20-point: (.+)…", "AutoCAL 20 puntos: $1…"),
+        ("AutoCAL color space: (.+)…", "AutoCAL espacio de color: $1…"),
+        ("EOTF: (.+)…", "EOTF: $1…"),
+        ("LG 1D LUT: (.+), black and white…", "LUT 1D LG: $1, negro y blanco…"),
+        ("LG 1D LUT: white, iteration (\\d+)…", "LUT 1D LG: blanco, iteración $1…"),
+        ("LG 1D LUT: curve at (.+), iteration (\\d+)…", "LUT 1D LG: curva al $1, iteración $2…"),
+        ("LG 1D LUT: (.+), fine step (\\d+)…", "LUT 1D LG: $1, paso fino $2…"),
+        ("LG 1D LUT: (.+), step (\\d+)…", "LUT 1D LG: $1, paso $2…"),
+        ("LG 1D LUT: (.+), (.+)…", "LUT 1D LG: $1, $2…"),
+        ("LG 3D LUT \\((.+)\\): checking (.+)…", "LUT 3D LG ($1): comprobando $2…"),
+        ("LG 3D LUT: checking (.+)…", "LUT 3D LG: comprobando $1…"),
+        ("LG Lightning LUT: profiling (.+)…", "Lightning LUT LG: perfilando $1…"),
+        ("LG 3D LUT: (Red|Green|Blue|Cyan|Magenta|Yellow)…", "LUT 3D LG: $1…"),
+        ("Dolby Vision: (Red|Green|Blue|Cyan|Magenta|Yellow|White)…", "Dolby Vision: $1…"),
+        ("Gamma (.+) ([+-]\\d+): luminance error (.+) %", "Gamma $1 $2: error de luminancia $3 %"),
+        ("Gamma set to (.+) ([+-]\\d+) \\(luminance error (.+) %\\)\\.", "Gamma ajustada a $1 $2 (error de luminancia $3 %)."),
+        ("Gain: (.+)", "Ganancia: $1"),
+        ("(Red|Green|Blue|Cyan|Magenta|Yellow|White) (\\d+%): (.+)", "$1 $2: $3"),
+        ("LG 1D LUT before: worst ΔE (.+), average (.+)", "LUT 1D LG antes: ΔE peor $1, media $2"),
+        ("LG 1D LUT white: ΔE (.+) \\(calibration mode\\)", "LUT 1D LG blanco: ΔE $1 (modo calibración)"),
+        ("LG 1D LUT curve (.+): ΔE (.+)", "LUT 1D LG curva $1: ΔE $2"),
+        ("LG 1D LUT (.+): calibration mode ΔE (.+), with the TV's processing ΔE (.+)", "LUT 1D LG $1: ΔE $2 en modo calibración, ΔE $3 con el procesado de la tele"),
+        ("LG 1D LUT (.+): ΔE (.+) \\(calibration mode\\)", "LUT 1D LG $1: ΔE $2 (modo calibración)"),
+        ("LG 1D LUT: calibration mode average ΔE (.+); with the TV's processing worst (.+), average (.+)", "LUT 1D LG: ΔE medio $1 en modo calibración; con el procesado de la tele peor $2, media $3"),
+        ("LG 3D LUT matrix: (.+)", "Matriz de la LUT 3D LG: $1"),
+        ("LG (Matrix|Lightning) LUT: average ΔE (.+) \\(calibration mode\\)", "$1 LUT LG: ΔE medio $2 (modo calibración)"),
+        ("LG 3D LUT \\((.+)\\): average ΔE (.+) with the TV's processing \\(before (.+)\\)", "LUT 3D LG ($1): ΔE medio $2 con el procesado de la tele (antes $3)"),
+        ("Dolby Vision: white (.+), black (.+)\\.", "Dolby Vision: blanco $1, negro $2."),
+    ]
 
     // English pattern → Spanish text with $1, $2… (German, French and Italian in `extra`)
     static let table: [(String, String)] = [

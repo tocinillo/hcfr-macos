@@ -261,10 +261,10 @@ extension Session {
     private func confirmClear(_ views: [MeasureView], what: String) -> Bool {
         guard views.contains(where: { !(seriesMeasurements[$0]?.isEmpty ?? true) }) else { return true }
         let alert = NSAlert()
-        alert.messageText = "Clear the measurements?"
-        alert.informativeText = "Changing \(what) clears the \(views.count > 1 ? "saturation" : views[0].rawValue.lowercased()) measurements."
-        alert.addButton(withTitle: "Change and clear")
-        alert.addButton(withTitle: "Cancel")
+        alert.messageText = tr("Clear the measurements?")
+        alert.informativeText = tr("Changing %@ clears the %@ measurements.", tr(what), tr(views.count > 1 ? "saturation" : views[0].rawValue.lowercased()))
+        alert.addButton(withTitle: tr("Change and clear"))
+        alert.addButton(withTitle: tr("Cancel"))
         guard alert.runModal() == .alertFirstButtonReturn else { return false }
         isDirty = true
         return true

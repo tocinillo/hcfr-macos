@@ -269,13 +269,13 @@ extension Session {
         }
         list = list.filter { $0.values.count == first.values.count && $0.start == first.start && $0.end == first.end }
         let alert = NSAlert()
-        alert.messageText = "Build spectral sample (CCSS)"
-        alert.informativeText = "Name of the display (it will appear in the colorimeter's Display list):"
+        alert.messageText = tr("Build spectral sample (CCSS)")
+        alert.informativeText = tr("Name of the display (it will appear in the colorimeter's Display list):")
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
         field.stringValue = correction?.name.isEmpty == false ? "My display" : "My display"
         alert.accessoryView = field
-        alert.addButton(withTitle: "Create")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: tr("Create"))
+        alert.addButton(withTitle: tr("Cancel"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let name = field.stringValue.trimmingCharacters(in: .whitespaces).isEmpty ? "My display" : field.stringValue
         let dir = Self.userCorrectionsDir

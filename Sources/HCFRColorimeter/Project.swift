@@ -338,11 +338,11 @@ extension Session {
     func confirmDiscardChanges() -> Bool {
         guard isDirty, hasMeasurements else { return true }
         let alert = NSAlert()
-        alert.messageText = "Save the current measurements?"
-        alert.informativeText = "If you don't save, the current measurements will be lost."
-        alert.addButton(withTitle: "Save")
-        alert.addButton(withTitle: "Don't Save")
-        alert.addButton(withTitle: "Cancel")
+        alert.messageText = tr("Save the current measurements?")
+        alert.informativeText = tr("If you don't save, the current measurements will be lost.")
+        alert.addButton(withTitle: tr("Save"))
+        alert.addButton(withTitle: tr("Don't Save"))
+        alert.addButton(withTitle: tr("Cancel"))
         switch alert.runModal() {
         case .alertFirstButtonReturn:
             saveProject()
