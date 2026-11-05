@@ -20,6 +20,8 @@ enum PGeneratorError: LocalizedError {
     case badAddress(String)
     case connectFailed(String, String)
     case communication(String)
+    /// Connected to PGenerator, but its pattern renderer isn't running: the Pi doesn't see a display.
+    case noDisplay(String)
 
     var errorDescription: String? {
         switch self {
@@ -34,6 +36,8 @@ enum PGeneratorError: LocalizedError {
             return "Error connecting with rPI: \(host)\n\n\(why)"
         case .communication(let why):
             return "Error communicating with rPI\n\n\(why)"
+        case .noDisplay(let host):
+            return tr("The Raspberry Pi at %@ is connected, but PGenerator can't show patterns: its pattern renderer is not running.\n\nThis almost always means the Pi doesn't detect a display on HDMI. Check that:\n• the cable is in the Pi's HDMI 0 port (next to the USB-C power connector);\n• the display chain (AV receiver, video processor, TV or projector) is on and on the Pi's input before the Pi starts — then reboot the Pi;\n• it works connected directly to the TV, without receiver or processor in between.\n\nThe HDMI status in PGenerator's web page must show a connected display.", host)
         }
     }
 }
@@ -264,6 +268,16 @@ final class PGeneratorClient: @unchecked Sendable {
                 c.resume(returning: answer)
             }
         }
+    }
+
+    /// Whether PGenerator's pattern renderer is running (PGENERATORISEXECUTED: "Pid …" or "Not
+    /// executed"), on its own connection; nil when the Pi doesn't answer. Without a display on HDMI
+    /// the renderer can't start, and every pattern then fails while the Pi still answers.
+    static func rendererRunning(_ host: String, timeout: TimeInterval = 20) async -> Bool? {
+        guard let a = await query(host, "PGENERATORISEXECUTED:", timeout: timeout) else { return nil }
+        if a.localizedCaseInsensitiveContains("not executed") { return false }
+        if a.localizedCaseInsensitiveContains("pid") { return true }
+        return nil
     }
 
     /// Says goodbye ("QUIT", as RB8PG_close) and closes the connection. Does not wait.

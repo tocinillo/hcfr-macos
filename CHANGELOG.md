@@ -2,6 +2,16 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.35
+
+- **Raspberry Pi without a display on HDMI: a clear message instead of "Not connected to the Raspberry
+  Pi".** When the Pi doesn't detect a display (cable in the wrong HDMI port, a receiver or video
+  processor in the chain that doesn't pass hot-plug, the display chain off when the Pi started),
+  PGenerator still answers on the network — so HCFR showed it as connected — but its pattern renderer
+  can't start and every pattern fails. When a pattern gets no answer, HCFR now asks PGenerator whether
+  its renderer is running (PGENERATORISEXECUTED); if not, it says the Pi has no display on HDMI, lists
+  what to check, and shows "no display on HDMI" next to the Pi in the Generator menu.
+
 ## 1.3.34
 
 - **Gamut coverage.** Under the CIE diagram: the share of DCI-P3 and BT.2020 covered by the measured

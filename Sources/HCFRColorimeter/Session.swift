@@ -1213,9 +1213,24 @@ final class Session: ObservableObject {
             let c = try await piClient()
             try await c.send(message(c))
         } catch PGeneratorError.communication {
+            // No answer to a pattern: if PGenerator's renderer isn't running, the Pi has no display
+            // on HDMI and reconnecting can't help — say so instead of "Not connected"
+            let host = pi?.host ?? piAddress
+            if !host.isEmpty, await PGeneratorClient.rendererRunning(host) == false {
+                piStatus = tr("%@ · no display on HDMI", host)
+                throw PGeneratorError.noDisplay(host)
+            }
             dropPi()
             let c = try await piClient()
-            try await c.send(message(c))
+            do {
+                try await c.send(message(c))
+            } catch PGeneratorError.communication {
+                if await PGeneratorClient.rendererRunning(c.host) == false {
+                    piStatus = tr("%@ · no display on HDMI", c.host)
+                    throw PGeneratorError.noDisplay(c.host)
+                }
+                throw PGeneratorError.communication(tr("Not connected to the Raspberry Pi."))
+            }
         }
     }
 
