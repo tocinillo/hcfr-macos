@@ -1209,7 +1209,7 @@ final class Session: ObservableObject {
     /// Sends a patch to the Raspberry Pi; if the connection was lost (Pi restarted…), reconnects once.
     private func piShow(levels: [Double], background: [Double] = [0, 0, 0]) async throws {
         let area = patternArea
-        if (piCurrentOutput ?? piOutput).bitDepth == 10 {
+        if (piCurrentOutput ?? piOutput).bitDepth >= 10 {
             // 10-bit codes (video 64–940 or full 0–1023); PGenerator takes 10-bit backgrounds only in RGB
             func code10(_ v: Double) -> Int {
                 videoLevels == .video ? Int((64 + v * 876).rounded()) : Int((v * 1023).rounded())
@@ -1311,6 +1311,7 @@ final class Session: ObservableObject {
                 piStatus = "\(c.host) · \(c.width)×\(c.height) · \(o.summary)"
             }
             status = "Raspberry Pi connected at \(c.host) (\(c.width)×\(c.height))"
+            checkPiInterlaced()
             return c
         } catch {
             piStatus = nil

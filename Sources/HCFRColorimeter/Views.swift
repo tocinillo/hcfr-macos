@@ -311,7 +311,7 @@ private struct GeneratorMenu: View {
                     } else {
                         Button("Connect to Raspberry Pi now") { session.connectPi() }
                     }
-                    Button("PGenerator output (SDR / HDR10, color)…") { session.editingPiOutput = true }
+                    Button("PGenerator output (resolution, signal, color, HDR)…") { session.editingPiOutput = true }
                 }
                 Divider()
                 Button(madVRAddressTitle) {
@@ -1530,58 +1530,81 @@ struct PiOutputSheet: View {
             if let now = session.piCurrentOutput {
                 Text(tr("Now: ") + now.summary).font(.callout).foregroundStyle(.secondary)
             }
-            Toggle("Choose SDR or HDR10 automatically from the reference (Preferences → References)", isOn: $session.piAutoMode)
+            Toggle("Choose SDR, HDR10 or HLG automatically from the reference (Preferences → References)", isOn: $session.piAutoMode)
             Form {
-                Picker("Mode", selection: $session.piOutput.hdr) {
-                    Text("SDR").tag(false)
-                    Text("HDR10 (PQ)").tag(true)
-                }
-                .pickerStyle(.segmented)
-                .disabled(session.piAutoMode)
-                Picker("Color format", selection: $session.piOutput.colorFormat) {
-                    ForEach(0..<3, id: \.self) { Text(PiOutput.formatNames[$0]).tag($0) }
-                }
-                Picker("Bit depth", selection: $session.piOutput.bitDepth) {
-                    Text("8 bits").tag(8)
-                    Text("10 bits").tag(10)
-                }
-                .pickerStyle(.segmented)
-                Picker("Range", selection: $session.piOutput.limited) {
-                    Text("Limited (16–235)").tag(true)
-                    Text("Full (0–255)").tag(false)
-                }
-                .pickerStyle(.segmented)
-                .onChange(of: session.piOutput.limited) { session.coordinateLevels(withLimited: $0) }
-                if !session.piModes.isEmpty {
-                    Picker("Resolution", selection: Binding(
-                        get: { session.piCurrentMode },
-                        set: { session.setPiMode($0) })) {
-                        if !session.piModes.contains(where: { $0.id == session.piCurrentMode }) {
-                            Text("Current").tag(session.piCurrentMode)
+                Section("Display settings") {
+                    HStack {
+                        Picker("Resolution", selection: Binding(
+                            get: { session.piCurrentMode },
+                            set: { session.setPiMode($0) })) {
+                            if !session.piModes.contains(where: { $0.id == session.piCurrentMode }) {
+                                Text(session.piModes.isEmpty ? "Not read yet" : "Current").tag(session.piCurrentMode)
+                            }
+                            ForEach(session.piModes) { Text($0.label).tag($0.id) }
                         }
-                        ForEach(session.piModes) { Text($0.label).tag($0.id) }
+                        .disabled(session.piApplying || session.activity != .idle || session.piModes.isEmpty)
+                        Button { session.readPiModes() } label: { Image(systemName: "arrow.clockwise") }
+                            .help("Read the resolutions of the Pi")
                     }
-                    .disabled(session.piApplying || session.activity != .idle)
+                    if let m = session.piModes.first(where: { $0.id == session.piCurrentMode }), m.interlaced {
+                        Label("Interlaced mode: the patterns look squashed and off-center. Choose a progressive resolution.", systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption).foregroundStyle(.orange)
+                    }
+                    Picker("Signal mode", selection: $session.piOutput.signal) {
+                        ForEach(0..<4, id: \.self) { Text(PiOutput.signalNames[$0]).tag($0) }
+                    }
+                    .disabled(session.piAutoMode)
+                    if session.piOutput.signal == 3 {
+                        Picker("Dolby Vision transport", selection: $session.piOutput.dvTransport) {
+                            Text("Standard").tag(0)
+                            Text("Low latency (LLDV)").tag(1)
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                    Picker("Bit depth", selection: $session.piOutput.bitDepth) {
+                        Text("8-bit").tag(8)
+                        Text("10-bit").tag(10)
+                        Text("12-bit").tag(12)
+                    }
+                    .pickerStyle(.segmented)
+                    Picker("Color format", selection: $session.piOutput.colorFormat) {
+                        ForEach(0..<3, id: \.self) { Text(PiOutput.formatNames[$0]).tag($0) }
+                    }
+                    Picker("Colorimetry", selection: $session.piOutput.colorimetry) {
+                        Text("Automatic").tag(-1)
+                        Text("Default").tag(0)
+                        Text("BT.709").tag(2)
+                        Text("BT.2020").tag(9)
+                    }
+                    Picker("Range", selection: $session.piOutput.range) {
+                        Text("Default").tag(0)
+                        Text("Limited (16–235)").tag(1)
+                        Text("Full (0–255)").tag(2)
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: session.piOutput.range) { session.coordinateLevels(withLimited: $0 != 2) }
                 }
-                Picker("Colorimetry", selection: $session.piOutput.colorimetry) {
-                    Text("Automatic").tag(-1)
-                    Text("Default").tag(0)
-                    Text("BT.709").tag(2)
-                    Text("BT.2020").tag(9)
-                }
-                Section("HDR10 metadata") {
-                    Picker("Mastering primaries", selection: $session.piOutput.primaries) {
+                Section("HDR metadata") {
+                    Picker("EOTF", selection: $session.piOutput.eotf) {
+                        Text("Automatic").tag(-1)
+                        ForEach(0..<4, id: \.self) { Text(PiOutput.eotfNames[$0]).tag($0) }
+                    }
+                    Picker("Primaries", selection: $session.piOutput.primaries) {
                         ForEach(0..<PiOutput.primariesNames.count, id: \.self) { Text(PiOutput.primariesNames[$0]).tag($0) }
                     }
                     HStack {
-                        number("Max. mastering luminance", $session.piOutput.maxLuma, "cd/m²")
-                        number("Min. (0.0001 cd/m²)", $session.piOutput.minLuma, "")
+                        number("Max luma", $session.piOutput.maxLuma, "cd/m²")
+                        HStack(spacing: 4) {
+                            TextField(tr("Min luma"), value: $session.piOutput.minLumaNits, format: .number.precision(.fractionLength(0...4))).frame(width: 70)
+                            Text("cd/m²").foregroundStyle(.secondary)
+                        }
                     }
                     HStack {
                         number("MaxCLL", $session.piOutput.maxCLL, "cd/m²")
                         number("MaxFALL", $session.piOutput.maxFALL, "cd/m²")
                     }
                 }
+                .disabled(session.piOutput.signal == 0)
             }
             .formStyle(.grouped)
             Text("Range and the Generator-menu Levels: only one place may limit the range. PC levels go with Full on both. For a limited-range display set exactly one of the two to Limited — PGenerator Limited (then send PC/Full patterns) or Video patterns (then PGenerator Full) — never both, or the signal is scaled twice. In HDR10 the patterns are sent in 10 bits. Applying restarts PGenerator (a few seconds).")
@@ -1605,7 +1628,7 @@ struct PiOutputSheet: View {
             }
         }
         .padding(20)
-        .frame(width: 520)
+        .frame(width: 560)
         .alert("Reboot the Raspberry Pi?", isPresented: $session.confirmRebootPi) {
             Button("Reboot", role: .destructive) { session.rebootPi() }
             Button("Cancel", role: .cancel) {}

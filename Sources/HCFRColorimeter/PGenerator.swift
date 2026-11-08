@@ -487,16 +487,20 @@ private extension Array where Element == UInt8 {
 struct PiMode: Identifiable, Equatable { let id: Int; let label: String }
 
 struct PiOutput: Codable, Equatable {
-    /// HDR10 (PQ, with HDR metadata) instead of SDR.
-    var hdr = false
+    /// Signal mode, as PGenerator+'s Output page: 0 SDR, 1 HDR10 (PQ), 2 HLG, 3 Dolby Vision.
+    var signal = 0
     /// 0 RGB, 1 YCbCr 4:4:4, 2 YCbCr 4:2:2.
     var colorFormat = 0
-    /// 8 or 10 bits per channel.
+    /// 8, 10 or 12 bits per channel.
     var bitDepth = 8
-    /// RGB quantization range: limited (16–235) or full (0–255).
-    var limited = true
-    /// HDMI colorimetry: 0 default, 2 BT.709, 9 BT.2020 (−1 = automatic from SDR / HDR).
+    /// Quantization range: 0 default, 1 limited (16–235), 2 full (0–255).
+    var range = 1
+    /// HDMI colorimetry: 0 default, 2 BT.709, 9 BT.2020 (−1 = automatic from the signal mode).
     var colorimetry = -1
+    /// EOTF of the HDR infoframe: 0 SDR gamma, 1 HDR gamma, 2 ST.2084 (PQ), 3 HLG (−1 = from the signal mode).
+    var eotf = -1
+    /// Dolby Vision transport: 0 standard, 1 low latency (LLDV).
+    var dvTransport = 1
     /// HDR metadata: mastering display primaries (0 Rec.709, 1 Rec.2020, 2 P3 D65, 3 DCI-P3, 4 P3 D60),
     /// luminances in cd/m² (min in 0.0001 cd/m²), MaxCLL and MaxFALL.
     var primaries = 2
@@ -506,71 +510,146 @@ struct PiOutput: Codable, Equatable {
     var maxFALL = 400
 
     static let formatNames = ["RGB", "YCbCr 4:4:4", "YCbCr 4:2:2"]
+    static let signalNames = ["SDR", "HDR10 (PQ)", "HLG", "Dolby Vision"]
+    static let eotfNames = ["SDR gamma", "HDR gamma", "ST.2084 (PQ)", "HLG"]
     static let primariesNames = ["Rec.709", "Rec.2020 / D65", "P3 / D65", "DCI-P3 (Theater)", "P3 D60 (ACES Cinema)"]
 
-    var effectiveColorimetry: Int { colorimetry >= 0 ? colorimetry : (hdr ? 9 : 2) }
+    init() {}
+
+    /// HDR10 (PQ). Setting it chooses HDR10 or SDR (the automatic mode and older settings use it).
+    var hdr: Bool {
+        get { signal == 1 }
+        set { signal = newValue ? 1 : 0 }
+    }
+    /// HDR10, HLG or Dolby Vision: the HDR metadata is sent.
+    var anyHDR: Bool { signal != 0 }
+    var limited: Bool {
+        get { range != 2 }
+        set { range = newValue ? 1 : 2 }
+    }
+    /// Minimum mastering luminance in cd/m².
+    var minLumaNits: Double {
+        get { Double(minLuma) / 10000 }
+        set { minLuma = Int((max(newValue, 0) * 10000).rounded()) }
+    }
+
+    var effectiveColorimetry: Int { colorimetry >= 0 ? colorimetry : (signal == 0 ? 2 : 9) }
+    var autoEOTF: Int { [0, 2, 3, 2][min(max(signal, 0), 3)] }
+    var effectiveEOTF: Int { eotf >= 0 ? eotf : autoEOTF }
 
     /// Short description, e.g. "HDR10 · RGB · 10-bit · Full".
     var summary: String {
-        [hdr ? "HDR10" : "SDR", Self.formatNames[min(max(colorFormat, 0), 2)], "\(bitDepth)-bit",
-         limited ? "Limited" : "Full"].joined(separator: " · ")
+        [["SDR", "HDR10", "HLG", signal == 3 && dvTransport == 1 ? "Dolby Vision LL" : "Dolby Vision"][min(max(signal, 0), 3)],
+         Self.formatNames[min(max(colorFormat, 0), 2)], "\(bitDepth)-bit",
+         ["Default range", "Limited", "Full"][min(max(range, 0), 2)]].joined(separator: " · ")
     }
 
-    /// The SET commands for this output (no Dolby Vision, no HLG: SDR or HDR10 only).
+    /// The SET commands for this output.
     var setCommands: [String] {
-        var c: [(String, Int)] = [
-            ("IS_SDR", hdr ? 0 : 1), ("IS_HDR", hdr ? 1 : 0), ("IS_LL_DOVI", 0), ("IS_STD_DOVI", 0),
-            ("DV_STATUS", 0), ("DV_INTERFACE", 0),
-            ("COLOR_FORMAT", colorFormat), ("MAX_BPC", bitDepth), ("RGB_QUANT_RANGE", limited ? 1 : 2),
-            ("COLORIMETRY", effectiveColorimetry),
-        ]
-        if hdr {
-            c += [("EOTF", 2), ("PRIMARIES", primaries), ("MAX_LUMA", maxLuma), ("MIN_LUMA", minLuma),
-                  ("MAX_CLL", maxCLL), ("MAX_FALL", maxFALL)]
-        } else {
-            c += [("EOTF", 0)]
+        var c: [(String, String)] = []
+        func add(_ k: String, _ v: Int) { c.append((k, "\(v)")) }
+        switch signal {
+        case 3:
+            add("IS_SDR", 0); add("IS_HDR", 0)
+            add("IS_STD_DOVI", dvTransport == 0 ? 1 : 0); add("IS_LL_DOVI", dvTransport == 1 ? 1 : 0); add("DV_STATUS", 1)
+        default:
+            add("IS_SDR", signal == 0 ? 1 : 0); add("IS_HDR", signal == 0 ? 0 : 1)
+            add("IS_LL_DOVI", 0); add("IS_STD_DOVI", 0); add("DV_STATUS", 0); add("DV_INTERFACE", 0)
+        }
+        add("COLOR_FORMAT", colorFormat); add("MAX_BPC", bitDepth); add("RGB_QUANT_RANGE", range)
+        add("COLORIMETRY", effectiveColorimetry); add("EOTF", effectiveEOTF)
+        if anyHDR {
+            add("PRIMARIES", primaries); add("MAX_LUMA", maxLuma); add("MIN_LUMA", minLuma)
+            add("MAX_CLL", maxCLL); add("MAX_FALL", maxFALL)
         }
         return c.map { "CMD:SET_PGENERATOR_CONF_\($0.0):\($0.1)" }
     }
 
-    static let readKeys = ["IS_HDR", "COLOR_FORMAT", "MAX_BPC", "RGB_QUANT_RANGE", "COLORIMETRY", "EOTF", "PRIMARIES",
-                           "MAX_LUMA", "MIN_LUMA", "MAX_CLL", "MAX_FALL"]
+    static let readKeys = ["IS_HDR", "IS_LL_DOVI", "IS_STD_DOVI", "DV_STATUS", "COLOR_FORMAT", "MAX_BPC", "RGB_QUANT_RANGE",
+                           "COLORIMETRY", "EOTF", "PRIMARIES", "MAX_LUMA", "MIN_LUMA", "MAX_CLL", "MAX_FALL"]
     static var readCommand: String { "CMD:MULTIPLE:" + readKeys.map { "GET_PGENERATOR_CONF_\($0)" }.joined(separator: ":") }
 
     /// Parses the answer to `readCommand` ("OK:" then one "GET_PGENERATOR_CONF_<KEY>:<value>" per line).
     static func parse(_ answer: String) -> PiOutput? {
-        var v: [String: Int] = [:]
+        var raw: [String: String] = [:]
         for line in answer.split(whereSeparator: \.isNewline) {
             for key in readKeys {
                 let tag = "GET_PGENERATOR_CONF_\(key):"
-                if let r = line.range(of: tag) { v[key] = Int(line[r.upperBound...].trimmingCharacters(in: .whitespaces)) }
+                if let r = line.range(of: tag) { raw[key] = line[r.upperBound...].trimmingCharacters(in: .whitespaces) }
             }
         }
-        guard !v.isEmpty else { return nil }
+        let v = raw.compactMapValues { Int($0) }
+        guard !raw.isEmpty else { return nil }
         var o = PiOutput()
-        o.hdr = (v["IS_HDR"] ?? 0) == 1 && (v["EOTF"] ?? 2) == 2
+        if v["DV_STATUS"] == 1 || v["IS_LL_DOVI"] == 1 || v["IS_STD_DOVI"] == 1 {
+            o.signal = 3
+            o.dvTransport = v["IS_STD_DOVI"] == 1 ? 0 : 1
+        } else if v["IS_HDR"] == 1 {
+            o.signal = v["EOTF"] == 3 ? 2 : 1
+        }
         o.colorFormat = v["COLOR_FORMAT"] ?? 0
-        o.bitDepth = v["MAX_BPC"] == 10 ? 10 : 8
-        o.limited = (v["RGB_QUANT_RANGE"] ?? 1) != 2
+        o.bitDepth = [8, 10, 12].contains(v["MAX_BPC"] ?? 8) ? (v["MAX_BPC"] ?? 8) : 8
+        o.range = min(max(v["RGB_QUANT_RANGE"] ?? 1, 0), 2)
         o.colorimetry = v["COLORIMETRY"] ?? -1
-        if o.colorimetry == o.effectiveColorimetryAuto { o.colorimetry = -1 }
+        if o.colorimetry == (o.signal == 0 ? 2 : 9) { o.colorimetry = -1 }
+        o.eotf = v["EOTF"] ?? -1
+        if o.eotf == o.autoEOTF { o.eotf = -1 }
         o.primaries = v["PRIMARIES"] ?? 2
-        o.maxLuma = v["MAX_LUMA"] ?? 1000
-        o.minLuma = v["MIN_LUMA"] ?? 50
+        o.maxLuma = v["MAX_LUMA"] ?? Int(Double(raw["MAX_LUMA"] ?? "") ?? 1000)
+        // PGenerator 1.x answers the minimum in 0.0001 cd/m² units, PGenerator+ in cd/m² ("0.005")
+        if let m = raw["MIN_LUMA"] {
+            if m.contains(".") || m.contains(",") { o.minLumaNits = Double(m.replacingOccurrences(of: ",", with: ".")) ?? 0.005 }
+            else { o.minLuma = Int(m) ?? 50 }
+        }
         o.maxCLL = v["MAX_CLL"] ?? 1000
         o.maxFALL = v["MAX_FALL"] ?? 400
         return o
     }
 
-    private var effectiveColorimetryAuto: Int { hdr ? 9 : 2 }
-
-    /// Same output on the HDMI link (HDR metadata only counts in HDR10).
+    /// Same output on the HDMI link (HDR metadata only counts in HDR).
     func matches(_ o: PiOutput) -> Bool {
-        guard hdr == o.hdr, colorFormat == o.colorFormat, bitDepth == o.bitDepth, limited == o.limited,
-              effectiveColorimetry == o.effectiveColorimetry else { return false }
-        return !hdr || (primaries == o.primaries && maxLuma == o.maxLuma && minLuma == o.minLuma
-                        && maxCLL == o.maxCLL && maxFALL == o.maxFALL)
+        guard signal == o.signal, colorFormat == o.colorFormat, bitDepth == o.bitDepth, range == o.range,
+              effectiveColorimetry == o.effectiveColorimetry, effectiveEOTF == o.effectiveEOTF,
+              signal != 3 || dvTransport == o.dvTransport else { return false }
+        return !anyHDR || (primaries == o.primaries && maxLuma == o.maxLuma && minLuma == o.minLuma
+                           && maxCLL == o.maxCLL && maxFALL == o.maxFALL)
     }
+
+    // Settings saved by older versions ("hdr" and "limited" instead of "signal" and "range")
+    private enum CodingKeys: String, CodingKey {
+        case signal, colorFormat, bitDepth, range, colorimetry, eotf, dvTransport, primaries, maxLuma, minLuma, maxCLL, maxFALL, hdr, limited
+    }
+    init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        if let s = try c.decodeIfPresent(Int.self, forKey: .signal) { signal = s }
+        else if let h = try c.decodeIfPresent(Bool.self, forKey: .hdr) { signal = h ? 1 : 0 }
+        colorFormat = try c.decodeIfPresent(Int.self, forKey: .colorFormat) ?? 0
+        bitDepth = try c.decodeIfPresent(Int.self, forKey: .bitDepth) ?? 8
+        if let r = try c.decodeIfPresent(Int.self, forKey: .range) { range = r }
+        else if let l = try c.decodeIfPresent(Bool.self, forKey: .limited) { range = l ? 1 : 2 }
+        colorimetry = try c.decodeIfPresent(Int.self, forKey: .colorimetry) ?? -1
+        eotf = try c.decodeIfPresent(Int.self, forKey: .eotf) ?? -1
+        dvTransport = try c.decodeIfPresent(Int.self, forKey: .dvTransport) ?? 1
+        primaries = try c.decodeIfPresent(Int.self, forKey: .primaries) ?? 2
+        maxLuma = try c.decodeIfPresent(Int.self, forKey: .maxLuma) ?? 1000
+        minLuma = try c.decodeIfPresent(Int.self, forKey: .minLuma) ?? 50
+        maxCLL = try c.decodeIfPresent(Int.self, forKey: .maxCLL) ?? 1000
+        maxFALL = try c.decodeIfPresent(Int.self, forKey: .maxFALL) ?? 400
+    }
+    func encode(to e: Encoder) throws {
+        var c = e.container(keyedBy: CodingKeys.self)
+        try c.encode(signal, forKey: .signal); try c.encode(colorFormat, forKey: .colorFormat)
+        try c.encode(bitDepth, forKey: .bitDepth); try c.encode(range, forKey: .range)
+        try c.encode(colorimetry, forKey: .colorimetry); try c.encode(eotf, forKey: .eotf)
+        try c.encode(dvTransport, forKey: .dvTransport); try c.encode(primaries, forKey: .primaries)
+        try c.encode(maxLuma, forKey: .maxLuma); try c.encode(minLuma, forKey: .minLuma)
+        try c.encode(maxCLL, forKey: .maxCLL); try c.encode(maxFALL, forKey: .maxFALL)
+    }
+}
+
+extension PiMode {
+    /// An interlaced video mode ("1920x1080i 29.97Hz"): the patterns look squashed and off-center.
+    var interlaced: Bool { label.range(of: #"\d+x\d+i\b"#, options: .regularExpression) != nil || label.lowercased().contains("interlace") }
 }
 
 extension PGeneratorClient {

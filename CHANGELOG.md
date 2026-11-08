@@ -2,6 +2,18 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.41
+
+- **PGenerator output: all of PGenerator+'s Output controls** (Generator → PGenerator output…): resolution
+  (with a button to read the list again), signal mode (SDR, HDR10, HLG, Dolby Vision with standard or
+  low-latency transport), bit depth (8, 10, 12), color format, colorimetry, range (default, limited,
+  full) and the HDR metadata (EOTF, primaries, max / min luminance in cd/m², MaxCLL, MaxFALL). The
+  automatic mode now also chooses HLG for an HLG reference.
+- **Interlaced resolution warning.** PGenerator's resolution list follows the display's EDID, so after
+  a change of TV, input or AV receiver the stored mode can become an interlaced one (e.g. 1920x1080i),
+  which makes the patterns squashed and off-center. The app now says so in the status bar when it
+  connects and in the output dialog.
+
 ## 1.3.40
 
 - **Primaries and Secondaries: the Black column can be selected and measured** (click it, then Measure

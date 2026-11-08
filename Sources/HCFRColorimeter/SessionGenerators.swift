@@ -17,8 +17,10 @@ extension Session {
     var piWantedOutput: PiOutput {
         var o = piOutput
         if piAutoMode {
-            o.hdr = prefs.mode == .st2084
-            if o.hdr { o.bitDepth = 10 }
+            // PQ reference → HDR10, HLG reference → HLG, else SDR (10 bits for HDR)
+            o.signal = prefs.mode == .st2084 ? 1 : (prefs.mode == .hlg ? 2 : 0)
+            o.eotf = -1
+            if o.signal != 0 && o.bitDepth < 10 { o.bitDepth = 10 }
         }
         return o
     }
@@ -34,11 +36,13 @@ extension Session {
         // output dialog (color format, range, colorimetry, or fields a PGenerator version reports
         // differently) must not restart PGenerator before every run: they are applied only from
         // Generator → PGenerator output… → Apply.
-        if now.hdr == want.hdr && (!want.hdr || now.bitDepth == 10) { return }
+        if now.signal == want.signal && now.effectiveEOTF == want.effectiveEOTF && (want.signal == 0 || now.bitDepth >= 10) { return }
         var o = now
-        o.hdr = want.hdr
-        if o.hdr {
-            o.bitDepth = 10
+        o.signal = want.signal
+        o.eotf = -1
+        o.colorimetry = -1
+        if o.signal != 0 {
+            o.bitDepth = max(o.bitDepth, 10)
             o.primaries = want.primaries; o.maxLuma = want.maxLuma; o.minLuma = want.minLuma
             o.maxCLL = want.maxCLL; o.maxFALL = want.maxFALL
         }
@@ -127,6 +131,20 @@ extension Session {
             if let (current, list) = try? await c.modes() {
                 piModes = list
                 piCurrentMode = current
+            }
+        }
+    }
+
+    /// After connecting: an interlaced video mode makes every pattern squashed and off-center (the
+    /// mode list of PGenerator follows the display's EDID, so a stored mode can point to another one
+    /// after the display or the AV receiver changes). Warns in the status bar.
+    func checkPiInterlaced() {
+        Task {
+            guard let c = try? await piClient(), let (current, list) = try? await c.modes() else { return }
+            piModes = list
+            piCurrentMode = current
+            if let m = list.first(where: { $0.id == current }), m.interlaced {
+                status = tr("PGenerator is outputting an interlaced mode (%@): the patterns look squashed and off-center. Choose a progressive resolution in Generator → PGenerator output.", m.label)
             }
         }
     }
