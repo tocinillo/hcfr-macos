@@ -235,19 +235,30 @@ extension Session {
         if confirmDiscardChanges() { openProject(url) }
     }
 
-    /// Open project: shows the file dialog (warns first if there are unsaved measurements).
+    /// Open project (the Open project button, as File → Open Project…): several projects can be open
+    /// at once, so a window that already holds a project keeps it and the file opens in a new window;
+    /// an empty window takes it (warning first if there are unsaved measurements). Nothing is cleared.
     func openProjectDialog() {
-        guard activity == .idle, confirmDiscardChanges() else { return }
+        guard activity == .idle else { return }
+        confirmNewProject = false
         let panel = NSOpenPanel()
-        panel.title = "Open project"
+        panel.title = tr("Open project")
         panel.allowedContentTypes = [.hcfrProject, .hcfrWindows, .json]
-        panel.allowsMultipleSelection = false
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        openProject(url)
+        panel.allowsMultipleSelection = true
+        guard panel.runModal() == .OK else { return }
+        confirmNewProject = false
+        for url in panel.urls {
+            if hasMeasurements || projectURL != nil, let open = AppDelegate.openDocument {
+                open(DocumentRequest(path: url.path))
+            } else if confirmDiscardChanges() {
+                openProject(url)
+            }
+        }
     }
 
     func openProject(_ url: URL) {
         guard activity == .idle else { return }
+        confirmNewProject = false   // a New project question left pending never applies to the opened project
         do {
             let file = try Self.readProjectFile(url)
             if let s = ColorStandard(rawValue: file.standard) { standard = s }

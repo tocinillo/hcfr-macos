@@ -22,6 +22,7 @@ struct ColorimeterApp: App {
     /// Opens a project. Several projects can be open at once (as HCFR for Windows): if the window in
     /// front already holds a project, this opens the new one in its own window instead of replacing it.
     private func openProjectKeepingOthers(_ url: URL) {
+        s.confirmNewProject = false
         if s.hasMeasurements || s.projectURL != nil {
             openWindow(id: "document", value: DocumentRequest(path: url.path))
         } else {
@@ -153,7 +154,7 @@ struct ColorimeterApp: App {
 
 enum AboutPanel {
     /// The app's version (Info.plist, from the VERSION file); the fallback is for `swift run`.
-    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.41"
+    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.42"
     /// Public repository with this program's complete source code (GPL v2 requirement).
     static let sourceURL = "https://github.com/tocinillo/hcfr-macos"
 

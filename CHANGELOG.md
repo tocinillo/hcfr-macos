@@ -2,6 +2,13 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.42
+
+- **Open project** (the button in Actions, as File → Open Project…) no longer replaces the project of the
+  window: when the window already has a project or measurements, the file opens in a new window;
+  an empty window takes it. A pending "New project" question can no longer pop up and clear the
+  project just opened.
+
 ## 1.3.41
 
 - **PGenerator output: all of PGenerator+'s Output controls** (Generator → PGenerator output…): resolution
