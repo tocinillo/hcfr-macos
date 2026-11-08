@@ -148,6 +148,8 @@ final class Session: ObservableObject {
     /// Primary / secondary color measurements (and the White measured with them).
     @Published var colorMeasurements: [PatchColor: XYZ] = [:] { willSet { noteMeasureChange() } }
     @Published var selectedPatch: PatchColor = .red
+    /// Primaries and secondaries: the Black column (the gray scale's 0 %) is selected instead of a color.
+    @Published var blackColumnSelected = false
     /// Near black, near white, saturation and Color Checker measurements: by view, by column.
     @Published var seriesMeasurements: [MeasureView: [Int: XYZ]] = [:] { willSet { noteMeasureChange() } }
     /// Free measures, in the order they were taken.
@@ -879,6 +881,11 @@ final class Session: ObservableObject {
                     let xyz = try await self.readWithCalibration(pattern: .gray(level))
                     // If the column changed during the reading, it belongs to the previous pattern: drop it.
                     if self.view == .grayScale && level == self.selectedLevel { self.store(xyz, level: level) }
+                } else if self.blackColumnSelected {
+                    self.status = "Continuous reading at 0 IRE — click another column to measure it, Stop to finish"
+                    try await self.showIfGenerator(.gray(0))
+                    let xyz = try await self.readWithCalibration(pattern: .gray(0))
+                    if self.view == .primariesSecondaries && self.blackColumnSelected { self.store(xyz, level: 0) }
                 } else {
                     let patch = self.selectedPatch
                     self.status = "Continuous reading of \(patch.rawValue) — click another column to measure it, Stop to finish"
@@ -911,7 +918,8 @@ final class Session: ObservableObject {
             case .grayScale:
                 pattern = .gray(self.selectedLevel); name = Reference.label(self.selectedLevel) + " IRE"
             case .primariesSecondaries:
-                pattern = .color(self.selectedPatch); name = self.selectedPatch.rawValue
+                if self.blackColumnSelected { pattern = .gray(0); name = "0 IRE" }
+                else { pattern = .color(self.selectedPatch); name = self.selectedPatch.rawValue }
             case .contrast:
                 let item = ContrastPatch.allCases[min(self.selectedIndex, 3)]
                 pattern = self.contrastPattern(item); name = item.rawValue
@@ -920,7 +928,7 @@ final class Session: ObservableObject {
                 name = self.seriesPatches(v)[safe: self.selectedIndex]?.name ?? ""
             }
             guard let pattern else { return }
-            let i = self.selectedIndex, level = self.selectedLevel, patch = self.selectedPatch
+            let i = self.selectedIndex, level = self.selectedLevel, patch = self.selectedPatch, black = self.blackColumnSelected
             try await self.present(pattern)
             self.status = "Measuring \(name)…"
             let xyz = try await self.readWithCalibration(pattern: pattern)
@@ -928,8 +936,12 @@ final class Session: ObservableObject {
             case .grayScale:
                 self.store(xyz, level: level)
             case .primariesSecondaries:
-                self.colorMeasurements[patch] = xyz
-                self.attach(.patch(patch))
+                if black {
+                    self.store(xyz, level: 0)
+                } else {
+                    self.colorMeasurements[patch] = xyz
+                    self.attach(.patch(patch))
+                }
             case .contrast:
                 self.contrastMeasurements[ContrastPatch.allCases[min(i, 3)]] = xyz
                 self.attach(.contrast(i))
@@ -946,6 +958,18 @@ final class Session: ObservableObject {
     func select(patch: PatchColor) {
         guard activity != .measuring else { return }
         selectedPatch = patch
+        blackColumnSelected = false
+    }
+
+    /// Primaries and secondaries → Black column: measuring it reads the gray scale's 0 % (as HCFR).
+    /// With "Override black" on, black is not measured (it is taken as 0 cd/m²).
+    func selectBlackColumn() {
+        guard activity != .measuring else { return }
+        if overrideBlack {
+            status = "Black is overridden (0 cd/m²): turn off Override black to measure it"
+            return
+        }
+        blackColumnSelected = true
     }
 
     func select(level: Double) {

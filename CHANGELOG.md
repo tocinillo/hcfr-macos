@@ -2,6 +2,13 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.40
+
+- **Primaries and Secondaries: the Black column can be selected and measured** (click it, then Measure
+  Selected Column or a continuous reading), as in HCFR for Windows: it reads 0 IRE and stores it as the
+  gray scale's black. With "Override black" on it can't be selected (black is taken as 0 cd/m²) and the
+  status bar says so.
+
 ## 1.3.39
 
 - **Calibration report: the Color Checker.** The Color Space page shows the 24 colors of the Color Checker

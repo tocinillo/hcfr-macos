@@ -1051,3 +1051,4 @@
 "LG 3D LUT: black…" = "LUT 3D LG: negro…";
 "LG 3D LUT: white…" = "LUT 3D LG: blanco…";
 "LG Lightning LUT: computing…" = "Lightning LUT LG: calculando…";
+"Black is overridden (0 cd/m²): turn off Override black to measure it" = "El negro está forzado (0 cd/m²): desactiva Forzar negro para medirlo";

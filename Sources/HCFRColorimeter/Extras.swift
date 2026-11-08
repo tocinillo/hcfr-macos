@@ -179,7 +179,7 @@ extension Session {
     var selectedTarget: EditTarget {
         switch view {
         case .grayScale: return .gray(selectedLevel)
-        case .primariesSecondaries: return .patch(selectedPatch)
+        case .primariesSecondaries: return blackColumnSelected ? .gray(0) : .patch(selectedPatch)
         case .contrast: return .contrast(selectedIndex)
         case .freeMeasures: return .free(selectedIndex)
         default: return .series(view, selectedIndex)

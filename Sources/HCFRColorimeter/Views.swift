@@ -779,7 +779,7 @@ private struct PrimariesGrid: View {
                             .foregroundStyle(Self.headerTint[r.patch] != nil ? Color.black : Color.primary)
                             .frame(maxWidth: .infinity, minHeight: 21)
                             .background(Self.headerTint[r.patch] ?? Color.gray.opacity(0.35))
-                            .overlay(r.patch == session.selectedPatch ? Rectangle().stroke(Color.accentColor, lineWidth: 2) : nil)
+                            .overlay(r.patch == session.selectedPatch && !session.blackColumnSelected ? Rectangle().stroke(Color.accentColor, lineWidth: 2) : nil)
                             .overlay(Rectangle().stroke(.separator, lineWidth: 0.5))
                             .contentShape(Rectangle())
                             .onTapGesture { session.select(patch: r.patch) }
@@ -788,7 +788,11 @@ private struct PrimariesGrid: View {
                     Text("Black").bold()
                         .frame(maxWidth: .infinity, minHeight: 21)
                         .background(Color.gray.opacity(0.35))
+                        .overlay(session.blackColumnSelected ? Rectangle().stroke(Color.accentColor, lineWidth: 2) : nil)
                         .overlay(Rectangle().stroke(.separator, lineWidth: 0.5))
+                        .contentShape(Rectangle())
+                        .onTapGesture { session.selectBlackColumn() }
+                        .contextMenu { EditMeasureMenu(session: session, target: .gray(0)) }
                 }
                 ForEach(0..<3, id: \.self) { k in
                     row(session.valueMode.label(k, session.standard), results, black: valueText(black ?? zeroXYZ, k, session)) { r in
@@ -851,7 +855,7 @@ private struct PrimariesGrid: View {
             .foregroundStyle(fill != nil ? Color.black : Color.primary)
             .frame(maxWidth: .infinity, minHeight: 21, alignment: .trailing)
             .padding(.trailing, 6)
-            .background(fill ?? (patch == session.selectedPatch ? Color.accentColor.opacity(0.10) : .clear))
+            .background(fill ?? (patch == session.selectedPatch && !session.blackColumnSelected ? Color.accentColor.opacity(0.10) : .clear))
             .overlay(Rectangle().stroke(.separator, lineWidth: 0.5))
             .contentShape(Rectangle())
             .onTapGesture { session.select(patch: patch) }
@@ -863,8 +867,10 @@ private struct PrimariesGrid: View {
             .foregroundStyle(measured ? Color.primary : Color.blue)
             .frame(maxWidth: .infinity, minHeight: 21, alignment: .trailing)
             .padding(.trailing, 6)
-            .background(measured ? Color.clear : blackCell)
+            .background(measured ? (session.blackColumnSelected ? Color.accentColor.opacity(0.10) : Color.clear) : blackCell)
             .overlay(Rectangle().stroke(.separator, lineWidth: 0.5))
+            .contentShape(Rectangle())
+            .onTapGesture { session.selectBlackColumn() }
     }
 }
 
