@@ -2,6 +2,14 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.43
+
+- **PGenerator in YCbCr Limited: patterns now at the right level.** In YCbCr, PGenerator puts the
+  codes on the wire exactly as received (only RGB goes through the Full → Limited conversion), so
+  with a YCbCr Limited output the patterns must be sent as video codes (64–940 / 16–235). They were
+  sent as PC codes: 7 % arrived as 0.9 %, 10 % as 4 %, 90 % as 98 %, so gray scale and saturation
+  readings were taken on the wrong stimulus. RGB outputs are unchanged.
+
 ## 1.3.42
 
 - **Open project** (the button in Actions, as File → Open Project…) no longer replaces the project of the

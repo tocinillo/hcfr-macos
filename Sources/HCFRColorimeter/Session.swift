@@ -1209,18 +1209,26 @@ final class Session: ObservableObject {
     /// Sends a patch to the Raspberry Pi; if the connection was lost (Pi restarted…), reconnects once.
     private func piShow(levels: [Double], background: [Double] = [0, 0, 0]) async throws {
         let area = patternArea
-        if (piCurrentOutput ?? piOutput).bitDepth >= 10 {
+        let out = piCurrentOutput ?? piOutput
+        // In YCbCr, PGenerator puts the codes on the wire as they come (Y = the code, no Full → Limited
+        // compression: only RGB goes through the HDMI CSC). With a Limited YCbCr output the codes
+        // must then be video codes (64–940 / 16–235, super-white above), or 7 % arrives as 0.9 %.
+        let wireVideo = videoLevels == .video || (out.limited && out.colorFormat != 0)
+        func code8(_ v: Double) -> Int {
+            wireVideo ? min(max(Int((16 + v * 219).rounded()), 0), 255) : videoLevels.code(v)
+        }
+        if out.bitDepth >= 10 {
             // 10-bit codes (video 64–940 or full 0–1023); PGenerator takes 10-bit backgrounds only in RGB
             func code10(_ v: Double) -> Int {
-                videoLevels == .video ? Int((64 + v * 876).rounded()) : Int((v * 1023).rounded())
+                min(max(wireVideo ? Int((64 + v * 876).rounded()) : Int((v * 1023).rounded()), 0), 1023)
             }
             let rgb = levels.map(code10)
-            let rgbFormat = (piCurrentOutput ?? piOutput).colorFormat == 0
-            let bg = background.map { rgbFormat ? code10($0) : videoLevels.code($0) }
+            let rgbFormat = out.colorFormat == 0
+            let bg = background.map { rgbFormat ? code10($0) : code8($0) }
             try await piSend { $0.rectangleMessage10(rgb: rgb, background: bg, areaPercent: area) }
         } else {
-            let bg = background.map { videoLevels.code($0) }
-            let rgb = levels.map { videoLevels.code($0) }
+            let bg = background.map(code8)
+            let rgb = levels.map(code8)
             try await piSend { $0.rectangleMessage(rgb: rgb, background: bg, areaPercent: area) }
         }
     }
