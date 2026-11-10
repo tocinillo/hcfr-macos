@@ -336,6 +336,17 @@ extension CalReference {
         }
     }
 
+    /// HDR: the RGB of the signal. PGenerator / the TV take an HDR10 signal as BT.2020 colorimetry, so
+    /// for the BT.2020-container references (UHDTV, P3 in 2020, Rec.709 in 2020) the patterns are
+    /// encoded in BT.2020 RGB: a P3 color sent as P3 RGB numbers would be shown as a far more
+    /// saturated BT.2020 color (the Color Checker cyan came out as 59, 92, 102 instead of 77, 96, 106).
+    var signalRGBToXYZ: Mat3 {
+        guard gammaMode.isHDR, [.uhdtv2020, .uhdtvP3in2020, .uhdtv709in2020].contains(standard) else { return rgbToXYZ }
+        var c = self
+        c.standard = .uhdtv2020
+        return c.rgbToXYZ
+    }
+
     /// Luminance (white = 1) of the color made of these channels at 100%.
     func luma(_ channels: [Bool], in standard: ColorStandard? = nil) -> Double {
         var r = self
@@ -383,7 +394,7 @@ extension CalReference {
     /// and decoded with the target curve, then converted with the standard (GetRefCC24Sat).
     func patternReference(signal: [Double], whiteY: Double, blackY: Double?) -> XYZ {
         let lin = signal.map { targetCurve(Self.quantize219($0), whiteY: whiteY, blackY: blackY) }
-        let v = rgbToXYZ.apply(lin)
+        let v = (gammaMode.isHDR ? signalRGBToXYZ : rgbToXYZ).apply(lin)
         return XYZ(X: v[0], Y: v[1], Z: v[2])
     }
 
@@ -391,12 +402,10 @@ extension CalReference {
     /// linearized with 2.22, in Rec.709 for the classic charts, then encoded with the HDR curve).
     func hdrSignal(_ s: [Double], rec709: Bool) -> [Double] {
         var lin = s.map { $0 <= 0 ? 0 : pow(min($0, 1), 2.22) }
-        if rec709 {
-            var r709 = self
-            r709.standard = .hdtv
-            let xyz = r709.rgbToXYZ.apply(lin)
-            lin = rgbToXYZ.inverse.apply(xyz)
-        }
+        // The colors (Rec.709 for the classic charts, else the reference's), into the signal's RGB
+        var src = self
+        if rec709 { src.standard = .hdtv }
+        lin = signalRGBToXYZ.inverse.apply(src.rgbToXYZ.apply(lin))
         return lin.map { Self.quantize219(encodeSignal(min(max($0, 0), 1))) }
     }
 
@@ -429,6 +438,11 @@ extension CalReference {
                 clr = min(max(clr, 0), 1)
                 comp = min(max(comp, 0), 1)
             }
+            // HDR in a BT.2020 container: the color goes out in BT.2020 RGB
+            if gammaMode.isHDR {
+                let lin = signalRGBToXYZ.inverse.apply(m.apply(on.map { $0 ? clr : comp }))
+                return lin.map { Self.quantize219(gen.encodeSignal(min(max($0, 0), 1))) }
+            }
             return on.map { a in Self.quantize219(gen.encodeSignal(a ? clr : comp)) }
         }
     }
@@ -443,11 +457,13 @@ extension CalReference {
         let end = XYZ(X: full[0], Y: full[1], Z: full[2])
         let c = XYZ.fromxyY(x: white.x + (end.x - white.x) * ratio, y: white.y + (end.y - white.y) * ratio,
                             Y: luma(on))
-        let rgb = m.inverse.apply([c.X, c.Y, c.Z])
+        // HDR: what the pattern (in the signal's RGB, see saturationSignals) lands on
+        let out = gammaMode.isHDR ? signalRGBToXYZ : m
+        let rgb = out.inverse.apply([c.X, c.Y, c.Z])
         let lin = rgb.map { v -> Double in
             targetCurve(Self.quantize219(encodeSignal(min(max(v, 0), 1))), whiteY: whiteY, blackY: blackY)
         }
-        let v = m.apply(lin)
+        let v = out.apply(lin)
         return XYZ(X: v[0], Y: v[1], Z: v[2])
     }
 }

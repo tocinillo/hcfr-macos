@@ -2,6 +2,15 @@
 
 Each version has its DMG in [Releases](https://github.com/tocinillo/hcfr-macos/releases).
 
+## 1.3.44
+
+- **HDR in a BT.2020 container (UHDTV, P3 in 2020, Rec.709 in 2020): Color Checker and saturation
+  patterns now encoded in BT.2020 RGB.** PGenerator and the TV take an HDR10 signal as BT.2020, but
+  the patterns were sent as the reference's own RGB (P3 numbers for "P3 in 2020"), so the TV showed
+  much more saturated colors than the targets (the Color Checker cyan went out as 59, 92, 102
+  instead of 77, 96, 106, Calman's). Targets are computed the same way, so the color ΔE in HDR now
+  measures the real colors, as Calman.
+
 ## 1.3.43
 
 - **PGenerator in YCbCr Limited: patterns now at the right level.** In YCbCr, PGenerator puts the
